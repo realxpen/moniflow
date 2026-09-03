@@ -52,7 +52,9 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
       redact: [
         "req.headers.authorization",
         "req.headers.cookie",
+        "req.headers.x-api-key",
         "headers.authorization",
+        "headers.x-api-key",
         "BMONI_API_KEY"
       ]
     }
