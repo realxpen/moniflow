@@ -17,6 +17,7 @@ const envSchema = z.object({
     emptyStringToUndefined,
     z.string().min(1).optional()
   ),
+  BMONI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().max(30_000).default(10_000),
   DATABASE_URL: z.string().default("file:./moniflow.db")
 });
 

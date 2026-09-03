@@ -1,0 +1,71 @@
+import type { UserMappingRepository } from "../../repositories/user-mapping.js";
+import type { CreateMoniflowUserInput } from "../../schemas/onboarding.js";
+
+import type { BmoniGateway } from "./gateway.js";
+
+export class UserMappingConflictError extends Error {
+  override readonly name = "UserMappingConflictError";
+}
+
+export type ProvisionBmoniUserResult = {
+  bmoniUserId: string;
+  localUserId: string;
+  status: "created" | "existing";
+};
+
+export class BmoniUserService {
+  constructor(
+    private readonly gateway: BmoniGateway,
+    private readonly mappings: UserMappingRepository
+  ) {}
+
+  async createOrFindMapping(
+    input: CreateMoniflowUserInput
+  ): Promise<ProvisionBmoniUserResult> {
+    const localMapping = this.mappings.findByLocalUserId(input.localUserId);
+    if (localMapping) {
+      if (localMapping.email.toLowerCase() !== input.email.toLowerCase()) {
+        throw new UserMappingConflictError(
+          "The local user is already associated with a different BMONI identity."
+        );
+      }
+
+      return {
+        bmoniUserId: localMapping.bmoniUserId,
+        localUserId: localMapping.localUserId,
+        status: "existing"
+      };
+    }
+
+    const emailMapping = this.mappings.findByEmail(input.email);
+    if (emailMapping) {
+      throw new UserMappingConflictError(
+        "The email is already associated with another local user."
+      );
+    }
+
+    const { localUserId, ...providerInput } = input;
+    const user = await this.gateway.createUser(providerInput);
+
+    if (user.email.toLowerCase() !== input.email.toLowerCase()) {
+      throw new UserMappingConflictError(
+        "The provider response did not preserve the requested identity."
+      );
+    }
+
+    const timestamp = new Date().toISOString();
+    const mapping = this.mappings.save({
+      bmoniUserId: user.bmoniUserId,
+      createdAt: timestamp,
+      email: user.email,
+      localUserId,
+      updatedAt: timestamp
+    });
+
+    return {
+      bmoniUserId: mapping.bmoniUserId,
+      localUserId: mapping.localUserId,
+      status: "created"
+    };
+  }
+}

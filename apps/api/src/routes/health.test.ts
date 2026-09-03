@@ -1,6 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../app.js";
+import { SqliteUserMappingRepository } from "../repositories/sqlite-user-mapping.js";
+import type { BmoniGateway } from "../services/bmoni/index.js";
+import { BmoniUserService } from "../services/bmoni/user-service.js";
 
 const apps: ReturnType<typeof buildApp>[] = [];
 
@@ -21,5 +24,32 @@ describe("GET /health", () => {
       service: "moniflow-api",
       environment: "test"
     });
+  });
+
+  it("checks BMONI connectivity without returning credentials", async () => {
+    const gateway: BmoniGateway = {
+      createUser: vi.fn(),
+      getSupportedSmartWalletCurrencies: vi
+        .fn()
+        .mockResolvedValue({ currencies: ["CNGN", "USDB"] })
+    };
+    const repository = new SqliteUserMappingRepository(":memory:");
+    const app = buildApp({
+      getBmoniGateway: () => gateway,
+      getBmoniUserService: () => new BmoniUserService(gateway, repository)
+    });
+    app.addHook("onClose", async () => repository.close());
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/health/bmoni" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      currencies: ["CNGN", "USDB"],
+      environment: "sandbox",
+      service: "bmoni",
+      status: "ok"
+    });
+    expect(response.body).not.toContain("x-api-key");
   });
 });

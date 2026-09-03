@@ -2,82 +2,77 @@
 
 ## Current Phase
 
-Phase 1 — Foundation
+Phase 2 — BMONI Foundation
 
-Hackathon MVP v0.1. Phase 0 repository inspection and Phase 1 scaffolding are complete. Phase 2 has not started.
+The sandbox REST foundation is implemented. Phase 2 remains intentionally limited to verified connectivity and user identity creation/mapping; it does not create wallets or execute money movement.
 
 ## Working
 
-- pnpm workspace with `apps/*` and `packages/*`
-- Expo + React Native + TypeScript mobile shell
-- Expo Router onboarding, tabs, operator, and bank route tree
-- Expo development-client configuration and native prebuild path
-- TanStack Query provider; Zustand, Zod, and React Hook Form dependencies ready
-- Calm Financial Intelligence theme tokens
-- Foundational UI components: `Screen`, `SoftCard`, `GlassCard`, `PrimaryButton`, `SecondaryButton`, `Pill`, `StatusPill`, `MoneyText`, and `SectionTitle`
-- Home composition placeholder with explicitly labeled mock UI data
-- Fastify + TypeScript API
-- Centralized API environment validation
-- `GET /health` returning real service/environment state
-- Empty API route and service boundaries for later product phases
-- Shared supported-intent and Money Plan status Zod contracts
-- Intent Engine public interface boundary with no parser or execution logic
-- MONI Guard verdict/check contracts with no rule engine
-- UI/UX, BMONI boundary, and target demo documentation
-- Typecheck, lint, unit tests, workspace build, Expo/Metro startup, web route bundle, API startup, and HTTP health validation
+- Phase 1 pnpm workspace, Expo Router mobile shell, theme, UI foundations, Fastify API, and shared package boundaries
+- Centralized API environment validation with a bounded BMONI timeout
+- Sandbox-only BMONI configuration; production mode and production host are rejected
+- Typed REST gateway using server-side `x-api-key`
+- Strict Zod schemas for documented user creation, user response, error envelope, and supported currencies
+- Typed configuration, transport, provider, and response-contract errors
+- No automatic provider retries
+- `GET /health` local API health
+- `GET /health/bmoni` non-sensitive read-only connectivity check
+- `POST /onboarding/users` documented BMONI user creation boundary
+- SQLite local-user/email/`bmoniUserId` mapping with uniqueness constraints
+- Existing mapping reuse and identity-conflict protection
+- Sanitized error responses and credential/header log redaction
+- Unit and route tests for the provider client, validation, persistence, mapping behavior, connectivity, and onboarding
+- Verified HTTP `200` sandbox connectivity through the documented supported-currencies endpoint
 
 ## Not Yet Implemented
 
-- BMONI REST client or connectivity
-- BMONI user creation
 - BMONI React Native SDK
 - wallet provisioning, ownership, or device signing
-- KYC or Nigeria onboarding
-- wallet or provider balance retrieval
+- KYC or Nigeria onboarding UI/flow
 - bank discovery, verification, withdrawal, offramp, or proposals
-- natural-language or deterministic parsing
-- Money Plan Engine or approval state machine
-- MONI Guard rule engine
-- SQLite schema or persistence
-- real Activity or Money Pockets data
+- wallet/provider balance retrieval or transaction activity
+- webhooks or reconciliation tooling
+- natural-language parsing or real Intent Engine
+- Money Plan Engine, approval state machine, or execution
+- complete MONI Guard rule engine
+- Activity or Money Pockets backed by real data
 - GhostPay, TrustDrop, LifeWallet, analytics, or production payments
 
 ## Known Issues
 
-- No blocking code issues are known.
-- Native Android/iOS binaries were not compiled in this container because no emulator/Xcode toolchain is available. Expo/Metro startup and a complete web route bundle were validated.
-- Expo's offline dependency check passes with a warning that offline validation is less authoritative; installed native versions are pinned to Expo SDK 57's bundled compatibility map.
+- BMONI currently documents no idempotency key. A timed-out create-user request therefore has an unknown result and requires reconciliation; MONIFlow does not retry it.
+- The shared sandbox key proves connectivity but is not a production credential. A project-specific key is required before production work.
+- User creation is contract-tested locally but was not exercised against the live sandbox because no test identity was supplied or authorized.
+- Native Android/iOS binaries are not compiled in this container because no emulator/Xcode toolchain is available; Phase 1 Metro and web-bundle validation remain the current mobile evidence.
 
 ## Next Phase
 
-Phase 2 — BMONI Foundation
+Phase 3 — Wallet Foundation
 
-Before implementation, inspect the current official BMONI documentation/OpenAPI. Confirm the sandbox base URL, authentication, supported user-creation flow, exact schemas, error handling, idempotency, and status behavior. Then implement only the server-side REST foundation and a real non-sensitive connectivity proof.
-
-Do not begin wallet provisioning, KYC, withdrawal, signing, or financial execution as part of that connectivity checkpoint unless separately scoped and documentation-backed.
+Before implementation, re-read the current BMONI lifecycle, React Native SDK, wallet-management, and security documentation. Define the device/backend ownership boundary, create an Expo development build path for the verified native SDK, and implement only documented sandbox wallet provisioning and retrieval. Do not add KYC, withdrawal, Money Plans, MONI Guard execution, or production access unless separately scoped.
 
 ## Environment Variables
 
 - `NODE_ENV` — API environment
 - `API_HOST` — API listen host
 - `API_PORT` — API port, default `4000`
-- `BMONI_BASE_URL` — API only; sandbox base URL
+- `BMONI_BASE_URL` — API only; must be the confirmed development origin in the hackathon build
 - `BMONI_API_KEY` — API only; secret and never exposed to mobile
-- `DATABASE_URL` — future SQLite persistence URL
+- `BMONI_REQUEST_TIMEOUT_MS` — API provider timeout, default `10000`, maximum `30000`
+- `DATABASE_URL` — SQLite identity-mapping URL
 - `EXPO_PUBLIC_API_URL` — public mobile-to-API URL; never contains secrets
 
 ## Architecture Decisions
 
-- Mobile owns UI, local state, explicit authorization UX, future device wallet actions, and signing.
-- API owns credentials, provider REST access, orchestration, policy enforcement, plans, and persistence.
-- The mobile app targets Expo development builds through `expo-dev-client`; Expo Go is optional for Phase 1 UI inspection only.
-- BMONI code is deferred rather than mocked. `apps/api/src/services/bmoni` is an empty documented boundary.
-- The Intent Engine only parses to a validated intent and can never execute financial operations.
-- MONI Guard is deterministic and never delegated to an LLM.
-- Pockets will be application-level bookkeeping unless current provider documentation proves real partitioning support.
-- Semantic theme tokens and four visual modes guide UI implementation; glass remains selective.
-- SQLite is deferred until a real persistence requirement appears.
-- Sandbox and production must remain separate, and provider success must be verified rather than inferred.
+- BMONI REST access and partner credentials remain in `apps/api`; provider payloads do not leak into shared/mobile contracts.
+- Phase 2 is locked to `https://embedded-dev.bmoni.com`; production is deliberately rejected.
+- Read-only supported-currency discovery is the connectivity proof and does not imply financial readiness.
+- User creation follows the documented `POST /v1/users` contract and persists the returned `bmoniUserId` against a local identity.
+- Mutation retries are disabled because idempotency is undocumented and timeout outcomes are uncertain.
+- SQLite is intentionally limited to the identity mapping needed by this phase.
+- Mobile retains future wallet/private-key/device-signing responsibility; private keys never go to the backend.
+- AI output can never call this provider boundary directly or bypass future Guard and human-approval controls.
+- Provider success is accepted only after HTTP success and strict response validation.
 
 ## Demo Status
 
@@ -85,8 +80,4 @@ Target future instruction:
 
 > Withdraw ₦40,000 to my GTBank account and save ₦20,000 for my laptop.
 
-The intended route journey exists as clearly labeled placeholders:
-
-`Home → command → parsing → Money Plan → MONI Guard/human approval → signing → result → Activity/Pockets`
-
-No step currently parses, approves, signs, executes, moves money, or claims provider success.
+The route journey remains a placeholder. Phase 2 adds provider connectivity and the initial user mapping only. No command is parsed, approved, signed, executed, settled, or presented as provider success.

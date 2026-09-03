@@ -12,7 +12,7 @@ The required execution flow is:
 
 ## Current phase
 
-Phase 1 — Foundation. The monorepo, mobile route shell, design system foundation, API health check, and domain boundaries work. BMONI, wallet, KYC, parsing, Guard rules, approval execution, and financial operations are not implemented.
+Phase 2 — BMONI Foundation. The backend has a sandbox-only, typed BMONI REST client, strict provider validation, a read-only connectivity check, documented user creation, and SQLite identity mapping. Wallets, KYC, parsing, Guard rules, approval execution, and financial operations are not implemented.
 
 ## Architecture
 
@@ -51,7 +51,10 @@ Do not add real credentials to `.env.example` or commit `.env`.
 ```bash
 pnpm dev:api
 curl http://localhost:4000/health
+curl http://localhost:4000/health/bmoni
 ```
+
+`/health/bmoni` requires local sandbox credentials. `POST /onboarding/users` is the only documented provider mutation implemented in Phase 2; it creates no wallet and moves no money.
 
 ## Run mobile
 
@@ -89,7 +92,8 @@ pnpm build
 | `API_PORT` | API | Fastify listen port; defaults to `4000` |
 | `BMONI_BASE_URL` | API only | Confirmed BMONI sandbox base URL |
 | `BMONI_API_KEY` | API only | Secret BMONI application credential |
-| `DATABASE_URL` | API | Future SQLite connection string |
+| `BMONI_REQUEST_TIMEOUT_MS` | API | Provider timeout; defaults to `10000` and is capped at `30000` |
+| `DATABASE_URL` | API | SQLite identity-mapping connection string |
 | `EXPO_PUBLIC_API_URL` | Mobile | Public URL used to reach MONIFlow API |
 
 Never prefix a secret with `EXPO_PUBLIC_`; those values enter the mobile bundle.
