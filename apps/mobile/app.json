@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "MONIFlow",
+    "slug": "moniflow",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "moniflow",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.realxpen.moniflow"
+    },
+    "android": {
+      "package": "com.realxpen.moniflow"
+    },
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
