@@ -1,3 +1,4 @@
+import multipart from "@fastify/multipart";
 import Fastify from "fastify";
 
 import { env } from "./config/env.js";
@@ -76,6 +77,16 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
         "headers.authorization", "headers.x-api-key", "BMONI_API_KEY",
         "req.body.signature", "req.body.ownerProofSignature", "req.body.bvn", "req.body.accountNumber"
       ]
+    }
+  });
+
+  // KYC uploads are bounded before any bytes are forwarded to BMONI.
+  app.register(multipart, {
+    limits: {
+      fields: 12,
+      files: 4,
+      fileSize: 8 * 1024 * 1024,
+      parts: 16
     }
   });
 
