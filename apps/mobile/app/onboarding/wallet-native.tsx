@@ -1,5 +1,5 @@
 import { BlurView } from "expo-blur";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -16,7 +16,10 @@ type StepState = "idle" | "working" | "done" | "error";
 type Step = { label: string; state: StepState };
 
 export default function NativeWalletSetupScreen() {
-  const [localUserId, setLocalUserId] = useState(defaultLocalUserId);
+  const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
+  const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
+  const localUserId = routedLocalUserId?.trim() || defaultLocalUserId;
+
   const [pin, setPin] = useState("");
   const [ownerAddress, setOwnerAddress] = useState<string | null>(null);
   const [smartWalletAddress, setSmartWalletAddress] = useState<string | null>(null);
@@ -47,8 +50,12 @@ export default function NativeWalletSetupScreen() {
       setError("BMONI device signing is unavailable in this build.");
       return;
     }
-    if (!localUserId.trim() || pin.length !== 6) {
-      setError("Enter the local user UUID from Phase 4 and a 6-digit device signing PIN.");
+    if (!localUserId) {
+      setError("Your MONIFlow identity link is missing. Return to Identity and continue again.");
+      return;
+    }
+    if (pin.length !== 6) {
+      setError("Enter a 6-digit device signing PIN.");
       return;
     }
 
@@ -67,7 +74,7 @@ export default function NativeWalletSetupScreen() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          localUserId: localUserId.trim(),
+          localUserId,
           ownerAddress: address
         })
       });
@@ -88,7 +95,7 @@ export default function NativeWalletSetupScreen() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          localUserId: localUserId.trim(),
+          localUserId,
           ownerAddress: address,
           challengeId: challenge.challengeId,
           signature
@@ -133,15 +140,7 @@ export default function NativeWalletSetupScreen() {
         </View>
 
         <View style={styles.fields}>
-          <TextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            onChangeText={setLocalUserId}
-            placeholder="Phase 4 local user UUID"
-            placeholderTextColor={colors.textSecondary}
-            style={styles.input}
-            value={localUserId}
-          />
+          <Text style={styles.identityLinked}>MONIFlow identity linked automatically</Text>
           <TextInput
             keyboardType="number-pad"
             maxLength={6}
@@ -161,11 +160,13 @@ export default function NativeWalletSetupScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         {smartWalletAddress ? (
-          <PrimaryButton onPress={() => router.push("/onboarding/nigeria")}>
+          <PrimaryButton
+            onPress={() => router.push({ pathname: "/onboarding/nigeria", params: { localUserId } })}
+          >
             Continue
           </PrimaryButton>
         ) : (
-          <PrimaryButton disabled={busy} onPress={() => void provision()}>
+          <PrimaryButton disabled={busy || !localUserId} onPress={() => void provision()}>
             {busy ? "Provisioning…" : "Create secure wallet"}
           </PrimaryButton>
         )}
@@ -257,6 +258,7 @@ const styles = StyleSheet.create({
   },
   symbolDone: { color: colors.statusSuccess, fontWeight: "700" },
   fields: { gap: spacing.sm },
+  identityLinked: { ...typography.caption, color: colors.statusSuccess },
   input: {
     ...typography.body,
     minHeight: 52,
