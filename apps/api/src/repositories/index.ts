@@ -1,8 +1,10 @@
 import type { Sql } from "postgres";
 
 import type { BankAccountRepository } from "./bank-account.js";
+import type { ExecutionRepository } from "./execution.js";
 import type { MoneyPlanRepository } from "./money-plan.js";
 import { PostgresBankAccountRepository, ensureBankAccountSchema } from "./postgres-bank-account.js";
+import { PostgresExecutionRepository, ensureExecutionSchema } from "./postgres-execution.js";
 import {
   PostgresMoneyPlanRepository,
   PostgresUserMappingRepository,
@@ -11,6 +13,7 @@ import {
   ensureMoniflowSchema
 } from "./postgres.js";
 import { SqliteBankAccountRepository } from "./sqlite-bank-account.js";
+import { SqliteExecutionRepository } from "./sqlite-execution.js";
 import { SqliteMoneyPlanRepository } from "./sqlite-money-plan.js";
 import { SqliteUserMappingRepository } from "./sqlite-user-mapping.js";
 import { SqliteWalletOwnershipRepository } from "./sqlite-wallet-ownership.js";
@@ -22,6 +25,7 @@ export type RepositorySet = {
   wallets: WalletOwnershipRepository;
   plans: MoneyPlanRepository;
   banks: BankAccountRepository;
+  executions: ExecutionRepository;
   ready: Promise<void>;
   close(): Promise<void>;
 };
@@ -32,14 +36,16 @@ export function createRepositories(databaseUrl: string): RepositorySet {
     const wallets = new SqliteWalletOwnershipRepository(databaseUrl);
     const plans = new SqliteMoneyPlanRepository(databaseUrl);
     const banks = new SqliteBankAccountRepository(databaseUrl);
+    const executions = new SqliteExecutionRepository(databaseUrl);
     return {
       users,
       wallets,
       plans,
       banks,
+      executions,
       ready: Promise.resolve(),
       async close() {
-        await Promise.all([users.close(), wallets.close(), plans.close(), banks.close()]);
+        await Promise.all([users.close(), wallets.close(), plans.close(), banks.close(), executions.close()]);
       }
     };
   }
@@ -53,14 +59,17 @@ export function createRepositories(databaseUrl: string): RepositorySet {
   const wallets = new PostgresWalletOwnershipRepository(sql);
   const plans = new PostgresMoneyPlanRepository(sql);
   const banks = new PostgresBankAccountRepository(sql);
+  const executions = new PostgresExecutionRepository(sql);
   return {
     users,
     wallets,
     plans,
     banks,
+    executions,
     ready: (async () => {
       await ensureMoniflowSchema(sql);
       await ensureBankAccountSchema(sql);
+      await ensureExecutionSchema(sql);
     })(),
     async close() {
       await sql.end({ timeout: 5 });
