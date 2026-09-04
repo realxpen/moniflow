@@ -1,3 +1,4 @@
+import { evaluateMoniGuard } from "@moniflow/moniguard";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 
@@ -15,6 +16,11 @@ const parseIntentBodySchema = z.object({
 const planBodySchema = z.object({
   intent: moniflowIntentSchema,
   localUserId: z.uuid()
+}).strict();
+
+const guardBodySchema = z.object({
+  intent: moniflowIntentSchema,
+  plan: moneyPlanSchema
 }).strict();
 
 type OperatorRouteOptions = {
@@ -91,6 +97,24 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
       }
       throw error;
     }
+  });
+
+  app.post<{ Body: unknown }>("/guard", async (request, reply) => {
+    const parsed = guardBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        statusCode: 400,
+        error: "Bad Request",
+        message: "A validated intent and Money Plan are required for MONI Guard."
+      });
+    }
+
+    const result = evaluateMoniGuard({
+      intent: parsed.data.intent,
+      plan: parsed.data.plan
+    });
+
+    return reply.send(result);
   });
 };
 
