@@ -13,11 +13,28 @@ export type ProvisionBmoniUserResult = {
   status: "created" | "existing";
 };
 
+export type BmoniUserMappingStatus = {
+  bmoniUserId: string;
+  localUserId: string;
+  email: string;
+} | null;
+
 export class BmoniUserService {
   constructor(
     private readonly gateway: BmoniGateway,
     private readonly mappings: UserMappingRepository
   ) {}
+
+  getMapping(localUserId: string): BmoniUserMappingStatus {
+    const mapping = this.mappings.findByLocalUserId(localUserId);
+    if (!mapping) return null;
+
+    return {
+      bmoniUserId: mapping.bmoniUserId,
+      email: mapping.email,
+      localUserId: mapping.localUserId
+    };
+  }
 
   async createOrFindMapping(
     input: CreateMoniflowUserInput
