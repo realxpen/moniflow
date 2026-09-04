@@ -1,15 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 
-export type WalletOwnership = {
-  localUserId: string;
-  ownerAddress: string;
-  bmoniSmartWalletId: string;
-  smartWalletAddress: string;
-  currency: "CNGN";
-  createdAt: string;
-  updatedAt: string;
-};
+import type { WalletOwnership, WalletOwnershipRepository } from "./wallet-ownership.js";
 
 const rowSchema = z.object({
   local_user_id: z.string(), owner_address: z.string(), bmoni_smart_wallet_id: z.string(),
@@ -18,11 +10,11 @@ const rowSchema = z.object({
 
 function databaseFilename(databaseUrl: string) {
   if (databaseUrl === ":memory:") return databaseUrl;
-  if (!databaseUrl.startsWith("file:")) throw new Error("DATABASE_URL must use the file: scheme or :memory:.");
+  if (!databaseUrl.startsWith("file:")) throw new Error("SQLite DATABASE_URL must use file: or :memory:.");
   return databaseUrl.slice("file:".length);
 }
 
-export class SqliteWalletOwnershipRepository {
+export class SqliteWalletOwnershipRepository implements WalletOwnershipRepository {
   private readonly database: DatabaseSync;
   constructor(databaseUrl: string) {
     this.database = new DatabaseSync(databaseFilename(databaseUrl));
@@ -39,7 +31,7 @@ export class SqliteWalletOwnershipRepository {
     `);
   }
 
-  findByLocalUserId(localUserId: string): WalletOwnership | null {
+  async findByLocalUserId(localUserId: string): Promise<WalletOwnership | null> {
     const row = this.database.prepare(`SELECT local_user_id, owner_address, bmoni_smart_wallet_id, smart_wallet_address, currency, created_at, updated_at FROM wallet_ownership WHERE local_user_id = ?`).get(localUserId);
     if (!row) return null;
     const parsed = rowSchema.parse(row);
@@ -49,7 +41,7 @@ export class SqliteWalletOwnershipRepository {
     };
   }
 
-  save(value: WalletOwnership): WalletOwnership {
+  async save(value: WalletOwnership): Promise<WalletOwnership> {
     this.database.prepare(`
       INSERT INTO wallet_ownership (local_user_id, owner_address, bmoni_smart_wallet_id, smart_wallet_address, currency, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -59,5 +51,5 @@ export class SqliteWalletOwnershipRepository {
     return value;
   }
 
-  close() { this.database.close(); }
+  async close() { this.database.close(); }
 }
