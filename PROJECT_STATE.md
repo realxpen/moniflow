@@ -4,9 +4,7 @@
 
 Phase 10 — MONI Guard
 
-Phase 10 is implemented on `main` as the deterministic safety boundary between Money Plan explanation and human authorization. MONI Guard is a standalone workspace package, contains no LLM call, evaluates explicit rules, fails closed on critical mismatches, and returns `ALLOW`, `REVIEW`, or `BLOCK`.
-
-A BMONI documentation audit was performed after the project's lifecycle, quickstart, sandbox-data, test-token, overview, and use-case sources were added. The audit uncovered one important earlier integration gap: the existing Phase 6 Nigeria route is not the complete current React Native KYC path and must not be marked provider-verified yet.
+Phase 10 remains implemented on `main`, but before Phase 11 the earlier BMONI lifecycle has been re-audited and Phase 6 has now been repaired specifically against the current Nigeria NGN KYC documentation.
 
 ## Working
 
@@ -15,47 +13,93 @@ A BMONI documentation audit was performed after the project's lifecycle, quickst
 - Phase 3 shell/navigation and static product journey
 - Phase 4 sandbox BMONI REST client, user creation, local → `bmoniUserId` mapping
 - Phase 5 React Native BMONI wallet integration, owner-proof signing, managed CNGN wallet persistence
+- Phase 6 Nigeria NGN KYC/onboarding code repaired to the Nigeria-specific provider contract
 - Phase 7 provider wallet/balance/deposit-account reads
 - Phase 8 deterministic Intent Engine
 - Phase 9 provider-balance Money Plan arithmetic
 - Phase 10 deterministic MONI Guard and guarded authorization boundary
-- native BMONI device adapter now exposes both:
+- native BMONI device adapter exposes both:
   - `signMessage` for EIP-191 owner proof
   - `signTransactionHash` for future raw proposal-hash signing
-- repo documentation now includes:
+- repo documentation includes:
   - `docs/BMONI_INTEGRATION.md`
   - `docs/BMONI_CAPABILITY_MAP.md`
   - `docs/BMONI_SANDBOX_RUNBOOK.md`
+  - `docs/BMONI_SOURCE_RECONCILIATION.md`
 
 ## BMONI Lifecycle Authority
 
-MONIFlow must follow:
+MONIFlow must prove the same sandbox user through:
 
 1. User
 2. Wallet
-3. KYC
-4. Rail
-5. Fund
-6. Move money
+3. Nigeria NGN KYC/onboarding
+4. Active NGN rail
+5. Funded balance
+6. Money movement
 
 A later stage must not be treated as valid while an earlier prerequisite is incomplete.
 
-## Nigeria KYC Correction Required
+## Phase 6 — Repaired Nigeria NGN Contract
 
-The current Bkey React Native reference uses the fixed NGN sequence:
+Phase 6 is intentionally scoped to the Nigerian **NGN local account / CNGN rail**, not the later Nigerian USD Enhanced Due Diligence path.
 
-1. `GET /v1/users/{userId}/kyc/options`
-2. `PATCH /v1/users/{userId}/kyc`
-3. multipart identification upload
-4. multipart proof-of-address upload
-5. `GET /v1/users/{userId}/kyc/readiness`
-6. `POST /v1/users/{userId}/kyc/activate` with no `sumsubLevelName`
-7. `POST /v1/users/{userId}/onboarding/start-nigeria`
-8. `GET /v1/users/{userId}/onboarding/status` until NGN is active
+The Nigeria-specific provider page defines the NGN local-account onboarding trigger as:
 
-The existing Phase 6 route currently performs BVN lookup, a minimal KYC patch, then `start-nigeria`. It is therefore **incomplete** against the current RN reference and must be corrected before the Nigeria rail checkpoint can be considered passed.
+`POST /v1/users/{userId}/onboarding/start-nigeria`
 
-There is a source discrepancy: the uploaded zero-to-first-send page lists a biometric upload for Nigeria, while the uploaded lifecycle and current Bkey React Native reference say NGN omits biometric. MONIFlow records the discrepancy and targets the current RN reference for its React Native implementation unless BMONI current sandbox/support says otherwise.
+with:
+
+- `bvn`
+- `ngnWalletAddress`
+- `ngnWalletIndex`
+
+MONIFlow now prepares the NGN KYC profile using the Nigeria-specific fields before that rail call:
+
+### Personal info
+
+- `firstName`
+- optional `lastName`
+- `phoneNumber`
+- `dateOfBirth`
+- optional `gender`
+
+### Nigerian address
+
+- `streetLine1`
+- `city`
+- `state`
+- `postalCode` — exactly 6 digits
+- `countryCode: "NGA"`
+
+### Identification numbers
+
+- exactly one BVN entry for Phase 6:
+  - `type: "bvn"`
+  - 11-digit `number`
+  - `issuingCountryCode: "NGA"`
+
+The previous `addressDetails.street` shape has been removed.
+
+The BVN helper lookup remains fetch-only. MONIFlow uses it to confirm the documented sandbox persona, then explicitly PATCHes the NGN KYC profile because the lookup itself writes nothing.
+
+After the profile is prepared, MONIFlow calls `start-nigeria` with the persisted CNGN smart-wallet address and wallet index `0`, then reads `GET /onboarding/status`. Only BMONI provider status can make the rail ready.
+
+## Nigeria NGN vs Nigerian USD
+
+Do not mix these flows.
+
+### Phase 6 / hackathon NGN local account
+
+- BVN
+- Nigerian profile/address
+- CNGN wallet
+- `start-nigeria`
+- provider onboarding status
+
+### Later Nigerian USD account
+
+The Nigeria-specific docs describe USD as a second EDD stage with additional employment/compliance/document requirements and `POST /kyc/activate`, followed by USD readiness/onboarding. MONIFlow does not perform that USD EDD in Phase 6.
 
 ## Sandbox Persona
 
@@ -97,28 +141,28 @@ The current destination rule verifies intent-to-plan destination integrity only.
 
 ## Provider Execution Contracts Recorded for Future Phases
 
-Current Bkey RN reference records the Nigeria withdrawal path as:
+Nigeria withdrawal will later use the provider bank-discovery/verification/registration/offramp path, then proposal signing with the device owner key. Owner-proof `signMessage` and proposal `signTransactionHash` must never be interchanged.
 
-- `GET .../bank-accounts/nigerian-banks`
-- `POST .../bank-accounts/verify-nigerian-account`
-- `POST .../bank-accounts/withdrawal-accounts/nigeria`
-- `POST .../smart-wallets/{smartWalletId}/offramp/nigeria`
-- proposal approval/signing states
-- `GET .../smart-wallets/proposals/{proposalId}/sign-payload`
-- device `signTransactionHash(hashToSign, pin)`
-- `POST .../smart-wallets/proposals/{proposalId}/sign`
-- fetch provider proposal/status until final/processing state
+## Tests Added for the Phase 6 Repair
 
-Owner-proof `signMessage` and proposal `signTransactionHash` must never be interchanged.
+`apps/api/src/services/bmoni/nigeria-kyc-schema.test.ts` covers:
 
-## Not Yet Verified
+- the repaired Nigeria NGN KYC profile shape
+- rejection of the old `addressDetails` shape
+- six-digit Nigerian postal-code enforcement
 
-- full Phase 6 NGN KYC/document/readiness/activation sequence
-- Phase 4–7 same-user live sandbox lifecycle
-- native wallet owner-proof flow on a real development build
-- persistent deployed backend database
-- NGN VBA creation through `POST /vba/ngn`
-- sandbox wallet funding
+These tests are committed but have not yet been executed from this chat environment.
+
+## Not Yet Live Verified
+
+- same-user live sandbox user creation
+- native owner wallet creation on a real development build
+- owner-proof challenge → EIP-191 signature → managed CNGN wallet
+- repaired Phase 6 profile PATCH accepted by the live BMONI sandbox
+- `start-nigeria` accepted for that same user/wallet
+- onboarding status reports NGN active
+- NGN virtual-account creation/read
+- sandbox funding credited and visible in provider balance
 - provider-approved Nigerian bank destination
 - bank verification/registration
 - Nigeria offramp proposal execution
@@ -126,18 +170,24 @@ Owner-proof `signMessage` and proposal `signTransactionHash` must never be inter
 - `pnpm install`, `pnpm typecheck`, and `pnpm test` after recent workspace changes
 - lockfile regeneration
 
-## Immediate Checkpoint Before Phase 11/Execution Work
+## Verification Gate Before Phase 11
 
-1. Deploy/redeploy the API with server-side BMONI sandbox variables and persistent storage.
-2. Correct Phase 6 to the complete current React Native NGN KYC sequence.
-3. Build/install the native BMONI development build on an arm64 phone.
-4. Create/recover one Bunch Dillon sandbox user and keep that same local/BMONI mapping through the whole lifecycle.
-5. Complete wallet owner proof and managed CNGN creation.
-6. Complete KYC and confirm onboarding status reports NGN active.
-7. Create/read the NGN virtual account where supported.
-8. Request and confirm sandbox funding; request NGN 300,000 if preserving the canonical demo amounts.
-9. Run `pnpm install`, `pnpm typecheck`, and `pnpm test`.
-10. Only then continue into Human Approval → real bank destination → BMONI offramp/proposal execution.
+Do not start Phase 11 until the same sandbox identity passes these checks in order:
+
+1. `POST /api/onboarding/user` returns/persists one `bmoniUserId`.
+2. Native device reports/creates one owner address using `hasWallet()` → `walletAddress()` or `initWallet()`.
+3. Owner-proof challenge is created for `CNGN`.
+4. Device signs challenge text with `signMessage`.
+5. Managed CNGN smart wallet is created and persisted.
+6. Nigeria Phase 6 submits the repaired profile and BMONI accepts it.
+7. `POST /onboarding/start-nigeria` is accepted for the same `bmoniUserId` and CNGN wallet address.
+8. `GET /onboarding/status` reports the NGN currency/rail active or equivalent documented ready state.
+9. NGN funding route/account is created/read where supported.
+10. Sandbox test funds are requested and `GET /smart-wallets/account/balances` shows a real spendable CNGN/NGN balance.
+11. Home displays that provider-backed balance rather than a mock.
+12. Run `pnpm install`, `pnpm typecheck`, and `pnpm test` successfully.
+
+Only after all twelve are true should MONIFlow proceed to Phase 11 human approval and then the real Nigerian bank/offramp path.
 
 ## Environment Variables
 
@@ -167,4 +217,4 @@ Never expose `BMONI_API_KEY` through an `EXPO_PUBLIC_*` variable.
 - Device signing is separate from human approval.
 - BMONI provider status is the only source for provider execution success.
 - Pockets remain MONIFlow application bookkeeping unless BMONI explicitly provides partitioning semantics for the use case.
-- Uploaded/provider source conflicts are documented, not silently guessed around.
+- Currency-specific provider documentation governs currency-specific integration behavior.
