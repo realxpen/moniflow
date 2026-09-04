@@ -115,29 +115,35 @@ NGN rail                active/ready from BMONI
 
 If the provider returns a failure or action-required state, stop and inspect the provider response. Never locally promote the rail to ready.
 
-## 5. Create/read NGN virtual account
+## 5. Verify the NGN virtual account and routing
 
-After the NGN rail is active, create/read the NGN virtual account according to the current provider contract.
+The current NGN rail documentation says the Nigerian virtual account is **issued during `start-nigeria`**. Do not create a second account through an invented `POST /vba/ngn` flow.
 
-The current Bkey reference uses:
+After Nigeria onboarding is active:
+
+1. point that existing virtual account at the managed CNGN wallet with:
 
 ```text
-POST /v1/users/{userId}/vba/ngn
-{ smartWalletId }
+POST /v1/users/{userId}/smart-wallets/{smartWalletId}/onramp/vba/nigeria
 ```
 
-and reads deposit-account details through:
+2. read the actual bank-account details with:
 
 ```text
 GET /v1/users/{userId}/bank-accounts/deposit-accounts/NGN
 ```
 
+3. if routing ever needs to be removed, BMONI documents `DELETE` on the same `onramp/vba/nigeria` path.
+
 Checkpoint:
 
 ```text
-NGN virtual account   issued/available
+NGN virtual account   returned by BMONI
+Deposit routing       points at managed CNGN wallet
 CNGN wallet           active
 ```
+
+The current MONIFlow API already reads the NGN deposit account. Explicit routing is a lifecycle/funding operation and should be added before testing real bank-transfer funding; manual BMONI sandbox token credits can still be verified directly from the wallet balance.
 
 ## 6. Request sandbox funds
 
@@ -251,10 +257,12 @@ Do not begin Phase 11 until all of these are proven for the same sandbox user:
 - repaired Nigeria NGN profile PATCH is accepted
 - `start-nigeria` is accepted
 - onboarding status reports NGN active/ready
-- NGN virtual account can be created/read where supported
+- NGN virtual account is returned by BMONI
 - sandbox funds are credited
 - provider balance endpoint returns the real funded amount
 - Home displays that provider-backed amount
 - `pnpm install`, `pnpm typecheck`, and `pnpm test` pass
+
+Use the internal `/_dev/bmoni-status` screen after deployment. With the same `localUserId`, it now calls the read-only `/api/dev/bmoni-lifecycle` endpoint and shows API, user, managed CNGN wallet, Nigeria rail, NGN account, and funded-balance checks plus a `READY / NOT READY` Phase 11 gate.
 
 Do not skip any item by substituting fake provider success.
