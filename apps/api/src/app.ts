@@ -2,6 +2,7 @@ import Fastify from "fastify";
 
 import { env } from "./config/env.js";
 import { createRepositories, type RepositorySet } from "./repositories/index.js";
+import type { MoneyPlanRepository } from "./repositories/money-plan.js";
 import type { WalletOwnershipRepository } from "./repositories/wallet-ownership.js";
 import { activityRoutes } from "./routes/activity.js";
 import { bankingRoutes } from "./routes/banking.js";
@@ -20,6 +21,7 @@ export type AppDependencies = {
   getBmoniGateway: () => BmoniGateway;
   getBmoniUserService: () => BmoniUserService;
   getWalletOwnershipRepository?: () => WalletOwnershipRepository;
+  getMoneyPlanRepository?: () => MoneyPlanRepository;
   ready?: Promise<void>;
 };
 
@@ -36,6 +38,7 @@ function createRuntimeDependencies() {
       getBmoniGateway,
       getBmoniUserService: () => (userService ??= new BmoniUserService(getBmoniGateway(), getRepositories().users)),
       getWalletOwnershipRepository: () => getRepositories().wallets,
+      getMoneyPlanRepository: () => getRepositories().plans,
       get ready() { return getRepositories().ready; }
     } satisfies AppDependencies,
     async close() { await repositories?.close(); }
@@ -47,10 +50,11 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   const dependencies = dependencyOverrides ?? runtime?.dependencies;
   if (!dependencies) throw new Error("MONIFlow API dependencies could not be initialized.");
 
-  const testRepositories = dependencyOverrides && !dependencyOverrides.getWalletOwnershipRepository
+  const testRepositories = dependencyOverrides && (!dependencyOverrides.getWalletOwnershipRepository || !dependencyOverrides.getMoneyPlanRepository)
     ? createRepositories(":memory:")
     : null;
   const getWalletOwnershipRepository = dependencies.getWalletOwnershipRepository ?? (() => testRepositories!.wallets);
+  const getMoneyPlanRepository = dependencies.getMoneyPlanRepository ?? (() => testRepositories!.plans);
 
   const app = Fastify({
     logger: {
@@ -67,9 +71,14 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
 
   const operatorOptions = {
     getBmoniGateway: dependencies.getBmoniGateway,
-    getBmoniUserService: dependencies.getBmoniUserService
+    getBmoniUserService: dependencies.getBmoniUserService,
+    getMoneyPlanRepository
   };
-  const walletOptions = { ...operatorOptions, getWalletOwnershipRepository };
+  const walletOptions = {
+    getBmoniGateway: dependencies.getBmoniGateway,
+    getBmoniUserService: dependencies.getBmoniUserService,
+    getWalletOwnershipRepository
+  };
 
   app.register(healthRoutes, { getBmoniGateway: dependencies.getBmoniGateway });
   app.register(onboardingRoutes, { prefix: "/api/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
