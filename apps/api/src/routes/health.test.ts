@@ -13,16 +13,24 @@ afterEach(async () => {
 
 function gatewayMethods(): Omit<BmoniGateway, "createUser" | "getSupportedSmartWalletCurrencies"> {
   return {
+    approveProposal: vi.fn(),
     createManagedSmartWallet: vi.fn(),
     createOwnerProofChallenge: vi.fn(),
     getNgnDepositAccount: vi.fn(),
+    getNigerianBanks: vi.fn(),
     getOnboardingStatus: vi.fn(),
+    getProposal: vi.fn(),
+    getProposalSignPayload: vi.fn(),
     getSmartWallet: vi.fn(),
     listAccountBalances: vi.fn(),
     listAccountWallets: vi.fn(),
     lookupBvn: vi.fn(),
+    offrampNigeria: vi.fn(),
+    registerNigerianWithdrawalAccount: vi.fn(),
+    signProposal: vi.fn(),
     startNigeriaOnboarding: vi.fn(),
-    updateNigeriaKyc: vi.fn()
+    updateNigeriaKyc: vi.fn(),
+    verifyNigerianAccount: vi.fn()
   };
 }
 
@@ -34,19 +42,13 @@ describe("GET /health", () => {
     const response = await app.inject({ method: "GET", url: "/health" });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      status: "ok",
-      service: "moniflow-api",
-      environment: "test"
-    });
+    expect(response.json()).toEqual({ status: "ok", service: "moniflow-api", environment: "test" });
   });
 
   it("checks BMONI connectivity without returning credentials", async () => {
     const gateway: BmoniGateway = {
       createUser: vi.fn(),
-      getSupportedSmartWalletCurrencies: vi
-        .fn()
-        .mockResolvedValue({ currencies: ["CNGN", "USDB"] }),
+      getSupportedSmartWalletCurrencies: vi.fn().mockResolvedValue({ currencies: ["CNGN", "USDB"] }),
       ...gatewayMethods()
     };
     const repository = new SqliteUserMappingRepository(":memory:");
@@ -60,12 +62,7 @@ describe("GET /health", () => {
     const response = await app.inject({ method: "GET", url: "/health/bmoni" });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      currencies: ["CNGN", "USDB"],
-      environment: "sandbox",
-      service: "bmoni",
-      status: "ok"
-    });
+    expect(response.json()).toEqual({ currencies: ["CNGN", "USDB"], environment: "sandbox", service: "bmoni", status: "ok" });
     expect(response.body).not.toContain("x-api-key");
   });
 });
