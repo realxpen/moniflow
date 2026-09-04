@@ -91,8 +91,9 @@ function parseCreatePocket(input: string): AtomicIntent | null {
   ];
   for (const pattern of patterns) {
     const match = input.match(pattern);
-    if (!match) continue;
-    const name = normalizePocketName(match[1]);
+    const capturedName = match?.[1];
+    if (!capturedName) continue;
+    const name = normalizePocketName(capturedName);
     if (!name) return null;
     return { intent: "CREATE_POCKET", pocket: { name }, requiresApproval: false };
   }
@@ -110,8 +111,9 @@ function parseAllocatePocket(input: string): AtomicIntent | null {
   ];
   for (const pattern of patterns) {
     const match = input.match(pattern);
-    if (!match) continue;
-    const name = normalizePocketName(match[1]);
+    const capturedName = match?.[1];
+    if (!capturedName) continue;
+    const name = normalizePocketName(capturedName);
     if (!name) return null;
     return {
       intent: "ALLOCATE_POCKET",
@@ -140,18 +142,19 @@ function parseAmount(input: string): number | null {
   const candidate = currencyAware?.[0] ?? compactNaira?.[0];
   if (!candidate) return null;
   const match = candidate.match(MONEY_PATTERN);
-  if (!match) return null;
+  const numericPart = match?.[1];
+  if (!numericPart) return null;
 
-  const base = Number.parseFloat(match[1].replace(/,/g, ""));
+  const base = Number.parseFloat(numericPart.replace(/,/g, ""));
   if (!Number.isFinite(base) || base <= 0) return null;
-  const multiplier = match[2]?.toLowerCase() === "k" ? 1_000 : match[2]?.toLowerCase() === "m" ? 1_000_000 : 1;
+  const multiplier = match?.[2]?.toLowerCase() === "k" ? 1_000 : match?.[2]?.toLowerCase() === "m" ? 1_000_000 : 1;
   const amount = base * multiplier;
   return Number.isSafeInteger(amount) ? amount : null;
 }
 
 function parseSavedBank(input: string): string | null {
   const matches = BANK_ALIASES.filter(({ pattern }) => pattern.test(input));
-  return matches.length === 1 ? matches[0].label : null;
+  return matches.length === 1 ? matches[0]?.label ?? null : null;
 }
 
 function splitActionClauses(input: string): string[] {
