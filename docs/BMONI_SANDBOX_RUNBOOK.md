@@ -57,8 +57,8 @@ Expo Go and the static web build cannot perform the secure native wallet operati
 Flow:
 
 1. initialize BMONI SDK
-2. create/read device wallet address
-3. request owner-proof challenge
+2. use `hasWallet()` to decide between `walletAddress()` and `initWallet()`
+3. request owner-proof challenge for `CNGN`
 4. sign challenge text with `signMessage`
 5. submit signature to create managed `CNGN` wallet
 6. persist only public wallet metadata
@@ -74,37 +74,52 @@ Managed CNGN       created
 Smart wallet ID    persisted
 ```
 
-## 4. Complete Nigeria KYC
+## 4. Complete Phase 6 — Nigeria NGN local-account onboarding
 
-For MONIFlow's React Native path, use the current Bkey React Native reference sequence:
+Phase 6 is **NGN/CNGN only**. Do not run the separate Nigerian USD Enhanced Due Diligence path here.
 
-1. GET KYC options
-2. PATCH KYC profile
-3. upload identification document
-4. upload proof of address
-5. GET KYC readiness
-6. POST KYC activate with no `sumsubLevelName`
-7. POST start-nigeria with BVN + CNGN wallet address + wallet index
-8. poll onboarding status until NGN is active
+MONIFlow's repaired flow is:
 
-NGN should not use the Global-KYC biometric path in the current RN reference.
+1. check `GET /v1/users/{userId}/onboarding/status`
+2. if NGN is already active, stop and reuse it
+3. `GET /v1/users/{userId}/kyc/bvn-lookup/{bvn}` to confirm the documented sandbox persona — this is fetch-only and writes nothing
+4. `PATCH /v1/users/{userId}/kyc` with the Nigeria NGN profile:
+   - `personalInfo.firstName`
+   - `personalInfo.lastName`
+   - `personalInfo.phoneNumber`
+   - `personalInfo.dateOfBirth`
+   - optional `personalInfo.gender`
+   - `address.streetLine1`
+   - `address.city`
+   - `address.state`
+   - `address.postalCode` — 6 digits
+   - `address.countryCode: "NGA"`
+   - `identificationNumbers: [{ type: "bvn", number: <11 digits>, issuingCountryCode: "NGA" }]`
+5. `POST /v1/users/{userId}/onboarding/start-nigeria` with:
+   - `bvn`
+   - the persisted `ngnWalletAddress`
+   - `ngnWalletIndex: 0`
+6. read `GET /v1/users/{userId}/onboarding/status`
+7. repeat status checks only as needed until BMONI reports NGN active/ready or a provider failure/action-required state
 
-Known source discrepancy: one uploaded zero-to-first-send page lists a biometric upload for Nigeria, while the lifecycle and current RN reference say NGN omits it. Do not silently add biometric. If the current sandbox rejects the RN-reference path, confirm with BMONI before changing the implementation.
+Do **not** run biometric, `sumsubLevelName`, or Nigerian USD EDD as part of the hackathon NGN Phase 6. The Nigeria-specific BMONI page describes those as part of the later USD international-account stage.
 
 Checkpoint:
 
 ```text
-KYC profile       submitted
-ID document       accepted
-Proof of address  accepted
-KYC readiness     ready
-KYC activation    accepted
-Nigeria rail      active
+BVN persona             matched
+NGN KYC profile         accepted
+Nigeria onboarding      accepted
+NGN rail                active/ready from BMONI
 ```
+
+If the provider returns a failure or action-required state, stop and inspect the provider response. Never locally promote the rail to ready.
 
 ## 5. Create/read NGN virtual account
 
-The current Bkey RN reference creates an NGN VBA with:
+After the NGN rail is active, create/read the NGN virtual account according to the current provider contract.
+
+The current Bkey reference uses:
 
 ```text
 POST /v1/users/{userId}/vba/ngn
@@ -146,7 +161,13 @@ Available after       NGN 240,000
 
 If BMONI grants only the standard NGN 1,000 allocation, do not fake NGN 300,000. Either request a larger credit or use a smaller demo amount that fits the provider balance.
 
-Verify funding via account balances before attempting a withdrawal.
+Verify funding through:
+
+```text
+GET /v1/users/{userId}/smart-wallets/account/balances
+```
+
+before attempting a withdrawal.
 
 ## 7. Prepare the Nigerian bank destination
 
@@ -182,10 +203,10 @@ Withdraw ₦40,000 to my GTBank account and save ₦20,000 for my laptop.
 
 Expected:
 
-- Phase 8 → deterministic MULTI_ACTION
+- Phase 8 → deterministic `MULTI_ACTION`
 - Phase 9 → external 40,000 + internal 20,000
 - available after → current - 60,000
-- Phase 10 → BLOCK / REVIEW / ALLOW based only on deterministic checks
+- Phase 10 → deterministic guard verdict
 - external movement → explicit human authorization required
 
 No BMONI money-movement endpoint should be called before approval.
@@ -217,14 +238,23 @@ Provider-backed activity should record:
 
 MONIFlow-only pocket allocation must remain visibly distinct from a BMONI bank withdrawal.
 
-## Current blockers before a real end-to-end demo
+## Gate before Phase 11
 
-- API must be deployed to a public HTTPS origin reachable by the phone
-- persistence must survive backend restarts/deployments
-- Phase 6 needs the complete KYC document/readiness/activation implementation
-- a native BMONI development build must be installed on an arm64 device
-- sandbox funding must be requested and confirmed
-- a provider-approved Nigerian bank destination must be available for verification
-- bank/offramp/proposal execution phases are not built yet
+Do not begin Phase 11 until all of these are proven for the same sandbox user:
 
-Do not skip any of these by substituting fake provider success.
+- API is reachable over public HTTPS from the phone
+- backend persistence survives a restart/redeploy
+- one `bmoniUserId` is created/recovered and retained
+- native owner wallet exists
+- owner proof succeeds with `signMessage`
+- managed CNGN wallet exists and is persisted
+- repaired Nigeria NGN profile PATCH is accepted
+- `start-nigeria` is accepted
+- onboarding status reports NGN active/ready
+- NGN virtual account can be created/read where supported
+- sandbox funds are credited
+- provider balance endpoint returns the real funded amount
+- Home displays that provider-backed amount
+- `pnpm install`, `pnpm typecheck`, and `pnpm test` pass
+
+Do not skip any item by substituting fake provider success.
