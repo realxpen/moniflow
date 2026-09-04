@@ -4,12 +4,12 @@ import { SqliteUserMappingRepository } from "./sqlite-user-mapping.js";
 
 const repositories: SqliteUserMappingRepository[] = [];
 
-afterEach(() => {
-  repositories.splice(0).forEach((repository) => repository.close());
+afterEach(async () => {
+  await Promise.all(repositories.splice(0).map((repository) => repository.close()));
 });
 
 describe("SqliteUserMappingRepository", () => {
-  it("persists and finds identity mappings case-insensitively by email", () => {
+  it("persists and finds identity mappings case-insensitively by email", async () => {
     const repository = new SqliteUserMappingRepository(":memory:");
     repositories.push(repository);
     const mapping = {
@@ -20,9 +20,9 @@ describe("SqliteUserMappingRepository", () => {
       updatedAt: "2026-09-03T12:00:00.000Z"
     };
 
-    repository.save(mapping);
+    await repository.save(mapping);
 
-    expect(repository.findByLocalUserId(mapping.localUserId)).toEqual(mapping);
-    expect(repository.findByEmail("ada@example.com")).toEqual(mapping);
+    await expect(repository.findByLocalUserId(mapping.localUserId)).resolves.toEqual(mapping);
+    await expect(repository.findByEmail("ada@example.com")).resolves.toEqual(mapping);
   });
 });
