@@ -4,127 +4,167 @@
 
 Phase 10 — MONI Guard
 
-Phase 10 is implemented on `main` as the deterministic safety boundary between Money Plan explanation and human authorization. MONI Guard is a standalone workspace package, does not call an LLM, evaluates eight explicit rules, fails closed on critical mismatches, and returns one of `ALLOW`, `REVIEW`, or `BLOCK`.
+Phase 10 is implemented on `main` as the deterministic safety boundary between Money Plan explanation and human authorization. MONI Guard is a standalone workspace package, contains no LLM call, evaluates explicit rules, fails closed on critical mismatches, and returns `ALLOW`, `REVIEW`, or `BLOCK`.
+
+A BMONI documentation audit was performed after the project's lifecycle, quickstart, sandbox-data, test-token, overview, and use-case sources were added. The audit uncovered one important earlier integration gap: the existing Phase 6 Nigeria route is not the complete current React Native KYC path and must not be marked provider-verified yet.
 
 ## Working
 
 - Phase 1 pnpm workspace, Expo Router mobile app, Fastify API, and package boundaries
-- Phase 2 semantic tokens, foundational components, bounded motion, and private design-system showcase
-- Phase 3 onboarding, tabs, Home operator, bank preview, and operator review journey
-- Phase 4 centralized sandbox-only BMONI REST client, canonical user creation, SQLite `bmoniUserId` mapping, and safe developer status surface
-- Phase 5 BMONI React Native signer integration, owner-proof challenge signing, managed CNGN wallet creation, and public wallet metadata persistence
-- Phase 6 Nigeria sandbox identity/KYC submission, Nigeria onboarding start, and provider onboarding status checks
-- Phase 7 provider-backed wallet state, CNGN balance, and NGN virtual-account surface on Home
-- Phase 8 deterministic Intent Engine with strict Zod validation and no LLM fallback
-- Phase 9 provider-backed Money Plan Engine with explicit external/internal consequence arithmetic
-- Phase 10 deterministic MONI Guard package at `packages/moniguard`
-- MONI Guard rules:
-  - `SUPPORTED_INTENT`
-  - `POSITIVE_AMOUNT`
-  - `CURRENCY`
-  - `BALANCE`
-  - `DESTINATION`
-  - `AMOUNT_INTEGRITY`
-  - `PLAN_INTEGRITY`
-  - `HUMAN_APPROVAL`
-- Verdict policy:
-  - `BLOCK` when any critical rule fails
-  - `REVIEW` when every critical rule passes but external movement requires explicit human authorization
-  - `ALLOW` when every rule passes and no external movement requires authorization
-- `POST /api/operator/guard` accepts the already-validated intent plus the already-built Money Plan and returns the deterministic verdict/check list
-- The guard boundary does not reparse natural language and does not rebuild the plan
-- Money Plan now routes into `/operator/guard` before the approval screen
-- Approval screen requires a serialized MONI Guard `REVIEW` result with every check passed; direct entry without guard clearance is blocked
-- MONI Guard UI uses sequential check rows, micro-labels, a soft/translucent-style safety panel, and a high-contrast SAFE TO CONTINUE / BLOCKED outcome band
-- Guard UI deliberately says saved-bank destination "matched" rather than claiming provider account verification that the current backend does not yet possess
-- No guard verdict signs, authorizes, or executes funds by itself
+- Phase 2 MONIFlow visual system and reusable components
+- Phase 3 shell/navigation and static product journey
+- Phase 4 sandbox BMONI REST client, user creation, local → `bmoniUserId` mapping
+- Phase 5 React Native BMONI wallet integration, owner-proof signing, managed CNGN wallet persistence
+- Phase 7 provider wallet/balance/deposit-account reads
+- Phase 8 deterministic Intent Engine
+- Phase 9 provider-balance Money Plan arithmetic
+- Phase 10 deterministic MONI Guard and guarded authorization boundary
+- native BMONI device adapter now exposes both:
+  - `signMessage` for EIP-191 owner proof
+  - `signTransactionHash` for future raw proposal-hash signing
+- repo documentation now includes:
+  - `docs/BMONI_INTEGRATION.md`
+  - `docs/BMONI_CAPABILITY_MAP.md`
+  - `docs/BMONI_SANDBOX_RUNBOOK.md`
 
-## Rule Semantics
+## BMONI Lifecycle Authority
 
-### SUPPORTED_INTENT
-Only Phase 8 supported intents may cross the safety boundary. `UNSUPPORTED` is blocked.
+MONIFlow must follow:
 
-### POSITIVE_AMOUNT
-Money-moving actions must have finite positive values. No-movement actions must remain exactly zero.
+1. User
+2. Wallet
+3. KYC
+4. Rail
+5. Fund
+6. Move money
 
-### CURRENCY
-The plan and every monetary intent remain NGN. Currency mutation is blocked.
+A later stage must not be treated as valid while an earlier prerequisite is incomplete.
 
-### BALANCE
-`totalCommitted` must be non-negative, no greater than current available funds, and `availableAfter` must not be negative.
+## Nigeria KYC Correction Required
 
-### DESTINATION
-Every planned bank withdrawal must correspond positionally and exactly to the validated saved-bank destination label in the Phase 8 intent. This is destination-integrity validation, not yet live provider verification of a beneficiary/account record.
+The current Bkey React Native reference uses the fixed NGN sequence:
 
-### AMOUNT_INTEGRITY
-Every plan action must preserve the exact amount and action kind from the validated intent. Amount substitution is blocked.
+1. `GET /v1/users/{userId}/kyc/options`
+2. `PATCH /v1/users/{userId}/kyc`
+3. multipart identification upload
+4. multipart proof-of-address upload
+5. `GET /v1/users/{userId}/kyc/readiness`
+6. `POST /v1/users/{userId}/kyc/activate` with no `sumsubLevelName`
+7. `POST /v1/users/{userId}/onboarding/start-nigeria`
+8. `GET /v1/users/{userId}/onboarding/status` until NGN is active
 
-### PLAN_INTEGRITY
-MONI Guard recomputes external movement, internal allocation, total committed, available-after arithmetic, and sequential action indexes independently from the plan totals. Tampered arithmetic is blocked.
+The existing Phase 6 route currently performs BVN lookup, a minimal KYC patch, then `start-nigeria`. It is therefore **incomplete** against the current RN reference and must be corrected before the Nigeria rail checkpoint can be considered passed.
 
-### HUMAN_APPROVAL
-Any external movement must retain `requiresApproval: true` at both plan and external-action level. A correct external plan yields `REVIEW`, not `ALLOW`, until the user explicitly authorizes it.
+There is a source discrepancy: the uploaded zero-to-first-send page lists a biometric upload for Nigeria, while the uploaded lifecycle and current Bkey React Native reference say NGN omits biometric. MONIFlow records the discrepancy and targets the current RN reference for its React Native implementation unless BMONI current sandbox/support says otherwise.
 
-## Phase 10 Test Coverage Added
+## Sandbox Persona
 
-MONI Guard package tests cover:
+Preferred demo persona:
 
-- valid withdrawal + pocket multi-action → `REVIEW`
-- altered withdrawal amount → `BLOCK`
-- tampered available-after/plan totals → `BLOCK`
-- insufficient funds → `BLOCK`
-- destination substitution → `BLOCK`
-- removal of human approval requirement → `BLOCK`
-- valid non-moving balance check → `ALLOW`
+- Bunch Dillon
+- phone `+2348000000000`
+- BVN `95888168924`
+- NIN `63184876213`
 
-This satisfies the intended malformed-plan checkpoint at the code/test-definition level: intentionally mutated financial plans are expected to fail closed.
+Do not use real identity values in sandbox. Do not mix persona identity numbers with another name or phone.
 
-## Safety Boundary
+## Sandbox Funding Reality
 
-- MONI Guard is deterministic and contains no LLM/API inference call.
-- Intent and Money Plan remain separate immutable inputs to the guard evaluation.
-- A client cannot turn a blocked plan into an approval UI merely by navigating to `/operator/approve`; that screen requires a passing guard payload.
-- Guard clearance is not a wallet signature and is not a BMONI execution request.
-- The current `DESTINATION` rule proves intent-to-plan destination integrity only. Provider-backed saved-bank account ownership/beneficiary verification must be added when the real withdrawal destination store/rail is implemented.
+BMONI sandbox wallets start empty. The standard test-token credit is NGN 1,000 and USD 10, with the docs allowing a request for more for a specific test scenario.
+
+MONIFlow's canonical demo commits NGN 60,000 and visually assumes NGN 300,000 current available. Request NGN 300,000 for the demo sandbox phone if BMONI will grant it. If the provider balance is smaller, the demo must use the real provider amount instead of a hardcoded NGN 300,000.
+
+## MONI Guard
+
+Rules:
+
+- `SUPPORTED_INTENT`
+- `POSITIVE_AMOUNT`
+- `CURRENCY`
+- `BALANCE`
+- `DESTINATION`
+- `AMOUNT_INTEGRITY`
+- `PLAN_INTEGRITY`
+- `HUMAN_APPROVAL`
+
+Verdict policy:
+
+- `BLOCK` when a critical rule fails
+- `REVIEW` when safety checks pass but external movement requires explicit human authorization
+- `ALLOW` when checks pass and no external authorization is required
+
+The current destination rule verifies intent-to-plan destination integrity only. Real provider bank verification belongs to the upcoming bank flow.
+
+## Provider Execution Contracts Recorded for Future Phases
+
+Current Bkey RN reference records the Nigeria withdrawal path as:
+
+- `GET .../bank-accounts/nigerian-banks`
+- `POST .../bank-accounts/verify-nigerian-account`
+- `POST .../bank-accounts/withdrawal-accounts/nigeria`
+- `POST .../smart-wallets/{smartWalletId}/offramp/nigeria`
+- proposal approval/signing states
+- `GET .../smart-wallets/proposals/{proposalId}/sign-payload`
+- device `signTransactionHash(hashToSign, pin)`
+- `POST .../smart-wallets/proposals/{proposalId}/sign`
+- fetch provider proposal/status until final/processing state
+
+Owner-proof `signMessage` and proposal `signTransactionHash` must never be interchanged.
 
 ## Not Yet Verified
 
-- `pnpm install`, `pnpm typecheck`, and `pnpm test` have not been executed from this chat environment after the new `@moniflow/moniguard` workspace dependency was added.
-- `pnpm-lock.yaml` has not been regenerated in this chat environment; a normal networked `pnpm install` should refresh it before using frozen-lockfile CI.
-- The malformed-plan tests are committed but still need an actual Vitest run before the Phase 10 checkpoint is marked test-passed.
-- Earlier live BMONI Phase 4–7 checkpoints still need a deployed sandbox end-to-end run.
-- Exact saved beneficiary/provider verification is not yet available; current destination checking is structural integrity against the validated Phase 8 saved-bank classification.
+- full Phase 6 NGN KYC/document/readiness/activation sequence
+- Phase 4–7 same-user live sandbox lifecycle
+- native wallet owner-proof flow on a real development build
+- persistent deployed backend database
+- NGN VBA creation through `POST /vba/ngn`
+- sandbox wallet funding
+- provider-approved Nigerian bank destination
+- bank verification/registration
+- Nigeria offramp proposal execution
+- proposal hash signing and provider completion status
+- `pnpm install`, `pnpm typecheck`, and `pnpm test` after recent workspace changes
+- lockfile regeneration
 
-## Next Checkpoint
+## Immediate Checkpoint Before Phase 11/Execution Work
 
-1. Run `pnpm install` to refresh the workspace lockfile for `@moniflow/moniguard`.
-2. Run `pnpm typecheck` and `pnpm test`.
-3. Confirm the canonical ₦300k / ₦40k GTBank / ₦20k Laptop plan returns `REVIEW` with all eight checks passed.
-4. Intentionally mutate the plan amount, destination, totals, approval flag, and available balance independently and confirm each mutation returns `BLOCK`.
-5. Confirm a non-moving supported intent such as `CHECK_BALANCE` returns `ALLOW`.
-6. From the mobile flow, confirm Money Plan → MONI Guard → Human Authorization is the only normal route for an external withdrawal.
-7. Confirm a blocked guard result cannot advance to authorization.
-8. After this checkpoint, proceed to the provider proposal / explicit device signing stage while preserving the Guard → Human approval → Signing sequence.
+1. Deploy/redeploy the API with server-side BMONI sandbox variables and persistent storage.
+2. Correct Phase 6 to the complete current React Native NGN KYC sequence.
+3. Build/install the native BMONI development build on an arm64 phone.
+4. Create/recover one Bunch Dillon sandbox user and keep that same local/BMONI mapping through the whole lifecycle.
+5. Complete wallet owner proof and managed CNGN creation.
+6. Complete KYC and confirm onboarding status reports NGN active.
+7. Create/read the NGN virtual account where supported.
+8. Request and confirm sandbox funding; request NGN 300,000 if preserving the canonical demo amounts.
+9. Run `pnpm install`, `pnpm typecheck`, and `pnpm test`.
+10. Only then continue into Human Approval → real bank destination → BMONI offramp/proposal execution.
 
 ## Environment Variables
 
-- `NODE_ENV` — API environment
-- `API_HOST` — API listen host
-- `API_PORT` — API port, default `4000`
-- `BMONI_BASE_URL` — API only; sandbox origin
-- `BMONI_API_KEY` — API only; never exposed to mobile
-- `BMONI_REQUEST_TIMEOUT_MS` — API provider timeout
-- `DATABASE_URL` — SQLite persistence URL
-- `EXPO_PUBLIC_API_URL` — public mobile-to-API URL; never contains secrets
-- `EXPO_PUBLIC_DEV_LOCAL_USER_ID` — optional development-only fallback local UUID
+API/server only:
+
+- `NODE_ENV`
+- `API_HOST`
+- `API_PORT`
+- `BMONI_BASE_URL`
+- `BMONI_API_KEY`
+- `BMONI_REQUEST_TIMEOUT_MS`
+- `DATABASE_URL`
+
+Mobile/web:
+
+- `EXPO_PUBLIC_API_URL`
+- optional dev-only `EXPO_PUBLIC_DEV_LOCAL_USER_ID`
+
+Never expose `BMONI_API_KEY` through an `EXPO_PUBLIC_*` variable.
 
 ## Architecture Decisions
 
-- User-facing onboarding never requires knowledge of `localUserId`; it remains an internal MONIFlow identifier.
 - Intent Engine answers what the user explicitly asked for.
-- Money Plan Engine answers what that request would do to available/unallocated money.
-- MONI Guard independently verifies that the validated intent and Money Plan still agree and that the plan can safely reach the authorization boundary.
-- `BLOCK` is fail-closed and must never enter approval/signing.
-- `REVIEW` means deterministic checks passed but a human must authorize consequential external movement.
-- `ALLOW` is reserved for plans that pass every rule without external authorization requirements.
-- No LLM is permitted inside MONI Guard.
+- Money Plan Engine explains the financial consequence.
+- MONI Guard validates the plan deterministically.
+- Human approval is separate from Guard clearance.
+- Device signing is separate from human approval.
+- BMONI provider status is the only source for provider execution success.
+- Pockets remain MONIFlow application bookkeeping unless BMONI explicitly provides partitioning semantics for the use case.
+- Uploaded/provider source conflicts are documented, not silently guessed around.
