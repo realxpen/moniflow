@@ -161,7 +161,7 @@ export default function NativeWalletSetupScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         {smartWalletAddress ? (
-          <PrimaryButton onPress={() => router.push("/onboarding/success")}>
+          <PrimaryButton onPress={() => router.push("/onboarding/nigeria")}>
             Continue
           </PrimaryButton>
         ) : (
