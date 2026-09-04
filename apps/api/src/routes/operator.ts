@@ -13,7 +13,7 @@ const parseIntentBodySchema = z.object({
 }).strict();
 
 const planBodySchema = z.object({
-  input: z.string().max(500),
+  intent: moniflowIntentSchema,
   localUserId: z.uuid()
 }).strict();
 
@@ -45,16 +45,16 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
       return reply.status(400).send({
         statusCode: 400,
         error: "Bad Request",
-        message: "input and a valid localUserId are required."
+        message: "A validated Phase 8 intent and valid localUserId are required."
       });
     }
 
-    const intent = moniflowIntentSchema.parse(parseIntent(parsed.data.input));
+    const intent = parsed.data.intent;
     if (intent.intent === "UNSUPPORTED") {
       return reply.status(422).send({
         statusCode: 422,
         error: "Unprocessable Entity",
-        message: "This instruction is not supported deterministically.",
+        message: "Unsupported intent cannot become a Money Plan.",
         intent
       });
     }
