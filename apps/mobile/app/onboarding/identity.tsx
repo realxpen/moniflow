@@ -8,15 +8,16 @@ import { colors, radius, spacing, typography } from "@/theme";
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
 export default function IdentityScreen() {
-  const [firstName, setFirstName] = useState("Ayomide");
-  const [email, setEmail] = useState("ayomide@example.com");
+  const [firstName, setFirstName] = useState("Bunch");
+  const [lastName, setLastName] = useState("Dillon");
+  const [email, setEmail] = useState("bunch.dillon@example.com");
   const [phoneNumber, setPhoneNumber] = useState("+2348000000000");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const continueOnboarding = async () => {
-    if (!firstName.trim() || !email.trim() || !phoneNumber.trim()) {
-      setError("First name, email, and phone are required.");
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || !phoneNumber.trim()) {
+      setError("First name, last name, email, and phone are required.");
       return;
     }
 
@@ -28,6 +29,7 @@ export default function IdentityScreen() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           firstName: firstName.trim(),
+          lastName: lastName.trim(),
           email: email.trim().toLowerCase(),
           phoneNumber: phoneNumber.trim()
         })
@@ -55,20 +57,32 @@ export default function IdentityScreen() {
     <Screen contentContainerStyle={styles.screen} scroll={false}>
       <View style={styles.content}>
         <FlowHeader
-          description="MONIFlow creates your sandbox identity and keeps its internal ID out of the normal user flow."
-          eyebrow="01 · IDENTITY"
-          title="First, let’s know you."
+          description="BMONI sandbox verification uses fixed identity personas. These defaults keep user creation and later BVN verification on the same documented persona."
+          eyebrow="01 · SANDBOX IDENTITY"
+          title="Create the test workspace."
         />
         <SoftCard style={styles.form}>
-          <View style={styles.field}>
-            <Text style={styles.label}>FIRST NAME</Text>
-            <TextInput
-              accessibilityLabel="First name"
-              autoCapitalize="words"
-              onChangeText={setFirstName}
-              style={styles.input}
-              value={firstName}
-            />
+          <View style={styles.row}>
+            <View style={styles.field}>
+              <Text style={styles.label}>FIRST NAME</Text>
+              <TextInput
+                accessibilityLabel="First name"
+                autoCapitalize="words"
+                onChangeText={setFirstName}
+                style={styles.input}
+                value={firstName}
+              />
+            </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>LAST NAME</Text>
+              <TextInput
+                accessibilityLabel="Last name"
+                autoCapitalize="words"
+                onChangeText={setLastName}
+                style={styles.input}
+                value={lastName}
+              />
+            </View>
           </View>
           <View style={styles.field}>
             <Text style={styles.label}>EMAIL</Text>
@@ -92,8 +106,12 @@ export default function IdentityScreen() {
               value={phoneNumber}
             />
           </View>
-          <StatusPill label="BMONI SANDBOX" tone="processing" />
+          <View style={styles.sandboxRow}>
+            <StatusPill label="BMONI SANDBOX" tone="processing" />
+            <Text style={styles.persona}>BUNCH DILLON PERSONA</Text>
+          </View>
         </SoftCard>
+        <Text style={styles.note}>Do not replace these sandbox identity fields with your real BVN/NIN identity. BMONI’s sandbox only resolves its documented test personas.</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
       <PrimaryButton disabled={busy} onPress={() => void continueOnboarding()}>
@@ -109,9 +127,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingBottom: spacing.xxl
   },
-  content: { gap: spacing.xxxl },
+  content: { gap: spacing.xl },
   form: { gap: spacing.lg },
-  field: { gap: spacing.xs },
+  row: { flexDirection: "row", gap: spacing.sm },
+  field: { flex: 1, gap: spacing.xs },
   label: { ...typography.technical, color: colors.textSecondary },
   input: {
     ...typography.body,
@@ -123,5 +142,8 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: spacing.md
   },
+  sandboxRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  persona: { ...typography.technical, color: colors.textSecondary },
+  note: { ...typography.caption, color: colors.textSecondary, textAlign: "center" },
   error: { ...typography.caption, color: colors.statusError, textAlign: "center" }
 });
