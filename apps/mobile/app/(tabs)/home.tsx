@@ -91,7 +91,7 @@ export default function HomeScreen() {
   const previewCommand = () => {
     const normalized = command.trim();
     if (!normalized) return;
-    router.push({ pathname: "/operator/processing", params: { command: normalized } });
+    router.push({ pathname: "/operator/processing", params: { command: normalized, localUserId } });
   };
 
   return (
@@ -154,14 +154,14 @@ export default function HomeScreen() {
       <View style={styles.section}>
         <SectionTitle eyebrow="MONIFLOW OPERATOR" title="What should your money do?" />
         <OperatorInput
-          actionLabel="Preview intent"
+          actionLabel="Preview plan"
           onChangeText={setCommand}
           onSubmit={previewCommand}
           placeholder="Ask MONIFlow..."
           value={command}
         />
         <View style={styles.suggestions}>
-          <Text style={styles.technicalLabel}>SUPPORTED IN PHASE 8</Text>
+          <Text style={styles.technicalLabel}>DETERMINISTIC INTENTS</Text>
           <View style={styles.chipRow}>
             {mockHomeData.suggestions.map((suggestion) => (
               <SuggestionChip
