@@ -14,6 +14,12 @@ import type {
   UpdateNigeriaKycInput
 } from "./schemas.js";
 
+export type BmoniUploadFile = {
+  bytes: Uint8Array;
+  filename: string;
+  contentType: string;
+};
+
 export interface BmoniGateway {
   createUser(input: CreateBmoniUserInput): Promise<BmoniUser>;
   getSupportedSmartWalletCurrencies(): Promise<SupportedSmartWalletCurrencies>;
@@ -21,11 +27,26 @@ export interface BmoniGateway {
   createManagedSmartWallet(bmoniUserId: string, input: CreateManagedWalletInput): Promise<ManagedSmartWallet>;
   lookupBvn(bmoniUserId: string, bvn: string): Promise<BvnLookup>;
   updateNigeriaKyc(bmoniUserId: string, input: UpdateNigeriaKycInput): Promise<KycProfileResponse>;
+  getKycReadiness(bmoniUserId: string): Promise<unknown>;
+  activateKyc(bmoniUserId: string): Promise<unknown>;
+  uploadKycIdentification(bmoniUserId: string, input: {
+    files: BmoniUploadFile[];
+    type: string;
+    documentNumber: string;
+    issuingCountry: string;
+    expirationDate?: string;
+    issueDate?: string;
+  }): Promise<unknown>;
+  uploadKycProofOfAddress(bmoniUserId: string, input: {
+    files: BmoniUploadFile[];
+    type: string;
+  }): Promise<unknown>;
   startNigeriaOnboarding(bmoniUserId: string, input: StartNigeriaOnboardingInput): Promise<StartNigeriaOnboardingResponse>;
   getOnboardingStatus(bmoniUserId: string): Promise<OnboardingStatus>;
   listAccountWallets(bmoniUserId: string): Promise<unknown>;
   listAccountBalances(bmoniUserId: string): Promise<unknown>;
   getSmartWallet(bmoniUserId: string, smartWalletId: string): Promise<unknown>;
+  createNgnVirtualAccount(bmoniUserId: string, smartWalletId: string): Promise<unknown>;
   getNgnDepositAccount(bmoniUserId: string): Promise<unknown>;
 
   getNigerianBanks(bmoniUserId: string): Promise<unknown>;
