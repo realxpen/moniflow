@@ -16,6 +16,7 @@ import { nigeriaOnboardingRoutes } from "./routes/nigeria-onboarding.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
 import { operatorRoutes } from "./routes/operator.js";
 import { pocketRoutes } from "./routes/pockets.js";
+import { walletFundingRoutes } from "./routes/wallet-funding.js";
 import { walletRoutes } from "./routes/wallet.js";
 import { walletOwnershipRoutes } from "./routes/wallet-ownership.js";
 import { createBmoniGateway, type BmoniGateway } from "./services/bmoni/index.js";
@@ -80,14 +81,8 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
     }
   });
 
-  // KYC uploads are bounded before any bytes are forwarded to BMONI.
   app.register(multipart, {
-    limits: {
-      fields: 12,
-      files: 4,
-      fileSize: 8 * 1024 * 1024,
-      parts: 16
-    }
+    limits: { fields: 12, files: 4, fileSize: 8 * 1024 * 1024, parts: 16 }
   });
 
   if (dependencies.ready) app.addHook("onReady", async () => dependencies.ready);
@@ -121,6 +116,7 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   app.register(devRoutes, { prefix: "/api/dev", ...walletOptions });
   app.register(walletOwnershipRoutes, { prefix: "/api/wallet", ...walletOptions });
   app.register(walletRoutes, { prefix: "/api/wallet", ...walletOptions });
+  app.register(walletFundingRoutes, { prefix: "/api/wallet", ...walletOptions });
   app.register(bankingRoutes, { prefix: "/api/banks", ...bankingOptions });
   app.register(operatorRoutes, { prefix: "/api/operator", ...operatorOptions });
   app.register(executionRoutes, { prefix: "/api/operator", ...executionOptions });
