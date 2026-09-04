@@ -7,8 +7,8 @@ import { BmoniUserService, UserMappingConflictError } from "./user-service.js";
 
 const repositories: SqliteUserMappingRepository[] = [];
 
-afterEach(() => {
-  repositories.splice(0).forEach((repository) => repository.close());
+afterEach(async () => {
+  await Promise.all(repositories.splice(0).map((repository) => repository.close()));
 });
 
 function createFixture() {
@@ -21,18 +21,26 @@ function createFixture() {
     updatedAt: "2026-09-03T12:00:00.000Z"
   });
   const gateway: BmoniGateway = {
+    approveProposal: vi.fn(),
     createUser,
     createManagedSmartWallet: vi.fn(),
     createOwnerProofChallenge: vi.fn(),
     getNgnDepositAccount: vi.fn(),
+    getNigerianBanks: vi.fn(),
     getOnboardingStatus: vi.fn(),
+    getProposal: vi.fn(),
+    getProposalSignPayload: vi.fn(),
     getSmartWallet: vi.fn(),
     getSupportedSmartWalletCurrencies: vi.fn(),
     listAccountBalances: vi.fn(),
     listAccountWallets: vi.fn(),
     lookupBvn: vi.fn(),
+    offrampNigeria: vi.fn(),
+    registerNigerianWithdrawalAccount: vi.fn(),
+    signProposal: vi.fn(),
     startNigeriaOnboarding: vi.fn(),
-    updateNigeriaKyc: vi.fn()
+    updateNigeriaKyc: vi.fn(),
+    verifyNigerianAccount: vi.fn()
   };
   const repository = new SqliteUserMappingRepository(":memory:");
   repositories.push(repository);
@@ -51,14 +59,8 @@ describe("BmoniUserService", () => {
   it("creates and persists a provider mapping once", async () => {
     const { createUser, service } = createFixture();
 
-    await expect(service.createOrFindMapping(input)).resolves.toMatchObject({
-      bmoniUserId: "bmoni-user-1",
-      status: "created"
-    });
-    await expect(service.createOrFindMapping(input)).resolves.toMatchObject({
-      bmoniUserId: "bmoni-user-1",
-      status: "existing"
-    });
+    await expect(service.createOrFindMapping(input)).resolves.toMatchObject({ bmoniUserId: "bmoni-user-1", status: "created" });
+    await expect(service.createOrFindMapping(input)).resolves.toMatchObject({ bmoniUserId: "bmoni-user-1", status: "existing" });
     expect(createUser).toHaveBeenCalledTimes(1);
   });
 
@@ -66,11 +68,6 @@ describe("BmoniUserService", () => {
     const { service } = createFixture();
     await service.createOrFindMapping(input);
 
-    await expect(
-      service.createOrFindMapping({
-        ...input,
-        localUserId: "22222222-2222-4222-8222-222222222222"
-      })
-    ).rejects.toBeInstanceOf(UserMappingConflictError);
+    await expect(service.createOrFindMapping({ ...input, localUserId: "22222222-2222-4222-8222-222222222222" })).rejects.toBeInstanceOf(UserMappingConflictError);
   });
 });
