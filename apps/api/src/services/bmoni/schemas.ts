@@ -28,7 +28,12 @@ export type SupportedSmartWalletCurrencies = z.infer<typeof supportedSmartWallet
 
 export const ownerProofChallengeInputSchema = z.object({ currency: z.literal("CNGN"), userOwnerAddress: evmAddressSchema }).strict();
 export type OwnerProofChallengeInput = z.infer<typeof ownerProofChallengeInputSchema>;
-export const ownerProofChallengeResponseSchema = z.object({ challengeId: z.string().min(1), message: z.string().min(1) }).passthrough();
+const ownerProofChallengeSchema = z.object({ challengeId: z.string().min(1), message: z.string().min(1) }).passthrough();
+export const ownerProofChallengeResponseSchema = z.union([
+  ownerProofChallengeSchema,
+  z.object({ challenge: ownerProofChallengeSchema }).passthrough().transform((value) => value.challenge),
+  z.object({ ownerProofChallenge: ownerProofChallengeSchema }).passthrough().transform((value) => value.ownerProofChallenge)
+]);
 export type OwnerProofChallenge = z.infer<typeof ownerProofChallengeResponseSchema>;
 
 export const createManagedWalletInputSchema = z.object({
