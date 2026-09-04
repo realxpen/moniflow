@@ -78,6 +78,10 @@ Expo Go can be used only for temporary UI inspection with `pnpm --filter @monifl
 
 The private Phase 2 showcase is available at `/_dev/design-system`. It is not part of the product tab bar and all displayed financial values are mock data.
 
+## Deploy the UI preview to Vercel
+
+Import the repository as a Vercel project and set its Root Directory to `apps/mobile`. The committed `apps/mobile/vercel.json` runs the Expo web export, publishes `dist`, and preserves direct Expo Router URLs. Do not add `BMONI_API_KEY` to this mobile project.
+
 ## Quality commands
 
 ```bash
