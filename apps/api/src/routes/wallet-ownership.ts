@@ -4,6 +4,7 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { SqliteWalletOwnershipRepository } from "../repositories/sqlite-wallet-ownership.js";
 import {
+  BmoniConfigurationError,
   BmoniProviderError,
   BmoniResponseValidationError,
   BmoniTransportError,
@@ -86,6 +87,9 @@ export const walletOwnershipRoutes: FastifyPluginAsync<WalletOwnershipRouteOptio
 };
 
 function handleBmoniError(app: FastifyInstance, reply: FastifyReply, error: unknown, operation: string) {
+  if (error instanceof BmoniConfigurationError) {
+    return reply.status(503).send({ statusCode: 503, error: "Service Unavailable", message: "BMONI sandbox access is not configured." });
+  }
   if (error instanceof BmoniProviderError) {
     app.log.warn({ errorName: error.name, requestId: error.requestId, statusCode: error.statusCode }, `BMONI ${operation} failed`);
     const statusCode = error.statusCode === 400 || error.statusCode === 409 ? error.statusCode : 502;
