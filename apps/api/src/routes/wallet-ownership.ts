@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyInstance, FastifyPluginAsync, FastifyReply } from "fastify";
 import { z } from "zod";
 
 import { env } from "../config/env.js";
@@ -13,12 +13,7 @@ import { BmoniUserService } from "../services/bmoni/user-service.js";
 
 const localUserIdSchema = z.uuid();
 const ownerAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
-
-const challengeBodySchema = z.object({
-  localUserId: localUserIdSchema,
-  ownerAddress: ownerAddressSchema
-}).strict();
-
+const challengeBodySchema = z.object({ localUserId: localUserIdSchema, ownerAddress: ownerAddressSchema }).strict();
 const createWalletBodySchema = z.object({
   localUserId: localUserIdSchema,
   ownerAddress: ownerAddressSchema,
@@ -90,10 +85,11 @@ export const walletOwnershipRoutes: FastifyPluginAsync<WalletOwnershipRouteOptio
   });
 };
 
-function handleBmoniError(app: Parameters<FastifyPluginAsync>[0], reply: any, error: unknown, operation: string) {
+function handleBmoniError(app: FastifyInstance, reply: FastifyReply, error: unknown, operation: string) {
   if (error instanceof BmoniProviderError) {
     app.log.warn({ errorName: error.name, requestId: error.requestId, statusCode: error.statusCode }, `BMONI ${operation} failed`);
-    return reply.status(error.statusCode === 400 || error.statusCode === 409 ? error.statusCode : 502).send({ statusCode: error.statusCode, error: "Upstream Error", message: `BMONI rejected the ${operation}.` });
+    const statusCode = error.statusCode === 400 || error.statusCode === 409 ? error.statusCode : 502;
+    return reply.status(statusCode).send({ statusCode, error: "Upstream Error", message: `BMONI rejected the ${operation}.` });
   }
   if (error instanceof BmoniTransportError) return reply.status(503).send({ statusCode: 503, error: "Service Unavailable", message: "BMONI could not be reached." });
   if (error instanceof BmoniResponseValidationError) return reply.status(502).send({ statusCode: 502, error: "Bad Gateway", message: "BMONI returned an undocumented wallet response." });
