@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-Phase 7 — Wallet Dashboard and Balance
+Phase 8 — Intent Engine
 
-Phase 7 is implemented on `main` as the provider-backed wallet home layer. MONIFlow now reads the managed CNGN wallet, BMONI account balances, and the NGN deposit account where the Nigeria rail has issued one. Home no longer uses the Phase 3 hardcoded wallet balance.
+Phase 8 is implemented on `main` as a deterministic, validated intent layer. MONIFlow does not use an LLM for MVP intent classification. Supported commands are parsed through explicit grammar rules and strict Zod schemas; unclear or incomplete instructions resolve to `UNSUPPORTED` instead of being guessed.
 
 ## Working
 
@@ -14,53 +14,70 @@ Phase 7 is implemented on `main` as the provider-backed wallet home layer. MONIF
 - Phase 4 centralized sandbox-only BMONI REST client, canonical user creation, SQLite `bmoniUserId` mapping, and safe developer status surface
 - Phase 5 BMONI React Native signer integration, owner-proof challenge signing, managed CNGN wallet creation, and public wallet metadata persistence
 - Phase 6 Nigeria sandbox identity/KYC submission, Nigeria onboarding start, and provider onboarding status checks
-- BMONI wallet-home endpoints integrated server-side:
-  - `GET /v1/users/{userId}/smart-wallets/account/wallets`
-  - `GET /v1/users/{userId}/smart-wallets/account/balances`
-  - `GET /v1/users/{userId}/smart-wallets/{smartWalletId}`
-  - `GET /v1/users/{userId}/bank-accounts/deposit-accounts/NGN`
-- MONIFlow routes:
-  - `GET /api/wallet?localUserId=...`
-  - `GET /api/wallet/balance?localUserId=...`
-  - `GET /api/wallet/deposit-account?localUserId=...`
-- Home reads provider-backed CNGN wallet state and available balance instead of `mockHomeData.availableBalance`
-- Home shows a compact CNGN wallet row with a shortened wallet address and provider status
-- Full wallet address and BMONI smart-wallet ID live behind `/wallet/details`
-- Add Money shows the NGN virtual account only when BMONI returns one; unsupported/not-yet-issued accounts do not block wallet/balance loading
-- Nigeria onboarding passes the sandbox `localUserId` through success into Home, so the provider wallet can load without requiring an extra manual environment value after onboarding
-- Existing non-wallet Phase 3 demo sections such as suggestions, pockets, and activity remain explicitly mock/demo content
+- Phase 7 provider-backed wallet state, CNGN balance, and NGN virtual-account surface on Home
+- Phase 8 supported intents:
+  - `CHECK_BALANCE`
+  - `BANK_WITHDRAWAL`
+  - `CREATE_POCKET`
+  - `ALLOCATE_POCKET`
+  - `SHOW_ACTIVITY`
+  - `MULTI_ACTION`
+  - `UNSUPPORTED`
+- Strict Zod schemas validate every parsed intent before it leaves the API
+- `BANK_WITHDRAWAL` requires an explicit supported saved-bank alias, explicit NGN/naira amount syntax, and always sets `requiresApproval: true`
+- Compact monetary syntax such as `₦40k` and explicit naira syntax such as `₦40,000` are normalized deterministically
+- Saved-bank aliases are explicitly mapped for GTBank, Access Bank, Zenith Bank, UBA, and FirstBank; unknown bank names are not guessed
+- Pocket creation and allocation require an explicit pocket target
+- `MULTI_ACTION` is emitted only when every clause parses to a supported atomic intent; a mixed supported/unsupported command resolves to `UNSUPPORTED`
+- Canonical example `Withdraw ₦40,000 to my GTBank account` maps to the required `BANK_WITHDRAWAL` structure
+- Canonical example `Withdraw ₦40k to GTBank and save ₦20k for laptop` maps to `MULTI_ACTION` with withdrawal + pocket allocation
+- MONIFlow route: `POST /api/operator/intent` with `{ "input": "..." }`
+- Home passes the actual Operator command into `/operator/processing`
+- Operator processing calls the deterministic API and displays the validated result or an explicit unsupported state
+- Phase 8 performs classification/structuring only; it does not execute financial actions
 
-## Security Boundary
+## Intent Safety Boundary
 
-- BMONI REST API key remains server-side only.
-- Device private key is generated and retained by the BMONI native SDK secure-storage boundary.
-- MONIFlow backend never receives or persists the private key or raw device PIN.
-- BVN is accepted only for the provider onboarding request path and is redacted from Fastify request logs.
-- Wallet dashboard endpoints take the local MONIFlow user UUID, resolve the persisted BMONI user mapping server-side, and derive the persisted managed-wallet identifier server-side.
-- The mobile app receives only wallet state, public wallet address, provider wallet ID, balance, and deposit-account details required for display.
+- There is no LLM fallback in Phase 8.
+- There is no fuzzy bank-name inference.
+- There is no implicit currency conversion.
+- Monetary actions require explicit supported monetary syntax.
+- Unknown, ambiguous, partially supported, or incomplete instructions do not degrade into a best guess.
+- A multi-action instruction is atomic at the parsing boundary: every clause must be understood or the whole command becomes `UNSUPPORTED`.
+- External money movement is marked as requiring human approval in the intent itself.
 
-## Provider Source of Truth
+## Phase 8 Test Coverage Added
 
-BMONI's documented wallet-home flow is the authority for Phase 7. The integration uses the account wallet/balance endpoints and the NGN deposit-account endpoint documented for an active Nigeria rail. MONIFlow does not synthesize a fake virtual account when the provider does not return one.
+Parser and route tests cover:
+
+- canonical `BANK_WITHDRAWAL`
+- `₦40k` normalization
+- canonical `MULTI_ACTION`
+- `CHECK_BALANCE`
+- `CREATE_POCKET`
+- `ALLOCATE_POCKET`
+- `SHOW_ACTIVITY`
+- unknown bank rejection
+- mixed supported/unsupported multi-action rejection
+- missing explicit naira syntax rejection
+- empty input rejection
+- `POST /api/operator/intent` response contract
 
 ## Not Yet Verified
 
-- The Phase 4 live BMONI user checkpoint still needs to be proven with the configured sandbox API deployment.
-- The Phase 5 native owner-wallet checkpoint still needs one real iOS/Android development build run.
-- The Phase 6 Nigeria onboarding checkpoint still needs a live BMONI sandbox run.
-- The Phase 7 wallet/balance/deposit-account checkpoint still needs a live provider-backed run against that same sandbox user.
-- Exact provider response envelopes for wallet/balance/deposit-account are normalized defensively because the public lifecycle docs define the endpoints but the live response shape still needs to be observed in MONIFlow's sandbox account.
-- Workspace install/typecheck/tests have not been executed from this chat environment.
+- Workspace install/typecheck/test commands have not been executed from this chat environment, so the new Phase 8 tests are committed but must still be run in a networked build/CI environment.
+- The earlier Phase 4–7 live BMONI checkpoints still need to be proven against the deployed sandbox user.
+- Phase 8 intentionally does not check whether a parsed saved-bank destination actually exists for the user; that belongs in the plan/validation stage.
+- Phase 8 intentionally does not check current balance sufficiency; that belongs in MONI Guard / consequence review.
 
 ## Next Checkpoint
 
-1. Deploy the MONIFlow API with server-side `BMONI_BASE_URL`, `BMONI_API_KEY`, and persistent `DATABASE_URL`.
-2. Confirm the same `localUserId` has a Phase 4 BMONI user mapping and Phase 5 managed CNGN wallet.
-3. Complete Phase 6 until BMONI reports the Nigeria rail active/ready.
-4. Call `GET /api/wallet?localUserId=...` and confirm the returned wallet address and ID match the Phase 5 managed wallet.
-5. Call `GET /api/wallet/balance?localUserId=...` and confirm the CNGN amount matches the BMONI sandbox balance.
-6. Call `GET /api/wallet/deposit-account?localUserId=...`; if the Nigeria rail issued a virtual account, confirm account number/bank details match BMONI. A provider 404 remains an honest unavailable state.
-7. Open Home and confirm the displayed amount, CNGN status, shortened address, wallet detail view, and Add Money virtual account all come from the provider-backed routes.
+1. Run `pnpm typecheck` and `pnpm test` in a networked development/CI environment.
+2. Verify all Phase 8 parser tests pass deterministically.
+3. From Home, submit `Withdraw ₦40,000 to my GTBank account` and confirm the Operator screen shows `BANK_WITHDRAWAL`, NGN 40000, GTBank, and approval required.
+4. Submit `Withdraw ₦40k to GTBank and save ₦20k for laptop` and confirm `MULTI_ACTION` contains exactly two validated actions.
+5. Submit ambiguous and unsupported phrases and confirm MONIFlow returns `UNSUPPORTED` without inventing parameters.
+6. After this checkpoint, proceed to the Money Plan Engine, where parsed intent becomes an executable-but-not-yet-authorized plan with provider/account validation, balance consequences, and approval state.
 
 ## Environment Variables
 
@@ -72,12 +89,13 @@ BMONI's documented wallet-home flow is the authority for Phase 7. The integratio
 - `BMONI_REQUEST_TIMEOUT_MS` — API provider timeout
 - `DATABASE_URL` — SQLite persistence URL
 - `EXPO_PUBLIC_API_URL` — public mobile-to-API URL; never contains secrets
-- `EXPO_PUBLIC_DEV_LOCAL_USER_ID` — optional development-only fallback local UUID; Phase 7 can also receive the UUID from the onboarding route
+- `EXPO_PUBLIC_DEV_LOCAL_USER_ID` — optional development-only fallback local UUID
 
 ## Architecture Decisions
 
-- Home displays money-facing state; blockchain/provider identifiers remain behind the wallet details screen.
-- Provider balance is never replaced with a hardcoded fallback amount.
-- NGN virtual-account availability is optional and does not block wallet or balance rendering.
-- Wallet lookups resolve BMONI identity and wallet identifiers server-side from MONIFlow persistence.
-- Phase 7 does not implement withdrawals, transfers, swaps, or proposal signing; those remain later phases.
+- Intent parsing is deterministic before any future LLM enhancement.
+- Zod is the final contract boundary even for results produced by internal deterministic rules.
+- Intent parsing answers "what did the user explicitly ask for?" only; it does not decide whether the action is financially safe or executable.
+- Saved destination resolution in Phase 8 is a strict label/alias classification, not provider account verification.
+- Human approval requirements are encoded directly into external movement intents.
+- The next layer must consume the validated intent rather than reparsing the user's natural-language command.
