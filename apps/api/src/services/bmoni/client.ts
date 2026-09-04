@@ -84,6 +84,38 @@ export class BmoniClient implements BmoniGateway {
     return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/bank-accounts/deposit-accounts/NGN`, providerPayloadSchema, { method: "GET" });
   }
 
+  async getNigerianBanks(bmoniUserId: string): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/bank-accounts/nigerian-banks`, providerPayloadSchema, { method: "GET" });
+  }
+
+  async verifyNigerianAccount(bmoniUserId: string, input: { bankCode: string; accountNumber: string }): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/bank-accounts/verify-nigerian-account`, providerPayloadSchema, { method: "POST", body: input });
+  }
+
+  async registerNigerianWithdrawalAccount(bmoniUserId: string, input: { accountNumber: string; bankCode: string; bankName: string; accountHolderName: string }): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/bank-accounts/withdrawal-accounts/nigeria`, providerPayloadSchema, { method: "POST", body: input });
+  }
+
+  async offrampNigeria(bmoniUserId: string, smartWalletId: string, input: { bankAccountId: string; fromAmount: string }): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/smart-wallets/${encodeURIComponent(smartWalletId)}/offramp/nigeria`, providerPayloadSchema, { method: "POST", body: input });
+  }
+
+  async approveProposal(bmoniUserId: string, proposalId: string): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/smart-wallets/proposals/${encodeURIComponent(proposalId)}/approve`, providerPayloadSchema, { method: "POST" });
+  }
+
+  async getProposalSignPayload(bmoniUserId: string, proposalId: string): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/smart-wallets/proposals/${encodeURIComponent(proposalId)}/sign-payload`, providerPayloadSchema, { method: "GET" });
+  }
+
+  async signProposal(bmoniUserId: string, proposalId: string, signature: string): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/smart-wallets/proposals/${encodeURIComponent(proposalId)}/sign`, providerPayloadSchema, { method: "POST", body: { signature } });
+  }
+
+  async getProposal(bmoniUserId: string, proposalId: string): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/smart-wallets/proposals/${encodeURIComponent(proposalId)}`, providerPayloadSchema, { method: "GET" });
+  }
+
   private async request<TSchema extends z.ZodType>(path: `/v1/${string}`, responseSchema: TSchema, options: RequestOptions): Promise<z.infer<TSchema>> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
