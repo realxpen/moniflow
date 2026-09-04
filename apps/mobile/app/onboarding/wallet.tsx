@@ -31,7 +31,7 @@ export default function WalletWebPreviewScreen() {
           </Text>
         </View>
 
-        <PrimaryButton onPress={() => router.push("/onboarding/success")}>
+        <PrimaryButton onPress={() => router.push("/onboarding/nigeria")}>
           Continue preview
         </PrimaryButton>
 
