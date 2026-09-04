@@ -9,6 +9,7 @@ import { moneyPlanSchema } from "../schemas/money-plan.js";
 import type {
   CreatePersistedMoneyPlanInput,
   MoneyPlanRepository,
+  MoneyPlanStatus,
   PersistedMoneyPlan
 } from "./money-plan.js";
 
@@ -63,50 +64,35 @@ export class SqliteMoneyPlanRepository implements MoneyPlanRepository {
     return row ? mapRow(rowSchema.parse(row)) : null;
   }
 
-  async recordGuard(
-    planId: string,
-    localUserId: string,
-    verdict: "ALLOW" | "REVIEW" | "BLOCK",
-    checks: GuardCheck[],
-    currentPlanHash: string
-  ): Promise<PersistedMoneyPlan | null> {
+  async recordGuard(planId: string, localUserId: string, verdict: "ALLOW" | "REVIEW" | "BLOCK", checks: GuardCheck[], currentPlanHash: string): Promise<PersistedMoneyPlan | null> {
     const now = new Date().toISOString();
     const status = verdict === "BLOCK" ? "BLOCKED" : verdict === "REVIEW" ? "AWAITING_USER_APPROVAL" : "APPROVED";
     const approvedHash = verdict === "ALLOW" ? currentPlanHash : null;
     const approvedAt = verdict === "ALLOW" ? now : null;
-    this.database.prepare(`
-      UPDATE money_plans_phase11
-      SET status = ?, guard_verdict = ?, plan_hash = ?, approved_plan_hash = ?, approved_at = ?, updated_at = ?
-      WHERE id = ? AND local_user_id = ?
-    `).run(status, verdict, currentPlanHash, approvedHash, approvedAt, now, planId, localUserId);
+    this.database.prepare(`UPDATE money_plans_phase11 SET status = ?, guard_verdict = ?, plan_hash = ?, approved_plan_hash = ?, approved_at = ?, updated_at = ? WHERE id = ? AND local_user_id = ?`).run(status, verdict, currentPlanHash, approvedHash, approvedAt, now, planId, localUserId);
     this.database.prepare(`DELETE FROM guard_checks_phase11 WHERE money_plan_id = ?`).run(planId);
-    const insert = this.database.prepare(`
-      INSERT INTO guard_checks_phase11 (id, money_plan_id, rule, passed, severity, message, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
+    const insert = this.database.prepare(`INSERT INTO guard_checks_phase11 (id, money_plan_id, rule, passed, severity, message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     for (const check of checks) insert.run(randomUUID(), planId, check.rule, check.passed ? 1 : 0, check.severity, check.message, now);
     return this.findById(planId, localUserId);
   }
 
   async approve(planId: string, localUserId: string, approvedPlanHash: string): Promise<PersistedMoneyPlan | null> {
     const now = new Date().toISOString();
-    this.database.prepare(`
-      UPDATE money_plans_phase11
-      SET status = 'APPROVED', approved_plan_hash = ?, approved_at = ?, updated_at = ?
-      WHERE id = ? AND local_user_id = ? AND status = 'AWAITING_USER_APPROVAL' AND guard_verdict = 'REVIEW'
-    `).run(approvedPlanHash, now, now, planId, localUserId);
+    this.database.prepare(`UPDATE money_plans_phase11 SET status = 'APPROVED', approved_plan_hash = ?, approved_at = ?, updated_at = ? WHERE id = ? AND local_user_id = ? AND status = 'AWAITING_USER_APPROVAL' AND guard_verdict = 'REVIEW'`).run(approvedPlanHash, now, now, planId, localUserId);
     return this.findById(planId, localUserId);
   }
 
   async invalidateApproval(planId: string, localUserId: string, _currentPlanHash: string): Promise<PersistedMoneyPlan | null> {
     const now = new Date().toISOString();
-    // Keep plan_hash as the last MONI Guard-approved fingerprint. A changed plan cannot be approved
-    // again until recordGuard runs and establishes a new authoritative fingerprint.
-    this.database.prepare(`
-      UPDATE money_plans_phase11
-      SET status = 'VALIDATING', guard_verdict = NULL, approved_plan_hash = NULL, approved_at = NULL, updated_at = ?
-      WHERE id = ? AND local_user_id = ?
-    `).run(now, planId, localUserId);
+    this.database.prepare(`UPDATE money_plans_phase11 SET status = 'VALIDATING', guard_verdict = NULL, approved_plan_hash = NULL, approved_at = NULL, updated_at = ? WHERE id = ? AND local_user_id = ?`).run(now, planId, localUserId);
+    return this.findById(planId, localUserId);
+  }
+
+  async transitionExecutionStatus(planId: string, localUserId: string, from: MoneyPlanStatus[], to: "EXECUTING" | "AWAITING_DEVICE_SIGNATURE" | "PROCESSING" | "COMPLETED" | "FAILED"): Promise<PersistedMoneyPlan | null> {
+    if (from.length === 0) return this.findById(planId, localUserId);
+    const placeholders = from.map(() => "?").join(",");
+    const now = new Date().toISOString();
+    this.database.prepare(`UPDATE money_plans_phase11 SET status = ?, updated_at = ? WHERE id = ? AND local_user_id = ? AND status IN (${placeholders})`).run(to, now, planId, localUserId, ...from);
     return this.findById(planId, localUserId);
   }
 
