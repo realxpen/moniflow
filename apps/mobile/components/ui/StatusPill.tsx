@@ -4,7 +4,7 @@ import { Animated, Platform, StyleSheet, Text, View } from "react-native";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { colors, radius, spacing, typography } from "@/theme";
 
-type StatusTone = "success" | "warning" | "error" | "processing";
+type StatusTone = "neutral" | "success" | "warning" | "error" | "processing";
 
 type StatusPillProps = {
   label: string;
@@ -12,6 +12,7 @@ type StatusPillProps = {
 };
 
 const toneStyles = {
+  neutral: { backgroundColor: colors.backgroundPrimary, color: colors.textSecondary },
   success: { backgroundColor: colors.statusSuccessSoft, color: colors.statusSuccess },
   warning: { backgroundColor: colors.statusWarningSoft, color: colors.statusWarning },
   error: { backgroundColor: colors.statusErrorSoft, color: colors.statusError },
