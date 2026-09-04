@@ -88,6 +88,11 @@ export default function HomeScreen() {
   }, [localUserId]);
 
   const availableAmount = balance ? Number.parseFloat(balance.amount) : null;
+  const previewCommand = () => {
+    const normalized = command.trim();
+    if (!normalized) return;
+    router.push({ pathname: "/operator/processing", params: { command: normalized } });
+  };
 
   return (
     <Screen contentContainerStyle={styles.screen}>
@@ -149,14 +154,14 @@ export default function HomeScreen() {
       <View style={styles.section}>
         <SectionTitle eyebrow="MONIFLOW OPERATOR" title="What should your money do?" />
         <OperatorInput
-          actionLabel="Preview plan"
+          actionLabel="Preview intent"
           onChangeText={setCommand}
-          onSubmit={() => router.push("/operator/processing")}
+          onSubmit={previewCommand}
           placeholder="Ask MONIFlow..."
           value={command}
         />
         <View style={styles.suggestions}>
-          <Text style={styles.technicalLabel}>SUGGESTED</Text>
+          <Text style={styles.technicalLabel}>SUPPORTED IN PHASE 8</Text>
           <View style={styles.chipRow}>
             {mockHomeData.suggestions.map((suggestion) => (
               <SuggestionChip
@@ -172,7 +177,7 @@ export default function HomeScreen() {
             onPress={() => setCommand(mockHomeData.command)}
             style={({ pressed }) => pressed && styles.pressed}
           >
-            <Text style={styles.demoCommand}>Use the full demo instruction</Text>
+            <Text style={styles.demoCommand}>Use the full multi-action demo instruction</Text>
           </Pressable>
         </View>
       </View>
