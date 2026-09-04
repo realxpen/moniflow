@@ -13,18 +13,9 @@ import type {
 } from "./money-plan.js";
 
 const rowSchema = z.object({
-  id: z.string(),
-  local_user_id: z.string(),
-  original_instruction: z.string(),
-  status: z.string(),
-  intent_payload: z.string(),
-  plan_payload: z.string(),
-  guard_verdict: z.string().nullable(),
-  plan_hash: z.string(),
-  approved_plan_hash: z.string().nullable(),
-  approved_at: z.string().nullable(),
-  created_at: z.string(),
-  updated_at: z.string()
+  id: z.string(), local_user_id: z.string(), original_instruction: z.string(), status: z.string(),
+  intent_payload: z.string(), plan_payload: z.string(), guard_verdict: z.string().nullable(), plan_hash: z.string(),
+  approved_plan_hash: z.string().nullable(), approved_at: z.string().nullable(), created_at: z.string(), updated_at: z.string()
 });
 
 function databaseFilename(databaseUrl: string) {
@@ -40,27 +31,13 @@ export class SqliteMoneyPlanRepository implements MoneyPlanRepository {
     this.database = new DatabaseSync(databaseFilename(databaseUrl));
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS money_plans_phase11 (
-        id TEXT PRIMARY KEY,
-        local_user_id TEXT NOT NULL,
-        original_instruction TEXT NOT NULL,
-        status TEXT NOT NULL,
-        intent_payload TEXT NOT NULL,
-        plan_payload TEXT NOT NULL,
-        guard_verdict TEXT,
-        plan_hash TEXT NOT NULL,
-        approved_plan_hash TEXT,
-        approved_at TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        id TEXT PRIMARY KEY, local_user_id TEXT NOT NULL, original_instruction TEXT NOT NULL, status TEXT NOT NULL,
+        intent_payload TEXT NOT NULL, plan_payload TEXT NOT NULL, guard_verdict TEXT, plan_hash TEXT NOT NULL,
+        approved_plan_hash TEXT, approved_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       ) STRICT;
       CREATE TABLE IF NOT EXISTS guard_checks_phase11 (
-        id TEXT PRIMARY KEY,
-        money_plan_id TEXT NOT NULL,
-        rule TEXT NOT NULL,
-        passed INTEGER NOT NULL,
-        severity TEXT NOT NULL,
-        message TEXT,
-        created_at TEXT NOT NULL
+        id TEXT PRIMARY KEY, money_plan_id TEXT NOT NULL, rule TEXT NOT NULL, passed INTEGER NOT NULL,
+        severity TEXT NOT NULL, message TEXT, created_at TEXT NOT NULL
       ) STRICT;
     `);
   }
@@ -116,18 +93,20 @@ export class SqliteMoneyPlanRepository implements MoneyPlanRepository {
     this.database.prepare(`
       UPDATE money_plans_phase11
       SET status = 'APPROVED', approved_plan_hash = ?, approved_at = ?, updated_at = ?
-      WHERE id = ? AND local_user_id = ? AND status = 'AWAITING_USER_APPROVAL'
+      WHERE id = ? AND local_user_id = ? AND status = 'AWAITING_USER_APPROVAL' AND guard_verdict = 'REVIEW'
     `).run(approvedPlanHash, now, now, planId, localUserId);
     return this.findById(planId, localUserId);
   }
 
-  async invalidateApproval(planId: string, localUserId: string, currentPlanHash: string): Promise<PersistedMoneyPlan | null> {
+  async invalidateApproval(planId: string, localUserId: string, _currentPlanHash: string): Promise<PersistedMoneyPlan | null> {
     const now = new Date().toISOString();
+    // Keep plan_hash as the last MONI Guard-approved fingerprint. A changed plan cannot be approved
+    // again until recordGuard runs and establishes a new authoritative fingerprint.
     this.database.prepare(`
       UPDATE money_plans_phase11
-      SET status = 'AWAITING_USER_APPROVAL', plan_hash = ?, approved_plan_hash = NULL, approved_at = NULL, updated_at = ?
+      SET status = 'VALIDATING', guard_verdict = NULL, approved_plan_hash = NULL, approved_at = NULL, updated_at = ?
       WHERE id = ? AND local_user_id = ?
-    `).run(currentPlanHash, now, planId, localUserId);
+    `).run(now, planId, localUserId);
     return this.findById(planId, localUserId);
   }
 
