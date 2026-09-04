@@ -11,10 +11,14 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
-function walletMethods(): Pick<BmoniGateway, "createManagedSmartWallet" | "createOwnerProofChallenge"> {
+function additionalGatewayMethods(): Omit<BmoniGateway, "createUser" | "getSupportedSmartWalletCurrencies"> {
   return {
     createManagedSmartWallet: vi.fn(),
-    createOwnerProofChallenge: vi.fn()
+    createOwnerProofChallenge: vi.fn(),
+    getOnboardingStatus: vi.fn(),
+    lookupBvn: vi.fn(),
+    startNigeriaOnboarding: vi.fn(),
+    updateNigeriaKyc: vi.fn()
   };
 }
 
@@ -30,7 +34,7 @@ describe("POST /api/onboarding/user", () => {
         updatedAt: "2026-09-03T12:00:00.000Z"
       }),
       getSupportedSmartWalletCurrencies: vi.fn(),
-      ...walletMethods()
+      ...additionalGatewayMethods()
     };
     const repository = new SqliteUserMappingRepository(":memory:");
     const service = new BmoniUserService(gateway, repository);
@@ -64,7 +68,7 @@ describe("POST /api/onboarding/user", () => {
     const gateway: BmoniGateway = {
       createUser: vi.fn(),
       getSupportedSmartWalletCurrencies: vi.fn(),
-      ...walletMethods()
+      ...additionalGatewayMethods()
     };
     const repository = new SqliteUserMappingRepository(":memory:");
     const app = buildApp({
