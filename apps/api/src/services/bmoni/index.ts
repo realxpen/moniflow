@@ -9,7 +9,7 @@ export {
   BmoniResponseValidationError,
   BmoniTransportError
 } from "./errors.js";
-export type { BmoniGateway } from "./gateway.js";
+export type { BmoniGateway, BmoniUploadFile } from "./gateway.js";
 export {
   bmoniErrorEnvelopeSchema,
   bmoniUserSchema,
