@@ -1,103 +1,126 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import {
-  ConfirmationButton,
-  FlowHeader,
-  PrimaryButton,
-  Screen,
-  SoftCard,
-  StatusPill
-} from "@/components/ui";
-import type { MoneyPlan } from "@/services/money-plan";
-import type { GuardResult } from "@/services/moniguard";
+import { ConfirmationButton, FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
+import { approvePlan, getAuthorization, type AuthorizationSnapshot } from "@/services/approval";
 import { colors, radius, spacing, typography } from "@/theme";
 
 export default function ApprovalScreen() {
-  const params = useLocalSearchParams<{ command?: string; localUserId?: string; plan?: string; guard?: string }>();
+  const params = useLocalSearchParams<{ localUserId?: string; planId?: string }>();
   const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
-  const plan = useMemo(() => parseJson<MoneyPlan>(params.plan), [params.plan]);
-  const guard = useMemo(() => parseJson<GuardResult>(params.guard), [params.guard]);
-  const withdrawal = plan?.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
-  const allocations = plan?.actions.filter((action) => action.kind === "ALLOCATE_POCKET") ?? [];
-  const guardCleared = guard?.verdict === "REVIEW" && guard.checks.every((check) => check.passed);
+  const planId = typeof params.planId === "string" ? params.planId : "";
+  const [authorization, setAuthorization] = useState<AuthorizationSnapshot | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [approving, setApproving] = useState(false);
 
-  if (!plan || !guardCleared || !withdrawal) {
+  const load = async () => {
+    if (!localUserId || !planId) {
+      setError("Authorization requires the persisted plan identity.");
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      setAuthorization(await getAuthorization(planId, localUserId));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Authorization details are unavailable.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void load(); }, [localUserId, planId]);
+
+  const approve = async () => {
+    if (!authorization || authorization.status !== "AWAITING_USER_APPROVAL") return;
+    setApproving(true);
+    setError(null);
+    try {
+      const result = await approvePlan(planId, localUserId, authorization.planHash);
+      setAuthorization((current) => current ? { ...current, status: result.status } : current);
+      router.push({ pathname: "/operator/signing", params: { localUserId, planId } });
+    } catch (cause) {
+      const typed = cause as Error & { code?: string };
+      if (typed.code === "PLAN_CHANGED") {
+        setError("This plan changed after review. Your approval was invalidated. Review the updated authorization and approve again.");
+        await load();
+      } else {
+        setError(typed.message ?? "MONIFlow could not record your approval.");
+      }
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  if (loading && !authorization) {
     return (
       <Screen contentContainerStyle={styles.screen}>
-        <FlowHeader
-          description="Authorization is unavailable until a valid plan passes MONI Guard."
-          eyebrow="AUTHORIZATION GATE"
-          title="Guard clearance required."
-        />
+        <FlowHeader description="Loading the server-approved consequence snapshot." eyebrow="AUTHORIZE" title="Confirm the exact movement." />
+        <SoftCard style={styles.notice}>
+          <StatusPill label="LOADING" tone="processing" />
+          <Text style={styles.noticeCopy}>Checking the persisted Money Plan and approval state…</Text>
+        </SoftCard>
+      </Screen>
+    );
+  }
+
+  if (!authorization) {
+    return (
+      <Screen contentContainerStyle={styles.screen}>
+        <FlowHeader description="The server did not expose an approvable plan." eyebrow="AUTHORIZATION GATE" title="Approval unavailable." />
         <SoftCard style={styles.notice}>
           <StatusPill label="BLOCKED" tone="warning" />
-          <Text style={styles.noticeCopy}>Open the Money Plan and run MONI Guard before entering the human authorization flow.</Text>
+          <Text style={styles.noticeCopy}>{error ?? "Run MONI Guard before entering authorization."}</Text>
         </SoftCard>
-        <PrimaryButton onPress={() => router.replace({ pathname: "/(tabs)/home", params: { localUserId } })}>
-          Return to Home
-        </PrimaryButton>
+        <PrimaryButton onPress={() => router.replace({ pathname: "/(tabs)/home", params: { localUserId } })}>Return to Home</PrimaryButton>
       </Screen>
     );
   }
 
   return (
     <Screen contentContainerStyle={styles.screen}>
-      <FlowHeader
-        description="MONI Guard passed every deterministic check. Only you can authorize the external movement."
-        eyebrow="HUMAN AUTHORIZATION"
-        title="You stay in control."
-      />
-
-      <View style={styles.consequenceCard}>
-        <Text style={styles.consequenceLabel}>YOU WOULD AUTHORIZE</Text>
-        <Text style={styles.amount}>{formatNaira(withdrawal.amount)}</Text>
-        <View style={styles.destinationBlock}>
-          <Text style={styles.toLabel}>TO</Text>
-          <Text style={styles.destination}>{withdrawal.label}</Text>
-        </View>
-        <View style={styles.darkDivider} />
-        <View style={styles.darkRow}>
-          <Text style={styles.darkMeta}>Expected available after complete plan</Text>
-          <Text style={styles.darkValue}>{formatNaira(plan.totals.availableAfter)}</Text>
-        </View>
+      <View style={styles.header}>
+        <Text style={styles.eyebrow}>AUTHORIZE</Text>
+        <Text style={styles.amount}>{formatNaira(authorization.amount)}</Text>
+        <Text style={styles.to}>to</Text>
+        <Text style={styles.bank}>{authorization.destination.bankName}</Text>
+        {authorization.destination.maskedAccountNumber ? <Text style={styles.account}>{authorization.destination.maskedAccountNumber}</Text> : null}
+        {authorization.destination.accountHolderName ? <Text style={styles.holder}>{authorization.destination.accountHolderName}</Text> : null}
       </View>
 
-      {allocations.map((allocation) => (
-        <SoftCard key={`${allocation.index}-${allocation.label}`} style={styles.allocationCard}>
-          <View style={styles.row}>
-            <View style={styles.rowCopy}>
-              <Text style={styles.rowLabel}>{allocation.label} money space</Text>
-              <Text style={styles.rowMeta}>Internal allocation included in the guarded plan</Text>
-            </View>
-            <Text style={styles.rowValue}>{formatNaira(allocation.amount)}</Text>
-          </View>
+      {!authorization.destination.maskedAccountNumber || !authorization.destination.accountHolderName ? (
+        <SoftCard style={styles.notice}>
+          <StatusPill label="DESTINATION METADATA PENDING" tone="neutral" />
+          <Text style={styles.noticeCopy}>MONIFlow will show the verified account mask and account-holder name once the saved bank destination is bound to BMONI. No account details are fabricated.</Text>
         </SoftCard>
-      ))}
+      ) : null}
 
-      <View style={styles.notice}>
-        <StatusPill label="MONI GUARD · REVIEW" tone="warning" />
-        <Text style={styles.noticeCopy}>All eight deterministic checks passed. External movement still requires your explicit device authorization.</Text>
+      <View style={styles.warningCard}>
+        <Text style={styles.warning}>{authorization.warning}</Text>
+        <View style={styles.divider} />
+        <Text style={styles.availableLabel}>Available afterwards</Text>
+        <Text style={styles.available}>{formatNaira(authorization.availableAfter)}</Text>
       </View>
 
-      <ConfirmationButton
-        label="Authorize guarded plan"
-        onPress={() => router.push({ pathname: "/operator/signing", params: { localUserId, plan: JSON.stringify(plan) } })}
-      />
-      <Text style={styles.disclosure}>MONI Guard clearance does not itself move funds or create a signature.</Text>
+      {authorization.status === "AWAITING_USER_APPROVAL" ? (
+        <ConfirmationButton disabled={approving} label={approving ? "Recording approval…" : `Approve ${formatNaira(authorization.amount)}`} onPress={() => void approve()} />
+      ) : (
+        <>
+          <SoftCard style={styles.notice}>
+            <StatusPill label="APPROVED" tone="success" />
+            <Text style={styles.noticeCopy}>The server has recorded approval for this exact plan fingerprint.</Text>
+          </SoftCard>
+          <PrimaryButton onPress={() => router.push({ pathname: "/operator/signing", params: { localUserId, planId } })}>Continue to device signing</PrimaryButton>
+        </>
+      )}
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <Text style={styles.disclosure}>Approval does not move money and does not create a BMONI proposal or signature. If the amount or destination changes, this approval becomes invalid.</Text>
     </Screen>
   );
-}
-
-function parseJson<T>(value: string | string[] | undefined): T | null {
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
 }
 
 function formatNaira(amount: number) {
@@ -106,23 +129,20 @@ function formatNaira(amount: number) {
 
 const styles = StyleSheet.create({
   screen: { gap: spacing.xxl, paddingBottom: spacing.xxl },
-  consequenceCard: { backgroundColor: colors.surfaceStrong, borderRadius: radius.card, gap: spacing.lg, padding: spacing.xl },
-  consequenceLabel: { ...typography.technical, color: colors.accentSoft },
-  amount: { ...typography.hero, color: colors.textInverse },
-  destinationBlock: { gap: spacing.xs },
-  toLabel: { ...typography.technical, color: colors.textSecondary },
-  destination: { ...typography.heading, color: colors.textInverse },
-  darkDivider: { backgroundColor: colors.borderInverseSoft, height: 1 },
-  darkRow: { alignItems: "center", flexDirection: "row", gap: spacing.md, justifyContent: "space-between" },
-  darkMeta: { ...typography.caption, color: colors.backgroundSecondary, flex: 1 },
-  darkValue: { ...typography.section, color: colors.textInverse },
-  allocationCard: { padding: spacing.lg },
-  row: { alignItems: "center", flexDirection: "row", gap: spacing.md, justifyContent: "space-between" },
-  rowCopy: { flex: 1, gap: spacing.xxs },
-  rowLabel: { ...typography.body, color: colors.textPrimary, fontWeight: "600" },
-  rowMeta: { ...typography.caption, color: colors.textSecondary },
-  rowValue: { ...typography.section, color: colors.textPrimary },
+  header: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.xl },
+  eyebrow: { ...typography.technical, color: colors.textSecondary, letterSpacing: 1.8 },
+  amount: { ...typography.hero, color: colors.textPrimary, fontSize: 64, lineHeight: 70 },
+  to: { ...typography.body, color: colors.textSecondary },
+  bank: { ...typography.display, color: colors.textPrimary, textAlign: "center" },
+  account: { ...typography.section, color: colors.textPrimary },
+  holder: { ...typography.body, color: colors.textSecondary },
+  warningCard: { backgroundColor: colors.surfaceStrong, borderRadius: radius.card, gap: spacing.lg, padding: spacing.xl },
+  warning: { ...typography.heading, color: colors.textInverse },
+  divider: { backgroundColor: colors.borderInverseSoft, height: 1 },
+  availableLabel: { ...typography.technical, color: colors.backgroundSecondary },
+  available: { ...typography.display, color: colors.textInverse },
   notice: { gap: spacing.sm },
   noticeCopy: { ...typography.caption, color: colors.textSecondary },
+  error: { ...typography.body, color: colors.statusError, textAlign: "center" },
   disclosure: { ...typography.technical, color: colors.textSecondary, textAlign: "center" }
 });
