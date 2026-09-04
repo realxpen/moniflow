@@ -11,7 +11,7 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
-describe("POST /onboarding/users", () => {
+describe("POST /api/onboarding/user", () => {
   it("returns only the persisted identity mapping", async () => {
     const gateway: BmoniGateway = {
       createUser: vi.fn().mockResolvedValue({
@@ -41,7 +41,7 @@ describe("POST /onboarding/users", () => {
         localUserId: "11111111-1111-4111-8111-111111111111",
         phoneNumber: "+2348012345678"
       },
-      url: "/onboarding/users"
+      url: "/api/onboarding/user"
     });
 
     expect(response.statusCode).toBe(201);
@@ -68,7 +68,7 @@ describe("POST /onboarding/users", () => {
     const response = await app.inject({
       method: "POST",
       payload: { email: "not-an-email" },
-      url: "/onboarding/users"
+      url: "/api/onboarding/user"
     });
 
     expect(response.statusCode).toBe(400);
