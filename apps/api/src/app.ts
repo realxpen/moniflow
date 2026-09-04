@@ -19,7 +19,7 @@ import { BmoniUserService } from "./services/bmoni/user-service.js";
 export type AppDependencies = {
   getBmoniGateway: () => BmoniGateway;
   getBmoniUserService: () => BmoniUserService;
-  getWalletOwnershipRepository: () => WalletOwnershipRepository;
+  getWalletOwnershipRepository?: () => WalletOwnershipRepository;
   ready?: Promise<void>;
 };
 
@@ -47,6 +47,11 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   const dependencies = dependencyOverrides ?? runtime?.dependencies;
   if (!dependencies) throw new Error("MONIFlow API dependencies could not be initialized.");
 
+  const testRepositories = dependencyOverrides && !dependencyOverrides.getWalletOwnershipRepository
+    ? createRepositories(":memory:")
+    : null;
+  const getWalletOwnershipRepository = dependencies.getWalletOwnershipRepository ?? (() => testRepositories!.wallets);
+
   const app = Fastify({
     logger: {
       redact: [
@@ -58,15 +63,13 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   });
 
   if (dependencies.ready) app.addHook("onReady", async () => dependencies.ready);
+  if (testRepositories) app.addHook("onClose", async () => testRepositories.close());
 
   const operatorOptions = {
     getBmoniGateway: dependencies.getBmoniGateway,
     getBmoniUserService: dependencies.getBmoniUserService
   };
-  const walletOptions = {
-    ...operatorOptions,
-    getWalletOwnershipRepository: dependencies.getWalletOwnershipRepository
-  };
+  const walletOptions = { ...operatorOptions, getWalletOwnershipRepository };
 
   app.register(healthRoutes, { getBmoniGateway: dependencies.getBmoniGateway });
   app.register(onboardingRoutes, { prefix: "/api/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
