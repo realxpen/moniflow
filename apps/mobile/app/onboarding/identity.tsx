@@ -5,7 +5,32 @@ import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import { FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
 import { colors, radius, spacing, typography } from "@/theme";
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
+const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL ?? "";
+
+function resolveApiUrl() {
+  const raw = configuredApiUrl.trim();
+  if (!raw) {
+    if (__DEV__) return "http://localhost:4000";
+    throw new Error("MONIFlow API URL is not configured for this deployment.");
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error("MONIFlow API URL is invalid. Set EXPO_PUBLIC_API_URL to the public HTTPS API domain.");
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new Error("MONIFlow API URL contains credentials. EXPO_PUBLIC_API_URL must be the public HTTPS API domain, never DATABASE_URL.");
+  }
+
+  if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && __DEV__)) {
+    throw new Error("MONIFlow API URL must use HTTPS in the deployed app.");
+  }
+
+  return raw.replace(/\/$/, "");
+}
 
 export default function IdentityScreen() {
   const [firstName, setFirstName] = useState("Bunch");
@@ -24,6 +49,7 @@ export default function IdentityScreen() {
     setBusy(true);
     setError(null);
     try {
+      const apiUrl = resolveApiUrl();
       const response = await fetch(`${apiUrl}/api/onboarding/user`, {
         method: "POST",
         headers: { "content-type": "application/json" },
