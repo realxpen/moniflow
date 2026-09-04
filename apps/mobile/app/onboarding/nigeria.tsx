@@ -20,6 +20,10 @@ export default function NigeriaOnboardingScreen() {
   const [phoneNumber, setPhoneNumber] = useState("+2348000000000");
   const [email, setEmail] = useState("bunch.dillon@example.com");
   const [bvn, setBvn] = useState("95888168924");
+  const [street, setStreet] = useState("15 Admiralty Way");
+  const [city, setCity] = useState("Lagos");
+  const [stateName, setStateName] = useState("Lagos");
+  const [countryCode, setCountryCode] = useState("NGA");
   const [showSandboxDetails, setShowSandboxDetails] = useState(false);
   const [status, setStatus] = useState<NigeriaStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -44,7 +48,13 @@ export default function NigeriaOnboardingScreen() {
           lastName: lastName.trim(),
           phoneNumber: phoneNumber.trim(),
           email: email.trim(),
-          bvn: bvn.trim()
+          bvn: bvn.trim(),
+          addressDetails: {
+            street: street.trim(),
+            city: city.trim(),
+            state: stateName.trim(),
+            countryCode: countryCode.trim().toUpperCase()
+          }
         })
       });
       const payload = (await response.json()) as { status?: NigeriaStatus; message?: string };
@@ -82,7 +92,7 @@ export default function NigeriaOnboardingScreen() {
       <View style={styles.heading}>
         <Text style={styles.eyebrow}>IDENTITY</Text>
         <Text style={styles.title}>Let’s secure your financial workspace.</Text>
-        <Text style={styles.subtitle}>A short Nigeria sandbox check. We only ask for what this rail needs.</Text>
+        <Text style={styles.subtitle}>BMONI sandbox identity values must match a documented test persona. The KYC profile also includes the address fields shown in the official sandbox quickstart.</Text>
       </View>
 
       <SoftCard style={styles.card}>
@@ -93,6 +103,16 @@ export default function NigeriaOnboardingScreen() {
         <Field label="PHONE" value={phoneNumber} onChangeText={setPhoneNumber} keyboardType="phone-pad" />
         <Field label="EMAIL" value={email} onChangeText={setEmail} keyboardType="email-address" />
         <Field label="BVN" value={bvn} onChangeText={setBvn} keyboardType="number-pad" secure maxLength={11} />
+      </SoftCard>
+
+      <SoftCard style={styles.card}>
+        <Text style={styles.sectionLabel}>KYC ADDRESS</Text>
+        <Field label="STREET" value={street} onChangeText={setStreet} />
+        <View style={styles.row}>
+          <Field label="CITY" value={city} onChangeText={setCity} />
+          <Field label="STATE" value={stateName} onChangeText={setStateName} />
+        </View>
+        <Field label="COUNTRY CODE" value={countryCode} onChangeText={setCountryCode} maxLength={3} />
 
         <View style={styles.environmentRow}>
           <View>
@@ -110,7 +130,7 @@ export default function NigeriaOnboardingScreen() {
 
       {showSandboxDetails ? (
         <SoftCard style={styles.detailsCard}>
-          <Text style={styles.detailsCopy}>MONIFlow now carries this internal identity automatically. You do not need to type or copy a UUID.</Text>
+          <Text style={styles.detailsCopy}>The default values are the documented Bunch Dillon sandbox persona and quickstart KYC address. Do not replace them with your real BVN/NIN in sandbox.</Text>
           <Text style={styles.label}>LOCAL USER</Text>
           <Text selectable style={styles.internalId}>{localUserId ? shortId(localUserId) : "Not linked"}</Text>
         </SoftCard>
@@ -130,12 +150,12 @@ export default function NigeriaOnboardingScreen() {
           Enter MONIFlow
         </PrimaryButton>
       ) : status === "processing" || status === "action_required" ? (
-        <PrimaryButton disabled={busy || !localUserId} onPress={() => void refreshStatus()}>{busy ? "Checking…" : "Check status"}</PrimaryButton>
+        <PrimaryButton disabled={busy || !localUserId} onPress={() => void refreshStatus()}>{busy ? "Checking…" : "Check provider status"}</PrimaryButton>
       ) : (
-        <PrimaryButton disabled={busy || !localUserId} onPress={() => void start()}>{busy ? "Securing…" : "Continue"}</PrimaryButton>
+        <PrimaryButton disabled={busy || !localUserId} onPress={() => void start()}>{busy ? "Submitting…" : "Submit sandbox KYC"}</PrimaryButton>
       )}
 
-      <Text style={styles.privacy}>BVN is sent to the MONIFlow API for the BMONI sandbox verification flow and is not stored in MONIFlow’s local wallet table.</Text>
+      <Text style={styles.privacy}>MONIFlow never treats this screen as proof of completed KYC. Only BMONI onboarding status can move the rail to ready. BVN is not persisted in the local wallet table.</Text>
     </Screen>
   );
 }
@@ -184,10 +204,10 @@ function statusTone(status: NigeriaStatus): "neutral" | "success" | "warning" {
 }
 
 function statusMessage(status: NigeriaStatus) {
-  if (status === "ready") return "Nigeria onboarding is active. Your financial workspace is ready.";
-  if (status === "action_required") return "BMONI needs another verification step. MONIFlow will not mark the rail ready until the provider does.";
+  if (status === "ready") return "BMONI reports the Nigeria rail as active. Your financial workspace is ready.";
+  if (status === "action_required") return "BMONI requires another KYC/document action. MONIFlow will not mark the rail ready until the provider does.";
   if (status === "failed") return "BMONI reported a failed onboarding state.";
-  return "Identity accepted. BMONI is processing the Nigeria onboarding state.";
+  return "The KYC/onboarding request was accepted. BMONI provider status remains the source of truth.";
 }
 
 const styles = StyleSheet.create({
@@ -197,6 +217,7 @@ const styles = StyleSheet.create({
   title: { ...typography.display, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary },
   card: { gap: spacing.md },
+  sectionLabel: { ...typography.technical, color: colors.textSecondary, letterSpacing: 1.2 },
   row: { flexDirection: "row", gap: spacing.sm },
   field: { flex: 1, gap: spacing.xs },
   label: { ...typography.technical, color: colors.textSecondary },
