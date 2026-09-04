@@ -7,10 +7,7 @@ import type { MoneyPlanRepository } from "../repositories/money-plan.js";
 import type { WalletOwnershipRepository } from "../repositories/wallet-ownership.js";
 import { BmoniProviderError, type BmoniGateway } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
-import {
-  fingerprintMoneyPlan,
-  requireApprovedPlanForExecution
-} from "../services/plans/approval.js";
+import { fingerprintMoneyPlan, requireApprovedPlanForExecution } from "../services/plans/approval.js";
 
 const paramsSchema = z.object({ planId: z.uuid() }).strict();
 const userBodySchema = z.object({ localUserId: z.uuid() }).strict();
@@ -48,18 +45,17 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     }
 
     const approved = await requireApprovedPlanForExecution(options.getMoneyPlanRepository(), params.data.planId, body.data.localUserId);
-    const withdrawal = approved.plan.actions.filter((action) => action.kind === "BANK_WITHDRAWAL");
-    if (withdrawal.length !== 1) return reply.status(409).send({ message: "Execution currently requires exactly one approved bank-withdrawal action." });
+    const withdrawals = approved.plan.actions.filter((action) => action.kind === "BANK_WITHDRAWAL");
+    const withdrawal = withdrawals.length === 1 ? withdrawals[0] : undefined;
+    if (!withdrawal) return reply.status(409).send({ message: "Execution currently requires exactly one approved bank-withdrawal action." });
 
     const mapping = await options.getBmoniUserService().getMapping(body.data.localUserId);
     if (!mapping) return reply.status(409).send({ message: "BMONI user mapping is missing." });
     const wallet = await options.getWalletOwnershipRepository().findByLocalUserId(body.data.localUserId);
     if (!wallet) return reply.status(409).send({ message: "Managed CNGN wallet is missing." });
-    const bank = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawal[0].label);
+    const bank = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawal.label);
     if (!bank) return reply.status(409).send({ message: "Verified BMONI Nigerian withdrawal destination is missing." });
 
-    // Re-read provider balance immediately before proposal creation. If the consequence changed,
-    // invalidate approval instead of silently executing against a stale approved snapshot.
     const balances = await options.getBmoniGateway().listAccountBalances(mapping.bmoniUserId);
     const freshBalance = findCngnBalance(balances);
     if (freshBalance === null) return reply.status(502).send({ message: "BMONI returned an undocumented CNGN balance response." });
@@ -71,7 +67,7 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     const proposalPayload = await options.getBmoniGateway().offrampNigeria(
       mapping.bmoniUserId,
       wallet.bmoniSmartWalletId,
-      { bankAccountId: bank.providerAccountId, fromAmount: withdrawal[0].amount.toFixed(2) }
+      { bankAccountId: bank.providerAccountId, fromAmount: withdrawal.amount.toFixed(2) }
     );
     const proposalId = extractText(proposalPayload, ["proposalId", "id"]);
     if (!proposalId) return reply.status(502).send({ message: "BMONI offramp returned no proposal id." });
@@ -82,7 +78,7 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
       localUserId: body.data.localUserId,
       providerProposalId: proposalId,
       providerBankAccountId: bank.providerAccountId,
-      amount: withdrawal[0].amount,
+      amount: withdrawal.amount,
       currency: "NGN",
       signHash: null,
       providerStatus: extractText(proposalPayload, ["status"]),
@@ -153,7 +149,6 @@ async function resumeProposal(execution: ProviderExecution, options: ExecutionRo
     try {
       await options.getBmoniGateway().approveProposal(mapping.bmoniUserId, execution.providerProposalId);
     } catch (error) {
-      // Retried prepare calls may encounter an already-approved proposal. Only tolerate BMONI's conflict response.
       if (!(error instanceof BmoniProviderError && error.statusCode === 409)) throw error;
     }
   }
