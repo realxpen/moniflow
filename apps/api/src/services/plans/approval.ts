@@ -48,7 +48,9 @@ export async function loadAuthorizationPlan(
 
   const currentHash = fingerprintMoneyPlan(stored.plan);
   if (stored.status === "APPROVED" && stored.approvedPlanHash !== currentHash) {
-    const invalidated = await repository.invalidateApproval(planId, localUserId, currentHash);
+    // Pass the last guarded hash, not the changed hash. This guarantees a changed plan
+    // cannot establish a new approvable fingerprint without MONI Guard running again.
+    const invalidated = await repository.invalidateApproval(planId, localUserId, stored.planHash);
     if (!invalidated) throw new ApprovalStateError("Money Plan not found.", "NOT_FOUND");
     return invalidated;
   }
@@ -68,12 +70,16 @@ export async function approveMoneyPlan(
 
   const currentHash = fingerprintMoneyPlan(stored.plan);
   if (currentHash !== stored.planHash || currentHash !== expectedPlanHash) {
-    await repository.invalidateApproval(planId, localUserId, currentHash);
-    throw new ApprovalStateError("The amount or destination changed. Approval was invalidated; review and approve the plan again.", "PLAN_CHANGED");
+    // Preserve the last guarded fingerprint so repeat approval attempts continue to fail
+    // until the changed plan is re-evaluated by MONI Guard.
+    await repository.invalidateApproval(planId, localUserId, stored.planHash);
+    throw new ApprovalStateError("The amount or destination changed. Approval was invalidated; run MONI Guard again, then review and approve the changed plan.", "PLAN_CHANGED");
   }
 
   const approved = await repository.approve(planId, localUserId, currentHash);
-  if (!approved) throw new ApprovalStateError("Money Plan not found.", "NOT_FOUND");
+  if (!approved || approved.status !== "APPROVED" || approved.approvedPlanHash !== currentHash) {
+    throw new ApprovalStateError("This plan could not transition to APPROVED.", "NOT_AWAITING_APPROVAL");
+  }
   return approved;
 }
 
@@ -84,7 +90,12 @@ export async function requireApprovedPlanForExecution(
 ): Promise<PersistedMoneyPlan> {
   const stored = await loadAuthorizationPlan(repository, planId, localUserId);
   const currentHash = fingerprintMoneyPlan(stored.plan);
-  if (stored.status !== "APPROVED" || !stored.approvedPlanHash || stored.approvedPlanHash !== currentHash) {
+  if (
+    stored.status !== "APPROVED" ||
+    !stored.approvedPlanHash ||
+    stored.approvedPlanHash !== currentHash ||
+    stored.planHash !== currentHash
+  ) {
     throw new ApprovalStateError("Financial execution requires an approved, unchanged Money Plan.", "NOT_APPROVED");
   }
   return stored;
