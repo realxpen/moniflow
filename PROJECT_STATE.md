@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-Phase 8 — Intent Engine
+Phase 9 — Money Plan Engine
 
-Phase 8 is implemented on `main` as a deterministic, validated intent layer. MONIFlow does not use an LLM for MVP intent classification. Supported commands are parsed through explicit grammar rules and strict Zod schemas; unclear or incomplete instructions resolve to `UNSUPPORTED` instead of being guessed.
+Phase 9 is implemented on `main` as the consequence-planning layer between deterministic intent and future safety/approval. The Money Plan Engine consumes the already-validated Phase 8 intent unchanged, reads the provider-backed CNGN available balance, separates external movement from internal pocket allocation, and calculates the money that remains available/unallocated after both categories.
 
 ## Working
 
@@ -15,69 +15,71 @@ Phase 8 is implemented on `main` as a deterministic, validated intent layer. MON
 - Phase 5 BMONI React Native signer integration, owner-proof challenge signing, managed CNGN wallet creation, and public wallet metadata persistence
 - Phase 6 Nigeria sandbox identity/KYC submission, Nigeria onboarding start, and provider onboarding status checks
 - Phase 7 provider-backed wallet state, CNGN balance, and NGN virtual-account surface on Home
-- Phase 8 supported intents:
-  - `CHECK_BALANCE`
-  - `BANK_WITHDRAWAL`
-  - `CREATE_POCKET`
-  - `ALLOCATE_POCKET`
-  - `SHOW_ACTIVITY`
-  - `MULTI_ACTION`
-  - `UNSUPPORTED`
-- Strict Zod schemas validate every parsed intent before it leaves the API
-- `BANK_WITHDRAWAL` requires an explicit supported saved-bank alias, explicit NGN/naira amount syntax, and always sets `requiresApproval: true`
-- Compact monetary syntax such as `₦40k` and explicit naira syntax such as `₦40,000` are normalized deterministically
-- Saved-bank aliases are explicitly mapped for GTBank, Access Bank, Zenith Bank, UBA, and FirstBank; unknown bank names are not guessed
-- Pocket creation and allocation require an explicit pocket target
-- `MULTI_ACTION` is emitted only when every clause parses to a supported atomic intent; a mixed supported/unsupported command resolves to `UNSUPPORTED`
-- Canonical example `Withdraw ₦40,000 to my GTBank account` maps to the required `BANK_WITHDRAWAL` structure
-- Canonical example `Withdraw ₦40k to GTBank and save ₦20k for laptop` maps to `MULTI_ACTION` with withdrawal + pocket allocation
-- MONIFlow route: `POST /api/operator/intent` with `{ "input": "..." }`
-- Home passes the actual Operator command into `/operator/processing`
-- Operator processing calls the deterministic API and displays the validated result or an explicit unsupported state
-- Phase 8 performs classification/structuring only; it does not execute financial actions
+- Phase 8 deterministic Intent Engine with strict Zod validation and no LLM fallback
+- Phase 9 strict Money Plan schema with typed action cards and totals
+- `POST /api/operator/plan` accepts a validated Phase 8 intent plus `localUserId`; it does not reparse natural language
+- The API resolves the BMONI user mapping server-side and reads the provider-backed CNGN available balance before building the plan
+- Plan action mapping:
+  - `BANK_WITHDRAWAL` → external movement
+  - `ALLOCATE_POCKET` → internal allocation
+  - `CREATE_POCKET` → no money movement
+  - `CHECK_BALANCE` → no money movement
+  - `SHOW_ACTIVITY` → no money movement
+  - `MULTI_ACTION` → ordered composition of the atomic actions
+- Plan totals always expose:
+  - `externalMovement`
+  - `internalAllocation`
+  - `totalCommitted`
+  - `availableAfter`
+- Calculation rule: `availableAfter = currentAvailable - externalMovement - internalAllocation`
+- Canonical example: ₦300,000 current − ₦40,000 GTBank withdrawal − ₦20,000 Laptop allocation = ₦240,000 available/unallocated
+- Internal pocket allocations reduce the user-facing available/unallocated amount even though they do not leave the provider wallet
+- Phase 9 preserves exact arithmetic even when a plan would go negative; blocking insufficient funds belongs to the next Guard/safety phase
+- Home Operator now passes the local wallet identity through the intent stage into the Money Plan flow
+- The Money Plan screen uses provider-backed balance data, oversized money typography, modular numbered action cards, compact movement labels, and a high-contrast Available After consequence card inspired by the project moodboard
+- Technical/provider details stay out of the main plan surface
+- The plan screen remains preview-only and performs no signing or execution
 
-## Intent Safety Boundary
+## Money Plan Safety Boundary
 
-- There is no LLM fallback in Phase 8.
-- There is no fuzzy bank-name inference.
-- There is no implicit currency conversion.
-- Monetary actions require explicit supported monetary syntax.
-- Unknown, ambiguous, partially supported, or incomplete instructions do not degrade into a best guess.
-- A multi-action instruction is atomic at the parsing boundary: every clause must be understood or the whole command becomes `UNSUPPORTED`.
-- External money movement is marked as requiring human approval in the intent itself.
+- Phase 9 does not reinterpret natural language. It consumes the validated Phase 8 intent object.
+- `UNSUPPORTED` cannot become a Money Plan.
+- Current balance is read from BMONI rather than supplied by the mobile client.
+- External and internal commitments are accounted for separately and then combined for the available-after calculation.
+- The plan does not authorize movement, sign a proposal, or call withdrawal execution APIs.
+- A negative `availableAfter` is displayed honestly so the next Guard layer can explain and block it deterministically.
 
-## Phase 8 Test Coverage Added
+## Phase 9 Test Coverage Added
 
-Parser and route tests cover:
+Pure Money Plan Engine tests cover:
 
-- canonical `BANK_WITHDRAWAL`
-- `₦40k` normalization
-- canonical `MULTI_ACTION`
-- `CHECK_BALANCE`
-- `CREATE_POCKET`
-- `ALLOCATE_POCKET`
-- `SHOW_ACTIVITY`
-- unknown bank rejection
-- mixed supported/unsupported multi-action rejection
-- missing explicit naira syntax rejection
-- empty input rejection
-- `POST /api/operator/intent` response contract
+- canonical multi-action calculation: ₦300k − ₦40k − ₦20k = ₦240k
+- bank withdrawal external movement
+- pocket allocation internal commitment
+- balance check with no movement
+- pocket creation with no movement
+- activity view with no movement
+- exact negative outcome arithmetic prior to Guard enforcement
+- refusal to create a plan from `UNSUPPORTED`
 
 ## Not Yet Verified
 
-- Workspace install/typecheck/test commands have not been executed from this chat environment, so the new Phase 8 tests are committed but must still be run in a networked build/CI environment.
+- Workspace install/typecheck/test commands have not been executed from this chat environment, so Phase 9 tests are committed but must still be run in a networked build/CI environment.
 - The earlier Phase 4–7 live BMONI checkpoints still need to be proven against the deployed sandbox user.
-- Phase 8 intentionally does not check whether a parsed saved-bank destination actually exists for the user; that belongs in the plan/validation stage.
-- Phase 8 intentionally does not check current balance sufficiency; that belongs in MONI Guard / consequence review.
+- The provider-backed `/api/operator/plan` checkpoint requires the same mapped sandbox user to have a readable CNGN account balance.
+- Saved-bank aliases remain Phase 8 classifications; provider verification of the exact destination account still belongs to the withdrawal/Guard layer.
+- Phase 9 intentionally does not block insufficient funds, stale balance, or risky destinations. Those belong to MONI Guard.
 
 ## Next Checkpoint
 
 1. Run `pnpm typecheck` and `pnpm test` in a networked development/CI environment.
-2. Verify all Phase 8 parser tests pass deterministically.
-3. From Home, submit `Withdraw ₦40,000 to my GTBank account` and confirm the Operator screen shows `BANK_WITHDRAWAL`, NGN 40000, GTBank, and approval required.
-4. Submit `Withdraw ₦40k to GTBank and save ₦20k for laptop` and confirm `MULTI_ACTION` contains exactly two validated actions.
-5. Submit ambiguous and unsupported phrases and confirm MONIFlow returns `UNSUPPORTED` without inventing parameters.
-6. After this checkpoint, proceed to the Money Plan Engine, where parsed intent becomes an executable-but-not-yet-authorized plan with provider/account validation, balance consequences, and approval state.
+2. Confirm all Phase 9 plan-engine calculation tests pass.
+3. With a provider-backed sandbox balance of ₦300,000, submit `Withdraw ₦40k to GTBank and save ₦20k for laptop`.
+4. Confirm Phase 8 emits the validated `MULTI_ACTION` unchanged into Phase 9.
+5. Confirm the Money Plan UI shows GTBank Withdrawal ₦40,000, Laptop Allocation ₦20,000, External movement ₦40,000, Internal allocation ₦20,000, and Available after ₦240,000.
+6. Confirm `CHECK_BALANCE`, `CREATE_POCKET`, and `SHOW_ACTIVITY` leave `availableAfter` unchanged.
+7. Confirm a plan larger than the current balance shows the negative consequence without executing anything.
+8. After this checkpoint, proceed to MONI Guard / consequence validation and human approval policy.
 
 ## Environment Variables
 
@@ -93,9 +95,9 @@ Parser and route tests cover:
 
 ## Architecture Decisions
 
-- Intent parsing is deterministic before any future LLM enhancement.
-- Zod is the final contract boundary even for results produced by internal deterministic rules.
-- Intent parsing answers "what did the user explicitly ask for?" only; it does not decide whether the action is financially safe or executable.
-- Saved destination resolution in Phase 8 is a strict label/alias classification, not provider account verification.
-- Human approval requirements are encoded directly into external movement intents.
-- The next layer must consume the validated intent rather than reparsing the user's natural-language command.
+- Intent Engine answers what the user explicitly asked for; Money Plan Engine answers what that request would do to their money.
+- The Money Plan boundary accepts structured intent, not raw natural language.
+- Provider-backed CNGN available balance is the starting balance for plan arithmetic.
+- Pocket allocation is logical MONIFlow bookkeeping, but it still reduces the amount presented as available/unallocated.
+- External movement and internal allocation remain separate concepts throughout the plan so later Guard and approval rules can reason about them independently.
+- The plan is explanatory and deterministic; authorization and execution remain separate future states.
