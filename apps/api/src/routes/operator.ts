@@ -1,7 +1,8 @@
-import { evaluateMoniGuard } from "@moniflow/moniguard";
+import { evaluateMoniGuard, type GuardCheck, type GuardResult } from "@moniflow/moniguard";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { z } from "zod";
 
+import type { BankAccountRepository } from "../repositories/bank-account.js";
 import type { MoneyPlanRepository } from "../repositories/money-plan.js";
 import { moniflowIntentSchema } from "../schemas/intent.js";
 import { moneyPlanSchema } from "../schemas/money-plan.js";
@@ -33,6 +34,7 @@ type OperatorRouteOptions = {
   getBmoniGateway: () => BmoniGateway;
   getBmoniUserService: () => BmoniUserService;
   getMoneyPlanRepository: () => MoneyPlanRepository;
+  getBankAccountRepository: () => BankAccountRepository;
 };
 type JsonRecord = Record<string, unknown>;
 
@@ -93,7 +95,13 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
     }
 
     const currentHash = fingerprintMoneyPlan(stored.plan);
-    const result = evaluateMoniGuard({ intent: stored.intent, plan: stored.plan });
+    let result: GuardResult = evaluateMoniGuard({ intent: stored.intent, plan: stored.plan });
+    const withdrawal = stored.plan.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
+    if (withdrawal) {
+      const destination = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawal.label);
+      result = withVerifiedDestination(result, destination ? `${destination.bankName} ${destination.maskedAccountNumber}` : null);
+    }
+
     const updated = await repository.recordGuard(params.data.planId, body.data.localUserId, result.verdict, result.checks, currentHash);
     if (!updated) return reply.status(404).send({ statusCode: 404, error: "Not Found", message: "Money Plan not found." });
     return reply.send({ ...result, planId: updated.id, planHash: currentHash, status: updated.status });
@@ -111,6 +119,9 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
       }
       const withdrawal = stored.plan.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
       if (!withdrawal) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "This plan has no external bank withdrawal to authorize." });
+      const destination = await options.getBankAccountRepository().findVerifiedByLabel(query.data.localUserId, withdrawal.label);
+      if (!destination) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "The bank destination is no longer verified. Run MONI Guard again." });
+
       return reply.send({
         authorization: {
           planId: stored.id,
@@ -119,9 +130,10 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
           amount: withdrawal.amount,
           currency: stored.plan.currency,
           destination: {
-            bankName: withdrawal.label,
-            maskedAccountNumber: null,
-            accountHolderName: null
+            bankName: destination.bankName,
+            maskedAccountNumber: destination.maskedAccountNumber,
+            accountHolderName: destination.accountHolderName,
+            providerAccountId: destination.providerAccountId
           },
           availableAfter: stored.plan.totals.availableAfter,
           warning: "This action will move money outside MONIFlow."
@@ -138,47 +150,51 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
     if (!params.success || !body.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Valid planId, localUserId, and expectedPlanHash are required." });
 
     try {
-      const approved = await approveMoneyPlan(
-        options.getMoneyPlanRepository(),
-        params.data.planId,
-        body.data.localUserId,
-        body.data.expectedPlanHash
-      );
-      return reply.send({
-        approval: {
-          planId: approved.id,
-          status: approved.status,
-          approvedAt: approved.approvedAt,
-          approvedPlanHash: approved.approvedPlanHash
-        }
-      });
+      const stored = await loadAuthorizationPlan(options.getMoneyPlanRepository(), params.data.planId, body.data.localUserId);
+      const withdrawal = stored.plan.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
+      if (withdrawal) {
+        const destination = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawal.label);
+        if (!destination) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Verified bank destination required before approval." });
+      }
+      const approved = await approveMoneyPlan(options.getMoneyPlanRepository(), params.data.planId, body.data.localUserId, body.data.expectedPlanHash);
+      return reply.send({ approval: { planId: approved.id, status: approved.status, approvedAt: approved.approvedAt, approvedPlanHash: approved.approvedPlanHash } });
     } catch (error) {
       return handleApprovalError(reply, error);
     }
   });
 
-  // Read-only checkpoint for Phase 11. Phase 12 execution MUST call requireApprovedPlanForExecution before any BMONI proposal is created.
   app.get<{ Params: unknown; Querystring: unknown }>("/plans/:planId/execution-readiness", async (request, reply) => {
     const params = planParamsSchema.safeParse(request.params);
     const query = planQuerySchema.safeParse(request.query);
     if (!params.success || !query.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Valid planId and localUserId are required." });
     try {
       const approved = await requireApprovedPlanForExecution(options.getMoneyPlanRepository(), params.data.planId, query.data.localUserId);
+      const withdrawal = approved.plan.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
+      if (withdrawal) {
+        const destination = await options.getBankAccountRepository().findVerifiedByLabel(query.data.localUserId, withdrawal.label);
+        if (!destination) return reply.status(409).send({ planId: approved.id, canExecute: false, approvalHashMatches: true, error: "DESTINATION_NOT_VERIFIED", message: "Verified bank destination required before execution." });
+      }
       return reply.send({ planId: approved.id, status: approved.status, canExecute: true, approvalHashMatches: true });
     } catch (error) {
       if (error instanceof ApprovalStateError) {
-        return reply.status(error.code === "NOT_FOUND" ? 404 : 409).send({
-          planId: params.data.planId,
-          canExecute: false,
-          approvalHashMatches: false,
-          error: error.code,
-          message: error.message
-        });
+        return reply.status(error.code === "NOT_FOUND" ? 404 : 409).send({ planId: params.data.planId, canExecute: false, approvalHashMatches: false, error: error.code, message: error.message });
       }
       throw error;
     }
   });
 };
+
+function withVerifiedDestination(result: GuardResult, verifiedDestination: string | null): GuardResult {
+  const checks = result.checks.map((check): GuardCheck => {
+    if (check.rule !== "DESTINATION") return check;
+    return verifiedDestination
+      ? { ...check, passed: true, severity: "info", message: `${verifiedDestination} is a verified BMONI withdrawal destination.` }
+      : { ...check, passed: false, severity: "critical", message: "A verified BMONI Nigerian bank destination is required." };
+  });
+  const blocked = checks.some((check) => !check.passed && check.severity === "critical");
+  const needsApproval = checks.some((check) => check.rule === "HUMAN_APPROVAL" && check.passed && check.severity === "warning");
+  return { checks, verdict: blocked ? "BLOCK" : needsApproval ? "REVIEW" : "ALLOW" };
+}
 
 function handleApprovalError(reply: FastifyReply, error: unknown) {
   if (error instanceof ApprovalStateError) {
