@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -30,6 +30,10 @@ import { colors, layout, spacing, typography } from "@/theme";
 const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
 
 export default function HomeScreen() {
+  const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
+  const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
+  const localUserId = routedLocalUserId?.trim() || configuredLocalUserId;
+
   const [command, setCommand] = useState("");
   const [showAddMoney, setShowAddMoney] = useState(false);
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
@@ -49,9 +53,9 @@ export default function HomeScreen() {
     let active = true;
 
     const load = async () => {
-      if (!configuredLocalUserId) {
+      if (!localUserId) {
         if (active) {
-          setWalletError("Connect a Phase 4 sandbox user to load provider-backed wallet data.");
+          setWalletError("Complete the sandbox onboarding flow to load provider-backed wallet data.");
           setWalletLoading(false);
         }
         return;
@@ -61,9 +65,9 @@ export default function HomeScreen() {
       setWalletError(null);
       try {
         const [nextWallet, nextBalance, nextDepositAccount] = await Promise.all([
-          loadWallet(configuredLocalUserId),
-          loadWalletBalance(configuredLocalUserId),
-          loadDepositAccount(configuredLocalUserId)
+          loadWallet(localUserId),
+          loadWalletBalance(localUserId),
+          loadDepositAccount(localUserId).catch(() => null)
         ]);
         if (!active) return;
         setWallet(nextWallet);
@@ -81,7 +85,7 @@ export default function HomeScreen() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [localUserId]);
 
   const availableAmount = balance ? Number.parseFloat(balance.amount) : null;
 
@@ -116,7 +120,10 @@ export default function HomeScreen() {
             status={wallet.status}
           />
 
-          <Pressable accessibilityRole="button" onPress={() => router.push("/wallet/details")}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: "/wallet/details", params: { localUserId } })}
+          >
             <SoftCard style={styles.walletStrip}>
               <View style={styles.walletStripText}>
                 <Text style={styles.technicalLabel}>CNGN WALLET</Text>
