@@ -13,9 +13,12 @@ afterEach(async () => {
 
 function additionalGatewayMethods(): Omit<BmoniGateway, "createUser" | "getSupportedSmartWalletCurrencies"> {
   return {
+    activateKyc: vi.fn(),
     approveProposal: vi.fn(),
     createManagedSmartWallet: vi.fn(),
+    createNgnVirtualAccount: vi.fn(),
     createOwnerProofChallenge: vi.fn(),
+    getKycReadiness: vi.fn(),
     getNgnDepositAccount: vi.fn(),
     getNigerianBanks: vi.fn(),
     getOnboardingStatus: vi.fn(),
@@ -30,6 +33,8 @@ function additionalGatewayMethods(): Omit<BmoniGateway, "createUser" | "getSuppo
     signProposal: vi.fn(),
     startNigeriaOnboarding: vi.fn(),
     updateNigeriaKyc: vi.fn(),
+    uploadKycIdentification: vi.fn(),
+    uploadKycProofOfAddress: vi.fn(),
     verifyNigerianAccount: vi.fn()
   };
 }
