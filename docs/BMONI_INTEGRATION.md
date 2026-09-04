@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 2 establishes the verified BMONI server boundary. It does not provision wallets, perform KYC, create withdrawal proposals, sign transactions, or move money.
+The BMONI API foundation was implemented ahead of its planned Phase 4 checkpoint. It does not provision wallets, perform KYC, create withdrawal proposals, sign transactions, or move money.
 
 The current official [BMONI documentation](https://bkey.mintlify.app/) and development OpenAPI document were reviewed on 2026-09-03. They remain the final source of truth; endpoint and SDK behavior must never be implemented from memory.
 
@@ -14,7 +14,7 @@ The current official [BMONI documentation](https://bkey.mintlify.app/) and devel
 - OpenAPI document: `https://embedded-dev.bmoni.com/docs/openapi.json`
 - `BMONI_BASE_URL` must contain the origin only, with no `/v1` path.
 
-The Phase 2 client deliberately accepts only the confirmed HTTPS development hostname and refuses to initialize in `NODE_ENV=production`. Production configuration is out of scope. `BMONI_API_KEY` is read by `apps/api` and must never enter mobile code, an `EXPO_PUBLIC_*` variable, logs, or a committed file.
+The current client deliberately accepts only the confirmed HTTPS development hostname and refuses to initialize in `NODE_ENV=production`. Production configuration is out of scope. `BMONI_API_KEY` is read by `apps/api` and must never enter mobile code, an `EXPO_PUBLIC_*` variable, logs, or a committed file.
 
 ## Implemented boundary
 

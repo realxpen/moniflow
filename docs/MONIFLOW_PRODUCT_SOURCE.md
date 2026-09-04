@@ -364,38 +364,30 @@ Income Agent, Savings Agent, Bills Agent, Business Agent, Tax Agent, Family Agen
 
 ## 27. Product Roadmap
 
-### Phase 0 — Foundation
-Vision, MVP, architecture, safety rules, BMONI capability map, demo scenario, success criteria.
+The detailed sequence and phase checkpoints are recorded in [`MONIFLOW_BUILD_PLAN.md`](MONIFLOW_BUILD_PLAN.md). The required order is:
 
-### Phase 1 — BMONI Foundation
-Sandbox API client, configuration, user creation, error handling, persistent BMONI user mapping.
+0. Lock build rules and product sources.
+1. Establish the repository and monorepo foundation.
+2. Build and visually validate the UI design system.
+3. Build the static shell and navigation.
+4. Complete the BMONI API foundation and prove a real sandbox user can be created.
+5. Add device wallet provisioning and ownership proof with the verified SDK.
+6. Add Nigeria onboarding and KYC.
+7. Populate wallet dashboard and balance from provider-backed data.
+8. Implement the deterministic Intent Engine.
+9. Implement the Money Plan Engine.
+10. Implement deterministic MONI Guard rules.
+11. Implement human approval and approval invalidation.
+12. Implement the documented Nigerian bank flow.
+13. Execute the approved BMONI sandbox flow and verify provider status.
+14. Add application-level Money Pockets.
+15. Add Activity and financial memory.
+16. Optionally add schema-constrained LLM interpretation with deterministic fallback.
+17. Polish UI/UX without weakening consequence clarity.
+18. Harden the repeatable demo.
+19. Prepare the presentation and submission.
 
-### Phase 2 — Wallet Foundation
-Device SDK, wallet provisioning, owner address, owner-proof workflow, managed wallet, signing boundary.
-
-### Phase 3 — Nigeria Financial Rail
-Required KYC, Nigeria onboarding, verification status, NGN/CNGN capability, virtual account where available, balance.
-
-### Phase 4 — MONIFlow Intelligence
-Operator input, deterministic parser, structured intent, Money Plan, calculations.
-
-### Phase 5 — MONI Guard
-Policy engine, balance checks, destination checks, amount integrity, plan integrity, approval requirements.
-
-### Phase 6 — Human Approval
-Plan review, Guard display, authorization screen, approval state, approval invalidation after edits.
-
-### Phase 7 — BMONI Execution
-Bank discovery, account verification, withdrawal account, supported offramp flow, proposal, device signing, status retrieval.
-
-### Phase 8 — Financial Memory
-Activity, pockets, saved destinations, plan history.
-
-### Phase 9 — Demo Experience
-Animations, loading states, success/failure, error recovery, demo seed data, presentation polish.
-
-### Post-Hackathon
-Phase 10 intelligence expansion; Phase 11 LifeWallet; Phase 12 GhostPay; Phase 13 TrustDrop research/build; Phase 14 Business MONIFlow.
+Post-hackathon work may expand intelligence, LifeWallet, GhostPay, TrustDrop research, and Business MONIFlow. It must not enter the hackathon MVP without an explicit scope change.
 
 ## 28. Hackathon Success Criteria
 

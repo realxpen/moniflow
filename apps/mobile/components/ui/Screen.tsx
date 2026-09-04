@@ -49,8 +49,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundPrimary
   },
   content: {
+    alignSelf: "center",
     flexGrow: 1,
+    maxWidth: 480,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md
+    paddingVertical: spacing.md,
+    width: "100%"
   }
 });

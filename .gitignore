@@ -9,6 +9,7 @@ coverage/
 .expo/
 .next/
 web-build/
+apps/mobile/dist-web/
 
 # Expo native projects are generated for development builds
 apps/mobile/android/

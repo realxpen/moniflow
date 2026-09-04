@@ -2,7 +2,7 @@
 
 Verified against the official BMONI documentation and development OpenAPI on 2026-09-03. “Verified” means the route and contract were read from those sources; it does not mean MONIFlow has exercised a financial operation.
 
-| Capability | Official contract evidence | Phase 2 status | Boundary |
+| Capability | Official contract evidence | Implementation status | Boundary |
 |---|---|---|---|
 | Partner authentication | `x-api-key` on every REST request | Implemented | API only |
 | Development environment | `https://embedded-dev.bmoni.com` | Enforced | API only |
@@ -17,7 +17,7 @@ Verified against the official BMONI documentation and development OpenAPI on 202
 | Money movement | Documented lifecycle capability | Deferred | Human approval and future signing required |
 | React Native SDK | Official SDK documentation exists | Not installed | Future device boundary |
 
-## Create-user contract recorded for Phase 2
+## Create-user contract recorded for the API foundation
 
 Required request properties:
 

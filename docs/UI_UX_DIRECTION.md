@@ -49,7 +49,7 @@ Use softly elevated cards, rounded modules, subtle borders, and occasional trans
 
 ## Semantic color tokens
 
-| Token | Phase 1 value | Purpose |
+| Token | Phase 2 value | Purpose |
 |---|---:|---|
 | `background-primary` | `#F6F2EA` | Main warm ivory canvas |
 | `background-secondary` | `#EEE8F1` | Pale gray-lilac alternate canvas |
@@ -103,11 +103,29 @@ Used for financial authorization. Reduce decoration, increase contrast, and make
 | `standard` | 280 ms | Cards and navigation continuity |
 | `deliberate` | 420 ms | Important process/result transitions |
 
-Motion must never disguise a status, delay access to approval details, or imply success before provider verification. Respect reduced-motion preferences when animation work begins.
+Motion must never disguise a status, delay access to approval details, or imply success before provider verification. The implementation respects the platform reduced-motion preference.
 
 ## Foundational components
 
-Phase 1 provides `Screen`, `SoftCard`, `GlassCard`, `PrimaryButton`, `SecondaryButton`, `Pill`, `StatusPill`, `MoneyText`, and `SectionTitle`. New components should be added only when a real screen creates a repeated need.
+Phase 2 provides:
+
+- foundations: `Screen`, `SoftCard`, `GlassCard`, `PrimaryButton`, `SecondaryButton`, `Pill`, `StatusPill`, `MoneyText`, and `SectionTitle`;
+- operator and process: `OperatorInput`, `SuggestionChip`, and `ProgressStep`;
+- safety and approval: `GuardCheck`, `BottomSheet`, and `ConfirmationButton`;
+- financial composition: `BalanceCard`, `PocketCard`, and `ActivityRow`;
+- motion primitive: `AnimatedEntry`.
+
+The private `/_dev/design-system` route is the Phase 2 component showcase. It is intentionally outside the permanent tab bar and uses clearly labeled mock data. New primitives should be added only when a real product screen creates a repeated need.
+
+## Motion behavior
+
+- Cards use a subtle fade-and-rise entry.
+- Processing dots pulse without implying success.
+- Operator focus expands the command area slightly.
+- Plan and Guard rows can enter sequentially with bounded delays.
+- Explicit confirmation provides brief device vibration feedback.
+- Consequence Mode avoids decorative or looping motion around authorization.
+- Reduced-motion mode removes entry and status animation while preserving state clarity.
 
 ## Content and trust rules
 

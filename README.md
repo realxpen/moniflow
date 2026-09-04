@@ -12,7 +12,9 @@ The required execution flow is:
 
 ## Current phase
 
-Phase 2 — BMONI Foundation. The backend has a sandbox-only, typed BMONI REST client, strict provider validation, a read-only connectivity check, documented user creation, and SQLite identity mapping. Wallets, KYC, parsing, Guard rules, approval execution, and financial operations are not implemented.
+Phase 2 — UI Design System. The native-first token system, reusable financial components, bounded motion, and private component showcase are implemented. Full screen composition and navigation are Phase 3 work.
+
+The backend also contains BMONI API groundwork implemented ahead of its planned Phase 4 checkpoint. It is preserved, but Phase 4 is not complete until live sandbox user creation is exercised with an authorized test identity.
 
 ## Architecture
 
@@ -54,7 +56,7 @@ curl http://localhost:4000/health
 curl http://localhost:4000/health/bmoni
 ```
 
-`/health/bmoni` requires local sandbox credentials. `POST /onboarding/users` is the only documented provider mutation implemented in Phase 2; it creates no wallet and moves no money.
+`/health/bmoni` requires local sandbox credentials. `POST /onboarding/users` is documented provider groundwork for Phase 4; it creates no wallet and moves no money.
 
 ## Run mobile
 
@@ -72,7 +74,9 @@ pnpm --filter @moniflow/mobile android
 pnpm --filter @moniflow/mobile ios
 ```
 
-Expo Go can be used only for temporary Phase 1 UI inspection with `pnpm --filter @moniflow/mobile start:go`; it is not the architectural target.
+Expo Go can be used only for temporary UI inspection with `pnpm --filter @moniflow/mobile start:go`; it is not the architectural target.
+
+The private Phase 2 showcase is available at `/_dev/design-system`. It is not part of the product tab bar and all displayed financial values are mock data.
 
 ## Quality commands
 
@@ -108,4 +112,4 @@ Never prefix a secret with `EXPO_PUBLIC_`; those values enter the mobile bundle.
 - Sandbox and production remain separate.
 - Logs must not leak credentials, keys, or sensitive authorization values.
 
-Product decisions come from [`docs/MONIFLOW_PRODUCT_SOURCE.md`](docs/MONIFLOW_PRODUCT_SOURCE.md), and engineering rules come from [`AGENTS.md`](AGENTS.md). BMONI integration must follow the current [official documentation](https://bkey.mintlify.app/).
+Product decisions come from [`docs/MONIFLOW_PRODUCT_SOURCE.md`](docs/MONIFLOW_PRODUCT_SOURCE.md), the agreed sequence is in [`docs/MONIFLOW_BUILD_PLAN.md`](docs/MONIFLOW_BUILD_PLAN.md), and engineering rules come from [`AGENTS.md`](AGENTS.md). BMONI integration must follow the current [official documentation](https://bkey.mintlify.app/).
