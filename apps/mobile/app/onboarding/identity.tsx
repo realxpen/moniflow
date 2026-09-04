@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
 import { colors, radius, spacing, typography } from "@/theme";
@@ -8,6 +8,12 @@ import { colors, radius, spacing, typography } from "@/theme";
 export default function IdentityScreen() {
   const [firstName, setFirstName] = useState("Ayomide");
   const [email, setEmail] = useState("ayomide@example.com");
+
+  const continueOnboarding = () => {
+    router.push(
+      Platform.OS === "web" ? "/onboarding/wallet" : "/onboarding/wallet-native"
+    );
+  };
 
   return (
     <Screen contentContainerStyle={styles.screen} scroll={false}>
@@ -42,13 +48,17 @@ export default function IdentityScreen() {
           <StatusPill label="LOCAL UI ONLY" tone="warning" />
         </SoftCard>
       </View>
-      <PrimaryButton onPress={() => router.push("/onboarding/wallet")}>Continue</PrimaryButton>
+      <PrimaryButton onPress={continueOnboarding}>Continue</PrimaryButton>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { gap: spacing.xl, justifyContent: "space-between", paddingBottom: spacing.xxl },
+  screen: {
+    gap: spacing.xl,
+    justifyContent: "space-between",
+    paddingBottom: spacing.xxl
+  },
   content: { gap: spacing.xxxl },
   form: { gap: spacing.lg },
   field: { gap: spacing.xs },
