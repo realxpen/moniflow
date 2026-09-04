@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-Phase 9 — Money Plan Engine
+Phase 10 — MONI Guard
 
-Phase 9 is implemented on `main` as the consequence-planning layer between deterministic intent and future safety/approval. The Money Plan Engine consumes the already-validated Phase 8 intent unchanged, reads the provider-backed CNGN available balance, separates external movement from internal pocket allocation, and calculates the money that remains available/unallocated after both categories.
+Phase 10 is implemented on `main` as the deterministic safety boundary between Money Plan explanation and human authorization. MONI Guard is a standalone workspace package, does not call an LLM, evaluates eight explicit rules, fails closed on critical mismatches, and returns one of `ALLOW`, `REVIEW`, or `BLOCK`.
 
 ## Working
 
@@ -16,78 +16,95 @@ Phase 9 is implemented on `main` as the consequence-planning layer between deter
 - Phase 6 Nigeria sandbox identity/KYC submission, Nigeria onboarding start, and provider onboarding status checks
 - Phase 7 provider-backed wallet state, CNGN balance, and NGN virtual-account surface on Home
 - Phase 8 deterministic Intent Engine with strict Zod validation and no LLM fallback
-- Phase 9 strict Money Plan schema with typed action cards and totals
-- Onboarding identity now calls `POST /api/onboarding/user` instead of acting as a local-only preview
-- `localUserId` is generated server-side when absent and an existing mapping is recovered by email when available
-- The generated/recovered `localUserId` is carried automatically through web/native wallet setup, Nigeria onboarding, success, Home, Intent, and Money Plan flows
-- The Nigeria onboarding screen no longer asks the user to type a Local User UUID; sandbox details show only a read-only shortened internal identifier
-- `POST /api/operator/plan` accepts a validated Phase 8 intent plus `localUserId`; it does not reparse natural language
-- The API resolves the BMONI user mapping server-side and reads the provider-backed CNGN available balance before building the plan
-- Plan action mapping:
-  - `BANK_WITHDRAWAL` → external movement
-  - `ALLOCATE_POCKET` → internal allocation
-  - `CREATE_POCKET` → no money movement
-  - `CHECK_BALANCE` → no money movement
-  - `SHOW_ACTIVITY` → no money movement
-  - `MULTI_ACTION` → ordered composition of the atomic actions
-- Plan totals always expose:
-  - `externalMovement`
-  - `internalAllocation`
-  - `totalCommitted`
-  - `availableAfter`
-- Calculation rule: `availableAfter = currentAvailable - externalMovement - internalAllocation`
-- Canonical example: ₦300,000 current − ₦40,000 GTBank withdrawal − ₦20,000 Laptop allocation = ₦240,000 available/unallocated
-- Internal pocket allocations reduce the user-facing available/unallocated amount even though they do not leave the provider wallet
-- Phase 9 preserves exact arithmetic even when a plan would go negative; blocking insufficient funds belongs to the next Guard/safety phase
-- Home Operator now passes the local wallet identity through the intent stage into the Money Plan flow
-- The Money Plan screen uses provider-backed balance data, oversized money typography, modular numbered action cards, compact movement labels, and a high-contrast Available After consequence card inspired by the project moodboard
-- Technical/provider details stay out of the main plan surface
-- The plan screen remains preview-only and performs no signing or execution
+- Phase 9 provider-backed Money Plan Engine with explicit external/internal consequence arithmetic
+- Phase 10 deterministic MONI Guard package at `packages/moniguard`
+- MONI Guard rules:
+  - `SUPPORTED_INTENT`
+  - `POSITIVE_AMOUNT`
+  - `CURRENCY`
+  - `BALANCE`
+  - `DESTINATION`
+  - `AMOUNT_INTEGRITY`
+  - `PLAN_INTEGRITY`
+  - `HUMAN_APPROVAL`
+- Verdict policy:
+  - `BLOCK` when any critical rule fails
+  - `REVIEW` when every critical rule passes but external movement requires explicit human authorization
+  - `ALLOW` when every rule passes and no external movement requires authorization
+- `POST /api/operator/guard` accepts the already-validated intent plus the already-built Money Plan and returns the deterministic verdict/check list
+- The guard boundary does not reparse natural language and does not rebuild the plan
+- Money Plan now routes into `/operator/guard` before the approval screen
+- Approval screen requires a serialized MONI Guard `REVIEW` result with every check passed; direct entry without guard clearance is blocked
+- MONI Guard UI uses sequential check rows, micro-labels, a soft/translucent-style safety panel, and a high-contrast SAFE TO CONTINUE / BLOCKED outcome band
+- Guard UI deliberately says saved-bank destination "matched" rather than claiming provider account verification that the current backend does not yet possess
+- No guard verdict signs, authorizes, or executes funds by itself
 
-## Money Plan Safety Boundary
+## Rule Semantics
 
-- Phase 9 does not reinterpret natural language. It consumes the validated Phase 8 intent object.
-- `UNSUPPORTED` cannot become a Money Plan.
-- Current balance is read from BMONI rather than supplied by the mobile client.
-- External and internal commitments are accounted for separately and then combined for the available-after calculation.
-- The plan does not authorize movement, sign a proposal, or call withdrawal execution APIs.
-- A negative `availableAfter` is displayed honestly so the next Guard layer can explain and block it deterministically.
+### SUPPORTED_INTENT
+Only Phase 8 supported intents may cross the safety boundary. `UNSUPPORTED` is blocked.
 
-## Phase 9 Test Coverage Added
+### POSITIVE_AMOUNT
+Money-moving actions must have finite positive values. No-movement actions must remain exactly zero.
 
-Pure Money Plan Engine tests cover:
+### CURRENCY
+The plan and every monetary intent remain NGN. Currency mutation is blocked.
 
-- canonical multi-action calculation: ₦300k − ₦40k − ₦20k = ₦240k
-- bank withdrawal external movement
-- pocket allocation internal commitment
-- balance check with no movement
-- pocket creation with no movement
-- activity view with no movement
-- exact negative outcome arithmetic prior to Guard enforcement
-- refusal to create a plan from `UNSUPPORTED`
+### BALANCE
+`totalCommitted` must be non-negative, no greater than current available funds, and `availableAfter` must not be negative.
+
+### DESTINATION
+Every planned bank withdrawal must correspond positionally and exactly to the validated saved-bank destination label in the Phase 8 intent. This is destination-integrity validation, not yet live provider verification of a beneficiary/account record.
+
+### AMOUNT_INTEGRITY
+Every plan action must preserve the exact amount and action kind from the validated intent. Amount substitution is blocked.
+
+### PLAN_INTEGRITY
+MONI Guard recomputes external movement, internal allocation, total committed, available-after arithmetic, and sequential action indexes independently from the plan totals. Tampered arithmetic is blocked.
+
+### HUMAN_APPROVAL
+Any external movement must retain `requiresApproval: true` at both plan and external-action level. A correct external plan yields `REVIEW`, not `ALLOW`, until the user explicitly authorizes it.
+
+## Phase 10 Test Coverage Added
+
+MONI Guard package tests cover:
+
+- valid withdrawal + pocket multi-action → `REVIEW`
+- altered withdrawal amount → `BLOCK`
+- tampered available-after/plan totals → `BLOCK`
+- insufficient funds → `BLOCK`
+- destination substitution → `BLOCK`
+- removal of human approval requirement → `BLOCK`
+- valid non-moving balance check → `ALLOW`
+
+This satisfies the intended malformed-plan checkpoint at the code/test-definition level: intentionally mutated financial plans are expected to fail closed.
+
+## Safety Boundary
+
+- MONI Guard is deterministic and contains no LLM/API inference call.
+- Intent and Money Plan remain separate immutable inputs to the guard evaluation.
+- A client cannot turn a blocked plan into an approval UI merely by navigating to `/operator/approve`; that screen requires a passing guard payload.
+- Guard clearance is not a wallet signature and is not a BMONI execution request.
+- The current `DESTINATION` rule proves intent-to-plan destination integrity only. Provider-backed saved-bank account ownership/beneficiary verification must be added when the real withdrawal destination store/rail is implemented.
 
 ## Not Yet Verified
 
-- Workspace install/typecheck/test commands have not been executed from this chat environment, so Phase 9 tests are committed but must still be run in a networked build/CI environment.
-- The new automatic onboarding identity handoff still needs a deployed end-to-end run: Identity → wallet → Nigeria onboarding without manual UUID entry.
-- The earlier Phase 4–7 live BMONI checkpoints still need to be proven against the deployed sandbox user.
-- The provider-backed `/api/operator/plan` checkpoint requires the same mapped sandbox user to have a readable CNGN account balance.
-- Saved-bank aliases remain Phase 8 classifications; provider verification of the exact destination account still belongs to the withdrawal/Guard layer.
-- Phase 9 intentionally does not block insufficient funds, stale balance, or risky destinations. Those belong to MONI Guard.
+- `pnpm install`, `pnpm typecheck`, and `pnpm test` have not been executed from this chat environment after the new `@moniflow/moniguard` workspace dependency was added.
+- `pnpm-lock.yaml` has not been regenerated in this chat environment; a normal networked `pnpm install` should refresh it before using frozen-lockfile CI.
+- The malformed-plan tests are committed but still need an actual Vitest run before the Phase 10 checkpoint is marked test-passed.
+- Earlier live BMONI Phase 4–7 checkpoints still need a deployed sandbox end-to-end run.
+- Exact saved beneficiary/provider verification is not yet available; current destination checking is structural integrity against the validated Phase 8 saved-bank classification.
 
 ## Next Checkpoint
 
-1. Redeploy the API and mobile/web build so the automatic identity handoff is active.
-2. Start from Identity and confirm Continue creates or recovers a `localUserId` without asking the user to see or type it.
-3. Confirm wallet setup and Nigeria onboarding receive the same `localUserId` automatically.
-4. Run `pnpm typecheck` and `pnpm test` in a networked development/CI environment.
-5. Confirm all Phase 9 plan-engine calculation tests pass.
-6. With a provider-backed sandbox balance of ₦300,000, submit `Withdraw ₦40k to GTBank and save ₦20k for laptop`.
-7. Confirm Phase 8 emits the validated `MULTI_ACTION` unchanged into Phase 9.
-8. Confirm the Money Plan UI shows GTBank Withdrawal ₦40,000, Laptop Allocation ₦20,000, External movement ₦40,000, Internal allocation ₦20,000, and Available after ₦240,000.
-9. Confirm `CHECK_BALANCE`, `CREATE_POCKET`, and `SHOW_ACTIVITY` leave `availableAfter` unchanged.
-10. Confirm a plan larger than the current balance shows the negative consequence without executing anything.
-11. After this checkpoint, proceed to MONI Guard / consequence validation and human approval policy.
+1. Run `pnpm install` to refresh the workspace lockfile for `@moniflow/moniguard`.
+2. Run `pnpm typecheck` and `pnpm test`.
+3. Confirm the canonical ₦300k / ₦40k GTBank / ₦20k Laptop plan returns `REVIEW` with all eight checks passed.
+4. Intentionally mutate the plan amount, destination, totals, approval flag, and available balance independently and confirm each mutation returns `BLOCK`.
+5. Confirm a non-moving supported intent such as `CHECK_BALANCE` returns `ALLOW`.
+6. From the mobile flow, confirm Money Plan → MONI Guard → Human Authorization is the only normal route for an external withdrawal.
+7. Confirm a blocked guard result cannot advance to authorization.
+8. After this checkpoint, proceed to the provider proposal / explicit device signing stage while preserving the Guard → Human approval → Signing sequence.
 
 ## Environment Variables
 
@@ -103,11 +120,11 @@ Pure Money Plan Engine tests cover:
 
 ## Architecture Decisions
 
-- User-facing onboarding never requires knowledge of `localUserId`; it is an internal MONIFlow identifier.
-- The backend owns local UUID generation and can recover an existing mapping by email.
-- Intent Engine answers what the user explicitly asked for; Money Plan Engine answers what that request would do to their money.
-- The Money Plan boundary accepts structured intent, not raw natural language.
-- Provider-backed CNGN available balance is the starting balance for plan arithmetic.
-- Pocket allocation is logical MONIFlow bookkeeping, but it still reduces the amount presented as available/unallocated.
-- External movement and internal allocation remain separate concepts throughout the plan so later Guard and approval rules can reason about them independently.
-- The plan is explanatory and deterministic; authorization and execution remain separate future states.
+- User-facing onboarding never requires knowledge of `localUserId`; it remains an internal MONIFlow identifier.
+- Intent Engine answers what the user explicitly asked for.
+- Money Plan Engine answers what that request would do to available/unallocated money.
+- MONI Guard independently verifies that the validated intent and Money Plan still agree and that the plan can safely reach the authorization boundary.
+- `BLOCK` is fail-closed and must never enter approval/signing.
+- `REVIEW` means deterministic checks passed but a human must authorize consequential external movement.
+- `ALLOW` is reserved for plans that pass every rule without external authorization requirements.
+- No LLM is permitted inside MONI Guard.
