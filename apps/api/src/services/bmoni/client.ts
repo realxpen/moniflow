@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { BmoniConfig } from "./config.js";
 import { BmoniProviderError, BmoniResponseValidationError, BmoniTransportError } from "./errors.js";
-import type { BmoniGateway } from "./gateway.js";
+import type { BmoniGateway, BmoniUploadFile } from "./gateway.js";
 import {
   bmoniErrorEnvelopeSchema,
   bvnLookupSchema,
@@ -60,6 +60,40 @@ export class BmoniClient implements BmoniGateway {
     return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc`, kycProfileResponseSchema, { body: input, method: "PATCH" });
   }
 
+  async getKycReadiness(bmoniUserId: string): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc/readiness`, providerPayloadSchema, { method: "GET" });
+  }
+
+  async activateKyc(bmoniUserId: string): Promise<unknown> {
+    // NGN intentionally omits sumsubLevelName. BMONI's current RN reference sends an empty JSON object.
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc/activate`, providerPayloadSchema, { method: "POST", body: {} });
+  }
+
+  async uploadKycIdentification(bmoniUserId: string, input: {
+    files: BmoniUploadFile[];
+    type: string;
+    documentNumber: string;
+    issuingCountry: string;
+    expirationDate?: string;
+    issueDate?: string;
+  }): Promise<unknown> {
+    const form = new FormData();
+    for (const file of input.files) appendFile(form, file);
+    form.append("type", input.type);
+    form.append("documentNumber", input.documentNumber);
+    form.append("issuingCountry", input.issuingCountry);
+    if (input.expirationDate) form.append("expirationDate", input.expirationDate);
+    if (input.issueDate) form.append("issueDate", input.issueDate);
+    return this.requestForm(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc/documents/identification`, form);
+  }
+
+  async uploadKycProofOfAddress(bmoniUserId: string, input: { files: BmoniUploadFile[]; type: string }): Promise<unknown> {
+    const form = new FormData();
+    for (const file of input.files) appendFile(form, file);
+    form.append("type", input.type);
+    return this.requestForm(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc/documents/proof-of-address`, form);
+  }
+
   async startNigeriaOnboarding(bmoniUserId: string, input: StartNigeriaOnboardingInput): Promise<StartNigeriaOnboardingResponse> {
     return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/onboarding/start-nigeria`, startNigeriaOnboardingResponseSchema, { body: input, method: "POST" });
   }
@@ -78,6 +112,10 @@ export class BmoniClient implements BmoniGateway {
 
   async getSmartWallet(bmoniUserId: string, smartWalletId: string): Promise<unknown> {
     return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/smart-wallets/${encodeURIComponent(smartWalletId)}`, providerPayloadSchema, { method: "GET" });
+  }
+
+  async createNgnVirtualAccount(bmoniUserId: string, smartWalletId: string): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/vba/ngn`, providerPayloadSchema, { method: "POST", body: { smartWalletId } });
   }
 
   async getNgnDepositAccount(bmoniUserId: string): Promise<unknown> {
@@ -126,20 +164,44 @@ export class BmoniClient implements BmoniGateway {
         method: options.method,
         signal: controller.signal
       });
-      const requestId = response.headers.get("x-request-id");
-      const payload = await this.readJson(response, requestId);
-      if (!response.ok) {
-        const providerError = bmoniErrorEnvelopeSchema.safeParse(payload);
-        throw new BmoniProviderError(response.status, providerError.success ? providerError.data : null, requestId);
-      }
-      const parsed = responseSchema.safeParse(payload);
-      if (!parsed.success) throw new BmoniResponseValidationError(requestId, { cause: parsed.error });
-      return parsed.data;
+      return this.parseResponse(response, responseSchema);
     } catch (error) {
-      if (error instanceof BmoniProviderError || error instanceof BmoniResponseValidationError) throw error;
-      const timedOut = controller.signal.aborted;
-      throw new BmoniTransportError(timedOut ? "BMONI request timed out." : "BMONI could not be reached.", timedOut, { cause: error });
+      return this.handleRequestError(error, controller);
     } finally { clearTimeout(timeout); }
+  }
+
+  private async requestForm(path: `/v1/${string}`, form: FormData): Promise<unknown> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
+    try {
+      const response = await this.fetchImplementation(new URL(path.slice(1), this.config.baseUrl), {
+        body: form,
+        headers: { accept: "application/json", "x-api-key": this.config.apiKey },
+        method: "POST",
+        signal: controller.signal
+      });
+      return this.parseResponse(response, providerPayloadSchema);
+    } catch (error) {
+      return this.handleRequestError(error, controller);
+    } finally { clearTimeout(timeout); }
+  }
+
+  private async parseResponse<TSchema extends z.ZodType>(response: Response, responseSchema: TSchema): Promise<z.infer<TSchema>> {
+    const requestId = response.headers.get("x-request-id");
+    const payload = await this.readJson(response, requestId);
+    if (!response.ok) {
+      const providerError = bmoniErrorEnvelopeSchema.safeParse(payload);
+      throw new BmoniProviderError(response.status, providerError.success ? providerError.data : null, requestId);
+    }
+    const parsed = responseSchema.safeParse(payload);
+    if (!parsed.success) throw new BmoniResponseValidationError(requestId, { cause: parsed.error });
+    return parsed.data;
+  }
+
+  private handleRequestError(error: unknown, controller: AbortController): never {
+    if (error instanceof BmoniProviderError || error instanceof BmoniResponseValidationError) throw error;
+    const timedOut = controller.signal.aborted;
+    throw new BmoniTransportError(timedOut ? "BMONI request timed out." : "BMONI could not be reached.", timedOut, { cause: error });
   }
 
   private async readJson(response: Response, requestId: string | null): Promise<unknown> {
@@ -148,4 +210,9 @@ export class BmoniClient implements BmoniGateway {
     try { return JSON.parse(rawBody) as unknown; }
     catch (error) { throw new BmoniResponseValidationError(requestId, { cause: error }); }
   }
+}
+
+function appendFile(form: FormData, file: BmoniUploadFile) {
+  const bytes = new Uint8Array(file.bytes);
+  form.append("files", new Blob([bytes], { type: file.contentType }), file.filename);
 }
