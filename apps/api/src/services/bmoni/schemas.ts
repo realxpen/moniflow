@@ -66,19 +66,28 @@ export const bvnLookupSchema = z.object({
 }).passthrough();
 export type BvnLookup = z.infer<typeof bvnLookupSchema>;
 
+const nigeriaIdentificationNumberSchema = z.object({
+  type: z.literal("bvn"),
+  number: z.string().regex(/^\d{11}$/),
+  issuingCountryCode: z.literal("NGA")
+}).strict();
+
 export const updateNigeriaKycInputSchema = z.object({
   personalInfo: z.object({
     firstName: z.string().trim().min(1),
-    lastName: z.string().trim().min(1),
-    dateOfBirth: z.string().min(1),
-    gender: z.string().min(1)
+    lastName: z.string().trim().min(1).optional(),
+    phoneNumber: e164PhoneSchema,
+    dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    gender: z.string().trim().min(1).optional()
   }).strict(),
-  addressDetails: z.object({
-    street: z.string().trim().min(1),
+  address: z.object({
+    streetLine1: z.string().trim().min(1),
     city: z.string().trim().min(1),
     state: z.string().trim().min(1),
-    countryCode: z.string().trim().length(3).transform((value) => value.toUpperCase())
-  }).strict()
+    postalCode: z.string().regex(/^\d{6}$/),
+    countryCode: z.literal("NGA")
+  }).strict(),
+  identificationNumbers: z.array(nigeriaIdentificationNumberSchema).length(1)
 }).strict();
 export type UpdateNigeriaKycInput = z.infer<typeof updateNigeriaKycInputSchema>;
 
