@@ -4,6 +4,7 @@ import { env } from "./config/env.js";
 import { SqliteUserMappingRepository } from "./repositories/sqlite-user-mapping.js";
 import { activityRoutes } from "./routes/activity.js";
 import { bankingRoutes } from "./routes/banking.js";
+import { devRoutes } from "./routes/dev.js";
 import { healthRoutes } from "./routes/health.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
 import { operatorRoutes } from "./routes/operator.js";
@@ -63,10 +64,24 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   app.register(healthRoutes, {
     getBmoniGateway: dependencies.getBmoniGateway
   });
+
+  // Phase 4 canonical API surface.
+  app.register(onboardingRoutes, {
+    prefix: "/api/onboarding",
+    getBmoniUserService: dependencies.getBmoniUserService
+  });
+  app.register(devRoutes, {
+    prefix: "/api/dev",
+    getBmoniGateway: dependencies.getBmoniGateway,
+    getBmoniUserService: dependencies.getBmoniUserService
+  });
+
+  // Preserve the pre-Phase-4 route while mobile integration catches up.
   app.register(onboardingRoutes, {
     prefix: "/onboarding",
     getBmoniUserService: dependencies.getBmoniUserService
   });
+
   app.register(walletRoutes, { prefix: "/wallet" });
   app.register(bankingRoutes, { prefix: "/banking" });
   app.register(operatorRoutes, { prefix: "/operator" });
