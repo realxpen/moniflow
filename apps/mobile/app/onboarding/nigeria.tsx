@@ -18,12 +18,11 @@ export default function NigeriaOnboardingScreen() {
   const [firstName, setFirstName] = useState("Bunch");
   const [lastName, setLastName] = useState("Dillon");
   const [phoneNumber, setPhoneNumber] = useState("+2348000000000");
-  const [email, setEmail] = useState("bunch.dillon@example.com");
   const [bvn, setBvn] = useState("95888168924");
-  const [street, setStreet] = useState("15 Admiralty Way");
+  const [streetLine1, setStreetLine1] = useState("15 Admiralty Way");
   const [city, setCity] = useState("Lagos");
   const [stateName, setStateName] = useState("Lagos");
-  const [countryCode, setCountryCode] = useState("NGA");
+  const [postalCode, setPostalCode] = useState("101241");
   const [showSandboxDetails, setShowSandboxDetails] = useState(false);
   const [status, setStatus] = useState<NigeriaStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -47,13 +46,13 @@ export default function NigeriaOnboardingScreen() {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           phoneNumber: phoneNumber.trim(),
-          email: email.trim(),
           bvn: bvn.trim(),
-          addressDetails: {
-            street: street.trim(),
+          address: {
+            streetLine1: streetLine1.trim(),
             city: city.trim(),
             state: stateName.trim(),
-            countryCode: countryCode.trim().toUpperCase()
+            postalCode: postalCode.trim(),
+            countryCode: "NGA"
           }
         })
       });
@@ -90,47 +89,68 @@ export default function NigeriaOnboardingScreen() {
   return (
     <Screen contentContainerStyle={styles.screen}>
       <View style={styles.heading}>
-        <Text style={styles.eyebrow}>IDENTITY</Text>
-        <Text style={styles.title}>Let’s secure your financial workspace.</Text>
-        <Text style={styles.subtitle}>BMONI sandbox identity values must match a documented test persona. The KYC profile also includes the address fields shown in the official sandbox quickstart.</Text>
+        <Text style={styles.eyebrow}>NIGERIA · NGN</Text>
+        <Text style={styles.title}>Secure your local financial rail.</Text>
+        <Text style={styles.subtitle}>
+          This screen is for the BMONI Nigeria NGN local-account stage only. USD enhanced due diligence is a separate later workflow.
+        </Text>
       </View>
 
       <SoftCard style={styles.card}>
+        <Text style={styles.sectionLabel}>SANDBOX IDENTITY</Text>
         <View style={styles.row}>
           <Field label="FIRST NAME" value={firstName} onChangeText={setFirstName} />
           <Field label="LAST NAME" value={lastName} onChangeText={setLastName} />
         </View>
         <Field label="PHONE" value={phoneNumber} onChangeText={setPhoneNumber} keyboardType="phone-pad" />
-        <Field label="EMAIL" value={email} onChangeText={setEmail} keyboardType="email-address" />
-        <Field label="BVN" value={bvn} onChangeText={setBvn} keyboardType="number-pad" secure maxLength={11} />
+        <Field label="BVN" value={bvn} onChangeText={(value) => setBvn(value.replace(/\D/g, ""))} keyboardType="number-pad" secure maxLength={11} />
       </SoftCard>
 
       <SoftCard style={styles.card}>
-        <Text style={styles.sectionLabel}>KYC ADDRESS</Text>
-        <Field label="STREET" value={street} onChangeText={setStreet} />
+        <Text style={styles.sectionLabel}>NIGERIAN ADDRESS</Text>
+        <Field label="STREET LINE 1" value={streetLine1} onChangeText={setStreetLine1} />
         <View style={styles.row}>
           <Field label="CITY" value={city} onChangeText={setCity} />
           <Field label="STATE" value={stateName} onChangeText={setStateName} />
         </View>
-        <Field label="COUNTRY CODE" value={countryCode} onChangeText={setCountryCode} maxLength={3} />
+        <View style={styles.row}>
+          <Field
+            label="POSTAL CODE"
+            value={postalCode}
+            onChangeText={(value) => setPostalCode(value.replace(/\D/g, ""))}
+            keyboardType="number-pad"
+            maxLength={6}
+          />
+          <View style={styles.field}>
+            <Text style={styles.label}>COUNTRY</Text>
+            <View style={styles.lockedField}>
+              <Text style={styles.lockedValue}>NGA</Text>
+            </View>
+          </View>
+        </View>
 
         <View style={styles.environmentRow}>
           <View>
             <Text style={styles.environmentLabel}>ENVIRONMENT</Text>
-            <Text style={styles.environmentValue}>Sandbox</Text>
+            <Text style={styles.environmentValue}>BMONI Sandbox</Text>
           </View>
           <StatusPill label={statusLabel(status)} tone={statusTone(status)} />
         </View>
       </SoftCard>
 
       <Pressable onPress={() => setShowSandboxDetails((value) => !value)} style={styles.disclosure}>
-        <Text style={styles.disclosureText}>{showSandboxDetails ? "Hide" : "Show"} sandbox details</Text>
+        <Text style={styles.disclosureText}>{showSandboxDetails ? "Hide" : "Show"} integration details</Text>
         <Text style={styles.disclosureSymbol}>{showSandboxDetails ? "−" : "+"}</Text>
       </Pressable>
 
       {showSandboxDetails ? (
         <SoftCard style={styles.detailsCard}>
-          <Text style={styles.detailsCopy}>The default values are the documented Bunch Dillon sandbox persona and quickstart KYC address. Do not replace them with your real BVN/NIN in sandbox.</Text>
+          <Text style={styles.detailsCopy}>
+            MONIFlow first performs the documented fetch-only BVN lookup, saves the NGN KYC profile, then starts Nigeria onboarding using the persisted CNGN wallet address. BMONI onboarding status remains authoritative.
+          </Text>
+          <Text style={styles.detailsCopy}>
+            The default identity is a documented BMONI sandbox persona. Do not replace it with your real BVN/NIN while using sandbox.
+          </Text>
           <Text style={styles.label}>LOCAL USER</Text>
           <Text selectable style={styles.internalId}>{localUserId ? shortId(localUserId) : "Not linked"}</Text>
         </SoftCard>
@@ -152,10 +172,12 @@ export default function NigeriaOnboardingScreen() {
       ) : status === "processing" || status === "action_required" ? (
         <PrimaryButton disabled={busy || !localUserId} onPress={() => void refreshStatus()}>{busy ? "Checking…" : "Check provider status"}</PrimaryButton>
       ) : (
-        <PrimaryButton disabled={busy || !localUserId} onPress={() => void start()}>{busy ? "Submitting…" : "Submit sandbox KYC"}</PrimaryButton>
+        <PrimaryButton disabled={busy || !localUserId} onPress={() => void start()}>{busy ? "Submitting…" : "Activate Nigeria rail"}</PrimaryButton>
       )}
 
-      <Text style={styles.privacy}>MONIFlow never treats this screen as proof of completed KYC. Only BMONI onboarding status can move the rail to ready. BVN is not persisted in the local wallet table.</Text>
+      <Text style={styles.privacy}>
+        MONIFlow never marks Nigeria onboarding complete from local UI state. The rail becomes ready only when BMONI reports the corresponding active/ready provider state.
+      </Text>
     </Screen>
   );
 }
@@ -164,7 +186,7 @@ function Field({ label, value, onChangeText, keyboardType, secure, maxLength }: 
   label: string;
   value: string;
   onChangeText: (value: string) => void;
-  keyboardType?: "default" | "email-address" | "phone-pad" | "number-pad";
+  keyboardType?: "default" | "phone-pad" | "number-pad";
   secure?: boolean;
   maxLength?: number;
 }) {
@@ -172,7 +194,7 @@ function Field({ label, value, onChangeText, keyboardType, secure, maxLength }: 
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
-        autoCapitalize={keyboardType === "email-address" ? "none" : "words"}
+        autoCapitalize="words"
         autoCorrect={false}
         keyboardType={keyboardType}
         maxLength={maxLength}
@@ -190,10 +212,10 @@ function shortId(value: string) {
 }
 
 function statusLabel(status: NigeriaStatus) {
-  if (status === "ready") return "READY";
+  if (status === "ready") return "ACTIVE";
   if (status === "processing") return "PROCESSING";
   if (status === "action_required") return "ACTION REQUIRED";
-  if (status === "failed") return "CHECK FAILED";
+  if (status === "failed") return "FAILED";
   return "SANDBOX";
 }
 
@@ -204,10 +226,10 @@ function statusTone(status: NigeriaStatus): "neutral" | "success" | "warning" {
 }
 
 function statusMessage(status: NigeriaStatus) {
-  if (status === "ready") return "BMONI reports the Nigeria rail as active. Your financial workspace is ready.";
-  if (status === "action_required") return "BMONI requires another KYC/document action. MONIFlow will not mark the rail ready until the provider does.";
-  if (status === "failed") return "BMONI reported a failed onboarding state.";
-  return "The KYC/onboarding request was accepted. BMONI provider status remains the source of truth.";
+  if (status === "ready") return "BMONI reports the Nigeria NGN rail as active.";
+  if (status === "action_required") return "BMONI requires another provider action. MONIFlow will not mark the rail ready until BMONI does.";
+  if (status === "failed") return "BMONI reported a failed Nigeria onboarding state.";
+  return "Nigeria onboarding was submitted. Check BMONI provider status until the NGN rail becomes active.";
 }
 
 const styles = StyleSheet.create({
@@ -231,6 +253,16 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingHorizontal: spacing.md
   },
+  lockedField: {
+    minHeight: 52,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surfaceGlass,
+    justifyContent: "center",
+    paddingHorizontal: spacing.md
+  },
+  lockedValue: { ...typography.body, color: colors.textPrimary },
   environmentRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginTop: spacing.sm },
   environmentLabel: { ...typography.technical, color: colors.textSecondary },
   environmentValue: { ...typography.body, color: colors.textPrimary },
