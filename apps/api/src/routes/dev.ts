@@ -1,7 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 
-import { env } from "../config/env.js";
 import {
   BmoniConfigurationError,
   BmoniProviderError,
@@ -12,6 +11,7 @@ import {
 import { BmoniUserService } from "../services/bmoni/user-service.js";
 
 const querySchema = z.object({ localUserId: z.uuid().optional() }).strict();
+const environment = "sandbox" as const;
 
 type DevRouteOptions = {
   getBmoniGateway: () => BmoniGateway;
@@ -37,7 +37,7 @@ export const devRoutes: FastifyPluginAsync<DevRouteOptions> = async (app, option
 
       return reply.send({
         bmoniApi: "connected",
-        environment: env.BMONI_ENVIRONMENT,
+        environment,
         supportedCurrencies: currencies.currencies,
         user: mapping
           ? {
@@ -57,7 +57,7 @@ export const devRoutes: FastifyPluginAsync<DevRouteOptions> = async (app, option
         app.log.warn({ errorName: error.name }, "BMONI debug status check failed");
         return reply.status(503).send({
           bmoniApi: "disconnected",
-          environment: env.BMONI_ENVIRONMENT,
+          environment,
           user: { status: "unknown", bmoniUserId: null }
         });
       }
