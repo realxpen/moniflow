@@ -3,13 +3,15 @@ import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { MoneyText, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
+import type { MoniflowIntent } from "@/services/intent-engine";
 import { prepareMoneyPlan, type MoneyPlan } from "@/services/money-plan";
 import { colors, radius, spacing, typography } from "@/theme";
 
 export default function PlanScreen() {
-  const params = useLocalSearchParams<{ command?: string; localUserId?: string }>();
+  const params = useLocalSearchParams<{ command?: string; localUserId?: string; intent?: string }>();
   const command = typeof params.command === "string" ? params.command : "";
   const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
+  const intent = useMemo(() => parseIntentParam(params.intent), [params.intent]);
   const [plan, setPlan] = useState<MoneyPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,15 +19,15 @@ export default function PlanScreen() {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      if (!command || !localUserId) {
-        setError("MONIFlow needs both the validated instruction and wallet identity to prepare this plan.");
+      if (!intent || !localUserId) {
+        setError("MONIFlow needs the validated Phase 8 intent and wallet identity to prepare this plan.");
         setLoading(false);
         return;
       }
       setLoading(true);
       setError(null);
       try {
-        const result = await prepareMoneyPlan(command, localUserId);
+        const result = await prepareMoneyPlan(intent, localUserId);
         if (active) setPlan(result);
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : "Money Plan could not be prepared.");
@@ -37,7 +39,7 @@ export default function PlanScreen() {
     return () => {
       active = false;
     };
-  }, [command, localUserId]);
+  }, [intent, localUserId]);
 
   const hasMoneyMovement = useMemo(
     () => Boolean(plan && plan.totals.totalCommitted > 0),
@@ -55,7 +57,7 @@ export default function PlanScreen() {
         <SoftCard style={styles.stateCard}>
           <StatusPill label="BUILDING PLAN" tone="processing" />
           <Text style={styles.stateTitle}>Reading your available CNGN balance…</Text>
-          <Text style={styles.stateCopy}>The plan uses the provider-backed balance, not a hardcoded demo amount.</Text>
+          <Text style={styles.stateCopy}>The plan uses the provider-backed balance and the already-validated intent.</Text>
         </SoftCard>
       ) : null}
 
@@ -112,7 +114,7 @@ export default function PlanScreen() {
           ) : null}
 
           <PrimaryButton
-            onPress={() => router.push({ pathname: "/operator/approve", params: { command, localUserId } })}
+            onPress={() => router.push({ pathname: "/operator/approve", params: { command, localUserId, plan: JSON.stringify(plan) } })}
             disabled={!hasMoneyMovement}
           >
             {hasMoneyMovement ? "Review consequences" : "No money movement to approve"}
@@ -134,6 +136,16 @@ export default function PlanScreen() {
   );
 }
 
+function parseIntentParam(value: string | string[] | undefined): MoniflowIntent | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as MoniflowIntent;
+  } catch {
+    return null;
+  }
+}
+
 function formatNaira(amount: number) {
   return `₦${new Intl.NumberFormat("en-NG", { maximumFractionDigits: 0 }).format(amount)}`;
 }
@@ -153,7 +165,7 @@ const styles = StyleSheet.create({
   actionIndex: { ...typography.technical, color: colors.textSecondary, fontSize: 18 },
   actionLabel: { ...typography.heading, color: colors.textPrimary, fontSize: 28, lineHeight: 34 },
   actionDescription: { ...typography.body, color: colors.textSecondary },
-  actionMoney: { fontSize: 34, lineHeight: 40, marginTop: "auto" },
+  actionMoney: { fontSize: 34, lineHeight: 40 },
   summaryGrid: { flexDirection: "row", gap: spacing.sm },
   summaryCard: { flex: 1, gap: spacing.sm, minHeight: 130 },
   summaryMoney: { fontSize: 27, lineHeight: 32 },
