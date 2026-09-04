@@ -19,16 +19,29 @@ const rowSchema = z.object({
 });
 
 export async function ensureBankAccountSchema(sql: Sql) {
-  // The live MONIFlow schema already uses label, bmoni_withdrawal_account_id,
-  // account_number_masked, and account_name. Add only the normalized lookup key.
+  // Keep the runtime repository aligned with the live MONIFlow private schema.
+  // These IF NOT EXISTS additions also make a fresh database compatible even
+  // if an older bootstrap definition created differently named bank columns.
+  await sql`alter table moniflow_private.bank_accounts add column if not exists label text`;
   await sql`alter table moniflow_private.bank_accounts add column if not exists normalized_label text`;
+  await sql`alter table moniflow_private.bank_accounts add column if not exists bmoni_withdrawal_account_id text`;
+  await sql`alter table moniflow_private.bank_accounts add column if not exists account_number_masked text`;
+  await sql`alter table moniflow_private.bank_accounts add column if not exists account_name text`;
+
   await sql`
     update moniflow_private.bank_accounts
-    set normalized_label = lower(regexp_replace(label, '[^a-zA-Z0-9]', '', 'g'))
-    where normalized_label is null
+    set label = coalesce(label, bank_name),
+        normalized_label = coalesce(
+          normalized_label,
+          lower(regexp_replace(coalesce(label, bank_name), '[^a-zA-Z0-9]', '', 'g'))
+        )
+    where label is null or normalized_label is null
   `;
+
+  await sql`alter table moniflow_private.bank_accounts alter column label set not null`;
   await sql`alter table moniflow_private.bank_accounts alter column normalized_label set not null`;
   await sql`create unique index if not exists bank_accounts_local_user_label_idx on moniflow_private.bank_accounts(local_user_id, normalized_label)`;
+  await sql`create unique index if not exists bank_accounts_bmoni_withdrawal_id_idx on moniflow_private.bank_accounts(bmoni_withdrawal_account_id) where bmoni_withdrawal_account_id is not null`;
 }
 
 export class PostgresBankAccountRepository implements BankAccountRepository {
@@ -43,6 +56,9 @@ export class PostgresBankAccountRepository implements BankAccountRepository {
         and normalized_label = ${normalizeBankLabel(label)}
         and verified = true
         and bmoni_withdrawal_account_id is not null
+        and bank_code is not null
+        and account_number_masked is not null
+        and account_name is not null
       limit 1
     `;
     return rows[0] ? mapRow(rowSchema.parse(rows[0])) : null;
@@ -56,6 +72,9 @@ export class PostgresBankAccountRepository implements BankAccountRepository {
       where local_user_id = ${localUserId}::uuid
         and bmoni_withdrawal_account_id = ${providerAccountId}
         and verified = true
+        and bank_code is not null
+        and account_number_masked is not null
+        and account_name is not null
       limit 1
     `;
     return rows[0] ? mapRow(rowSchema.parse(rows[0])) : null;
