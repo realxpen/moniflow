@@ -13,16 +13,24 @@ afterEach(async () => {
 
 function additionalGatewayMethods(): Omit<BmoniGateway, "createUser" | "getSupportedSmartWalletCurrencies"> {
   return {
+    approveProposal: vi.fn(),
     createManagedSmartWallet: vi.fn(),
     createOwnerProofChallenge: vi.fn(),
     getNgnDepositAccount: vi.fn(),
+    getNigerianBanks: vi.fn(),
     getOnboardingStatus: vi.fn(),
+    getProposal: vi.fn(),
+    getProposalSignPayload: vi.fn(),
     getSmartWallet: vi.fn(),
     listAccountBalances: vi.fn(),
     listAccountWallets: vi.fn(),
     lookupBvn: vi.fn(),
+    offrampNigeria: vi.fn(),
+    registerNigerianWithdrawalAccount: vi.fn(),
+    signProposal: vi.fn(),
     startNigeriaOnboarding: vi.fn(),
-    updateNigeriaKyc: vi.fn()
+    updateNigeriaKyc: vi.fn(),
+    verifyNigerianAccount: vi.fn()
   };
 }
 
@@ -42,10 +50,7 @@ describe("POST /api/onboarding/user", () => {
     };
     const repository = new SqliteUserMappingRepository(":memory:");
     const service = new BmoniUserService(gateway, repository);
-    const app = buildApp({
-      getBmoniGateway: () => gateway,
-      getBmoniUserService: () => service
-    });
+    const app = buildApp({ getBmoniGateway: () => gateway, getBmoniUserService: () => service });
     app.addHook("onClose", async () => repository.close());
     apps.push(app);
 
@@ -82,11 +87,7 @@ describe("POST /api/onboarding/user", () => {
     app.addHook("onClose", async () => repository.close());
     apps.push(app);
 
-    const response = await app.inject({
-      method: "POST",
-      payload: { email: "not-an-email" },
-      url: "/api/onboarding/user"
-    });
+    const response = await app.inject({ method: "POST", payload: { email: "not-an-email" }, url: "/api/onboarding/user" });
 
     expect(response.statusCode).toBe(400);
     expect(gateway.createUser).not.toHaveBeenCalled();
