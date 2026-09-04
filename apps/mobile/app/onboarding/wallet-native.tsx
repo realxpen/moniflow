@@ -63,8 +63,11 @@ export default function NativeWalletSetupScreen() {
     setError(null);
     try {
       update("device", "working");
-      const address =
-        (await bmoniDevice.walletAddress()) ?? (await bmoniDevice.initWallet());
+      const hasWallet = await bmoniDevice.hasWallet();
+      const address = hasWallet
+        ? await bmoniDevice.walletAddress()
+        : await bmoniDevice.initWallet();
+      if (!address) throw new Error("BMONI did not return a device wallet address.");
       if (!(await bmoniDevice.hasPin())) await bmoniDevice.setPin(pin);
       setOwnerAddress(address);
       update("device", "done");
@@ -86,6 +89,8 @@ export default function NativeWalletSetupScreen() {
         throw new Error("Ownership challenge could not be created.");
       }
 
+      // Owner proof is an EIP-191 message signature. Transaction/proposal signing
+      // later uses signTransactionHash instead and must never reuse this method.
       const signature = await bmoniDevice.signMessage(challenge.message, pin);
       setPin("");
       update("ownership", "done");
