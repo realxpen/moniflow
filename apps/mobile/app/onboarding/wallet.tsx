@@ -1,10 +1,14 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
 import { PrimaryButton, Screen } from "@/components/ui";
 import { colors, radius, spacing, typography } from "@/theme";
 
 export default function WalletWebPreviewScreen() {
+  const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
+  const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
+  const localUserId = routedLocalUserId?.trim() ?? "";
+
   return (
     <Screen contentContainerStyle={styles.screen}>
       <View style={styles.glowOne} />
@@ -25,14 +29,16 @@ export default function WalletWebPreviewScreen() {
         <View style={styles.notice}>
           <Text style={styles.noticeTitle}>WEB PREVIEW</Text>
           <Text style={styles.noticeBody}>
-            Secure device wallet creation and ownership signing run only inside the MONIFlow
-            iOS or Android development build. This browser preview intentionally never creates
-            keys or asks for a signing PIN.
+            Your MONIFlow sandbox identity is already linked automatically. Secure device wallet
+            creation and ownership signing run only inside the iOS or Android development build.
           </Text>
         </View>
 
-        <PrimaryButton onPress={() => router.push("/onboarding/nigeria")}>
-          Continue preview
+        <PrimaryButton
+          disabled={!localUserId}
+          onPress={() => router.push({ pathname: "/onboarding/nigeria", params: { localUserId } })}
+        >
+          {localUserId ? "Continue preview" : "Identity link unavailable"}
         </PrimaryButton>
 
         <Text style={styles.security}>
