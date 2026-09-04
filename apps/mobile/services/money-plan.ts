@@ -1,3 +1,5 @@
+import type { MoniflowIntent } from "@/services/intent-engine";
+
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
 export type MoneyPlanAction = {
@@ -24,11 +26,11 @@ export type MoneyPlan = {
   sourceIntent: "CHECK_BALANCE" | "BANK_WITHDRAWAL" | "CREATE_POCKET" | "ALLOCATE_POCKET" | "SHOW_ACTIVITY" | "MULTI_ACTION";
 };
 
-export async function prepareMoneyPlan(input: string, localUserId: string): Promise<MoneyPlan> {
+export async function prepareMoneyPlan(intent: MoniflowIntent, localUserId: string): Promise<MoneyPlan> {
   const response = await fetch(`${apiUrl}/api/operator/plan`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ input, localUserId })
+    body: JSON.stringify({ intent, localUserId })
   });
   const payload = (await response.json()) as { plan?: MoneyPlan; message?: string };
   if (!response.ok || !payload.plan) {
