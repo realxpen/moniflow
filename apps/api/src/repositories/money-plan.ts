@@ -50,5 +50,11 @@ export interface MoneyPlanRepository {
   ): Promise<PersistedMoneyPlan | null>;
   approve(planId: string, localUserId: string, approvedPlanHash: string): Promise<PersistedMoneyPlan | null>;
   invalidateApproval(planId: string, localUserId: string, currentPlanHash: string): Promise<PersistedMoneyPlan | null>;
+  transitionExecutionStatus(
+    planId: string,
+    localUserId: string,
+    from: MoneyPlanStatus[],
+    to: "EXECUTING" | "AWAITING_DEVICE_SIGNATURE" | "PROCESSING" | "COMPLETED" | "FAILED"
+  ): Promise<PersistedMoneyPlan | null>;
   close(): Promise<void>;
 }
