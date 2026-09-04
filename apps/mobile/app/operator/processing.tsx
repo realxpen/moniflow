@@ -63,7 +63,7 @@ export default function ProcessingScreen() {
         <ProgressStep index={1} state={loading ? "active" : "complete"} title="Normalize instruction" detail="Whitespace and exact syntax" />
         <ProgressStep delay={90} index={2} state={loading ? "pending" : "complete"} title="Match supported intent" detail="Deterministic rule table" />
         <ProgressStep delay={180} index={3} state={loading ? "pending" : intent && !unsupported ? "complete" : "pending"} title="Validate structure" detail="Strict Zod contract" />
-        <ProgressStep delay={270} index={4} state={canPlan ? "active" : "pending"} title="Prepare Money Plan" detail="Provider-backed balance comes next" />
+        <ProgressStep delay={270} index={4} state={canPlan ? "active" : "pending"} title="Prepare Money Plan" detail="Validated intent crosses the boundary unchanged" />
       </View>
 
       {intent ? (
@@ -79,8 +79,8 @@ export default function ProcessingScreen() {
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {canPlan ? (
-        <PrimaryButton onPress={() => router.push({ pathname: "/operator/plan", params: { command, localUserId } })}>
+      {canPlan && intent ? (
+        <PrimaryButton onPress={() => router.push({ pathname: "/operator/plan", params: { command, localUserId, intent: JSON.stringify(intent) } })}>
           Build my Money Plan
         </PrimaryButton>
       ) : (
