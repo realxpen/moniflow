@@ -1,6 +1,3 @@
-import type { MoniflowIntent } from "@/services/intent-engine";
-import type { MoneyPlan } from "@/services/money-plan";
-
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
 export type GuardRuleName =
@@ -23,17 +20,20 @@ export type GuardCheck = {
 export type GuardResult = {
   verdict: "ALLOW" | "REVIEW" | "BLOCK";
   checks: GuardCheck[];
+  planId: string;
+  planHash: string;
+  status: "BLOCKED" | "AWAITING_USER_APPROVAL" | "APPROVED";
 };
 
-export async function runMoniGuard(intent: MoniflowIntent, plan: MoneyPlan): Promise<GuardResult> {
-  const response = await fetch(`${apiUrl}/api/operator/guard`, {
+export async function runMoniGuard(planId: string, localUserId: string): Promise<GuardResult> {
+  const response = await fetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/guard`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ intent, plan })
+    body: JSON.stringify({ localUserId })
   });
-  const payload = (await response.json()) as GuardResult & { message?: string };
-  if (!response.ok || !payload.verdict || !Array.isArray(payload.checks)) {
-    throw new Error(payload.message ?? "MONI Guard could not evaluate this plan.");
+  const payload = (await response.json()) as Partial<GuardResult> & { message?: string };
+  if (!response.ok || !payload.verdict || !Array.isArray(payload.checks) || !payload.planId || !payload.planHash || !payload.status) {
+    throw new Error(payload.message ?? "MONI Guard could not evaluate this persisted plan.");
   }
-  return payload;
+  return payload as GuardResult;
 }
