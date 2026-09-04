@@ -9,11 +9,12 @@ import { parseOperatorIntent, type MoniflowIntent } from "@/services/intent-engi
 import { colors, spacing, typography } from "@/theme";
 
 export default function ProcessingScreen() {
-  const params = useLocalSearchParams<{ command?: string }>();
+  const params = useLocalSearchParams<{ command?: string; localUserId?: string }>();
   const command = useMemo(
     () => (typeof params.command === "string" && params.command.trim() ? params.command : mockHomeData.command),
     [params.command]
   );
+  const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
   const [intent, setIntent] = useState<MoniflowIntent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +40,7 @@ export default function ProcessingScreen() {
   }, [command]);
 
   const unsupported = intent?.intent === "UNSUPPORTED";
+  const canPlan = Boolean(intent && !unsupported && localUserId);
 
   return (
     <Screen contentContainerStyle={styles.screen}>
@@ -61,7 +63,7 @@ export default function ProcessingScreen() {
         <ProgressStep index={1} state={loading ? "active" : "complete"} title="Normalize instruction" detail="Whitespace and exact syntax" />
         <ProgressStep delay={90} index={2} state={loading ? "pending" : "complete"} title="Match supported intent" detail="Deterministic rule table" />
         <ProgressStep delay={180} index={3} state={loading ? "pending" : intent && !unsupported ? "complete" : "pending"} title="Validate structure" detail="Strict Zod contract" />
-        <ProgressStep delay={270} index={4} state={intent && !unsupported ? "active" : "pending"} title="Prepare next stage" detail="No financial execution in Phase 8" />
+        <ProgressStep delay={270} index={4} state={canPlan ? "active" : "pending"} title="Prepare Money Plan" detail="Provider-backed balance comes next" />
       </View>
 
       {intent ? (
@@ -72,11 +74,14 @@ export default function ProcessingScreen() {
         </SoftCard>
       ) : null}
 
+      {!localUserId && intent && !unsupported ? (
+        <Text style={styles.error}>Complete wallet onboarding before MONIFlow can calculate a provider-backed plan.</Text>
+      ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {intent && !unsupported ? (
-        <PrimaryButton onPress={() => router.push({ pathname: "/operator/plan", params: { command, intent: JSON.stringify(intent) } })}>
-          Continue to plan preview
+      {canPlan ? (
+        <PrimaryButton onPress={() => router.push({ pathname: "/operator/plan", params: { command, localUserId } })}>
+          Build my Money Plan
         </PrimaryButton>
       ) : (
         <PrimaryButton onPress={() => router.back()} disabled={loading}>
@@ -84,7 +89,7 @@ export default function ProcessingScreen() {
         </PrimaryButton>
       )}
 
-      <Text style={styles.disclosure}>Phase 8 parses intent only. It does not execute money movement.</Text>
+      <Text style={styles.disclosure}>Understanding does not authorize execution. The next screen only explains the financial consequences.</Text>
     </Screen>
   );
 }
