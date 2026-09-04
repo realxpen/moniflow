@@ -10,6 +10,7 @@ import { onboardingRoutes } from "./routes/onboarding.js";
 import { operatorRoutes } from "./routes/operator.js";
 import { pocketRoutes } from "./routes/pockets.js";
 import { walletRoutes } from "./routes/wallet.js";
+import { walletOwnershipRoutes } from "./routes/wallet-ownership.js";
 import { createBmoniGateway, type BmoniGateway } from "./services/bmoni/index.js";
 import { BmoniUserService } from "./services/bmoni/user-service.js";
 
@@ -44,53 +45,34 @@ function createRuntimeDependencies() {
 export const buildApp = (dependencyOverrides?: AppDependencies) => {
   const runtime = dependencyOverrides ? null : createRuntimeDependencies();
   const dependencies = dependencyOverrides ?? runtime?.dependencies;
-  if (!dependencies) {
-    throw new Error("MONIFlow API dependencies could not be initialized.");
-  }
+  if (!dependencies) throw new Error("MONIFlow API dependencies could not be initialized.");
 
   const app = Fastify({
     logger: {
       redact: [
-        "req.headers.authorization",
-        "req.headers.cookie",
-        "req.headers.x-api-key",
-        "headers.authorization",
-        "headers.x-api-key",
-        "BMONI_API_KEY"
+        "req.headers.authorization", "req.headers.cookie", "req.headers.x-api-key",
+        "headers.authorization", "headers.x-api-key", "BMONI_API_KEY",
+        "req.body.signature", "req.body.ownerProofSignature"
       ]
     }
   });
 
-  app.register(healthRoutes, {
-    getBmoniGateway: dependencies.getBmoniGateway
-  });
-
-  // Phase 4 canonical API surface.
-  app.register(onboardingRoutes, {
-    prefix: "/api/onboarding",
-    getBmoniUserService: dependencies.getBmoniUserService
-  });
-  app.register(devRoutes, {
-    prefix: "/api/dev",
+  app.register(healthRoutes, { getBmoniGateway: dependencies.getBmoniGateway });
+  app.register(onboardingRoutes, { prefix: "/api/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
+  app.register(devRoutes, { prefix: "/api/dev", getBmoniGateway: dependencies.getBmoniGateway, getBmoniUserService: dependencies.getBmoniUserService });
+  app.register(walletOwnershipRoutes, {
+    prefix: "/api/wallet",
     getBmoniGateway: dependencies.getBmoniGateway,
     getBmoniUserService: dependencies.getBmoniUserService
   });
 
-  // Preserve the pre-Phase-4 route while mobile integration catches up.
-  app.register(onboardingRoutes, {
-    prefix: "/onboarding",
-    getBmoniUserService: dependencies.getBmoniUserService
-  });
-
+  app.register(onboardingRoutes, { prefix: "/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
   app.register(walletRoutes, { prefix: "/wallet" });
   app.register(bankingRoutes, { prefix: "/banking" });
   app.register(operatorRoutes, { prefix: "/operator" });
   app.register(activityRoutes, { prefix: "/activity" });
   app.register(pocketRoutes, { prefix: "/pockets" });
 
-  if (runtime) {
-    app.addHook("onClose", async () => runtime.close());
-  }
-
+  if (runtime) app.addHook("onClose", async () => runtime.close());
   return app;
 };

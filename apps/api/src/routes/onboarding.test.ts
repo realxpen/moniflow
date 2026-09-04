@@ -11,6 +11,13 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
+function walletMethods(): Pick<BmoniGateway, "createManagedSmartWallet" | "createOwnerProofChallenge"> {
+  return {
+    createManagedSmartWallet: vi.fn(),
+    createOwnerProofChallenge: vi.fn()
+  };
+}
+
 describe("POST /api/onboarding/user", () => {
   it("returns only the persisted identity mapping", async () => {
     const gateway: BmoniGateway = {
@@ -22,7 +29,8 @@ describe("POST /api/onboarding/user", () => {
         id: "provider-row-1",
         updatedAt: "2026-09-03T12:00:00.000Z"
       }),
-      getSupportedSmartWalletCurrencies: vi.fn()
+      getSupportedSmartWalletCurrencies: vi.fn(),
+      ...walletMethods()
     };
     const repository = new SqliteUserMappingRepository(":memory:");
     const service = new BmoniUserService(gateway, repository);
@@ -55,7 +63,8 @@ describe("POST /api/onboarding/user", () => {
   it("rejects invalid input before contacting BMONI", async () => {
     const gateway: BmoniGateway = {
       createUser: vi.fn(),
-      getSupportedSmartWalletCurrencies: vi.fn()
+      getSupportedSmartWalletCurrencies: vi.fn(),
+      ...walletMethods()
     };
     const repository = new SqliteUserMappingRepository(":memory:");
     const app = buildApp({

@@ -22,6 +22,8 @@ function createFixture() {
   });
   const gateway: BmoniGateway = {
     createUser,
+    createManagedSmartWallet: vi.fn(),
+    createOwnerProofChallenge: vi.fn(),
     getSupportedSmartWalletCurrencies: vi.fn()
   };
   const repository = new SqliteUserMappingRepository(":memory:");

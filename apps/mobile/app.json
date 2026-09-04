@@ -7,7 +7,7 @@
     "scheme": "moniflow",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "plugins": ["expo-router"],
+    "plugins": ["expo-router", "./plugins/with-bmoni-sdk.js"],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.realxpen.moniflow"
