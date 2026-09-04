@@ -1,0 +1,95 @@
+import postgres, { type Sql } from "postgres";
+import { z } from "zod";
+
+import type { UserMapping, UserMappingRepository } from "./user-mapping.js";
+import type { WalletOwnership, WalletOwnershipRepository } from "./wallet-ownership.js";
+
+const userRowSchema = z.object({
+  local_user_id: z.string(), email: z.string(), bmoni_user_id: z.string(), created_at: z.coerce.string(), updated_at: z.coerce.string()
+});
+const walletRowSchema = z.object({
+  local_user_id: z.string(), owner_address: z.string(), bmoni_smart_wallet_id: z.string(), smart_wallet_address: z.string(),
+  currency: z.literal("CNGN"), created_at: z.coerce.string(), updated_at: z.coerce.string()
+});
+
+export function createPostgresClient(databaseUrl: string) {
+  return postgres(databaseUrl, { max: 5, prepare: false, idle_timeout: 20, connect_timeout: 10 });
+}
+
+export async function ensureMoniflowSchema(sql: Sql) {
+  await sql`
+    create table if not exists bmoni_user_mappings (
+      local_user_id uuid primary key,
+      email text not null,
+      bmoni_user_id text not null unique,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `;
+  await sql`create unique index if not exists bmoni_user_mappings_email_lower_idx on bmoni_user_mappings (lower(email))`;
+  await sql`
+    create table if not exists wallet_ownership (
+      local_user_id uuid primary key references bmoni_user_mappings(local_user_id) on delete cascade,
+      owner_address text not null,
+      bmoni_smart_wallet_id text not null unique,
+      smart_wallet_address text not null unique,
+      currency text not null check (currency = 'CNGN'),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `;
+}
+
+function iso(value: string) { return new Date(value).toISOString(); }
+
+export class PostgresUserMappingRepository implements UserMappingRepository {
+  constructor(private readonly sql: Sql) {}
+
+  async findByEmail(email: string): Promise<UserMapping | null> {
+    const rows = await this.sql`select local_user_id, email, bmoni_user_id, created_at, updated_at from bmoni_user_mappings where lower(email) = lower(${email}) limit 1`;
+    if (!rows[0]) return null;
+    const row = userRowSchema.parse(rows[0]);
+    return { localUserId: row.local_user_id, email: row.email, bmoniUserId: row.bmoni_user_id, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at) };
+  }
+
+  async findByLocalUserId(localUserId: string): Promise<UserMapping | null> {
+    const rows = await this.sql`select local_user_id, email, bmoni_user_id, created_at, updated_at from bmoni_user_mappings where local_user_id = ${localUserId}::uuid limit 1`;
+    if (!rows[0]) return null;
+    const row = userRowSchema.parse(rows[0]);
+    return { localUserId: row.local_user_id, email: row.email, bmoniUserId: row.bmoni_user_id, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at) };
+  }
+
+  async save(mapping: UserMapping): Promise<UserMapping> {
+    await this.sql`insert into bmoni_user_mappings (local_user_id, email, bmoni_user_id, created_at, updated_at) values (${mapping.localUserId}::uuid, ${mapping.email}, ${mapping.bmoniUserId}, ${mapping.createdAt}::timestamptz, ${mapping.updatedAt}::timestamptz)`;
+    return mapping;
+  }
+
+  async close() {}
+}
+
+export class PostgresWalletOwnershipRepository implements WalletOwnershipRepository {
+  constructor(private readonly sql: Sql) {}
+
+  async findByLocalUserId(localUserId: string): Promise<WalletOwnership | null> {
+    const rows = await this.sql`select local_user_id, owner_address, bmoni_smart_wallet_id, smart_wallet_address, currency, created_at, updated_at from wallet_ownership where local_user_id = ${localUserId}::uuid limit 1`;
+    if (!rows[0]) return null;
+    const row = walletRowSchema.parse(rows[0]);
+    return { localUserId: row.local_user_id, ownerAddress: row.owner_address, bmoniSmartWalletId: row.bmoni_smart_wallet_id, smartWalletAddress: row.smart_wallet_address, currency: row.currency, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at) };
+  }
+
+  async save(value: WalletOwnership): Promise<WalletOwnership> {
+    await this.sql`
+      insert into wallet_ownership (local_user_id, owner_address, bmoni_smart_wallet_id, smart_wallet_address, currency, created_at, updated_at)
+      values (${value.localUserId}::uuid, ${value.ownerAddress}, ${value.bmoniSmartWalletId}, ${value.smartWalletAddress}, ${value.currency}, ${value.createdAt}::timestamptz, ${value.updatedAt}::timestamptz)
+      on conflict (local_user_id) do update set
+        owner_address = excluded.owner_address,
+        bmoni_smart_wallet_id = excluded.bmoni_smart_wallet_id,
+        smart_wallet_address = excluded.smart_wallet_address,
+        currency = excluded.currency,
+        updated_at = excluded.updated_at
+    `;
+    return value;
+  }
+
+  async close() {}
+}
