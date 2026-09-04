@@ -1,28 +1,38 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
 import { FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
 import { colors, spacing, typography } from "@/theme";
 
 export default function OnboardingSuccessScreen() {
+  const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
+  const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
+  const localUserId = routedLocalUserId?.trim() ?? "";
+
   return (
     <Screen contentContainerStyle={styles.screen} scroll={false}>
       <View style={styles.content}>
         <FlowHeader
-          description="The navigation shell is ready to explore. Real identity and wallet setup remain later phases."
-          eyebrow="03 · SETUP PREVIEW"
-          title="Your workspace is ready to preview."
+          description="Your sandbox identity, wallet, and Nigeria rail can now feed the MONIFlow wallet home."
+          eyebrow="READY"
+          title="Your financial workspace is connected."
         />
         <SoftCard style={styles.card}>
-          <StatusPill label="SHELL READY" tone="success" />
-          <Text style={styles.cardTitle}>Nothing financial happened.</Text>
+          <StatusPill label="SANDBOX READY" tone="success" />
+          <Text style={styles.cardTitle}>Provider-backed Home is ready.</Text>
           <Text style={styles.cardCopy}>
-            No BMONI user, wallet, KYC record, or provider balance was created. Every value ahead is
-            clearly marked mock data.
+            MONIFlow will read wallet state, CNGN balance, and the NGN deposit account from the BMONI sandbox where available. Technical wallet identifiers stay behind the wallet detail view.
           </Text>
         </SoftCard>
       </View>
-      <PrimaryButton onPress={() => router.replace("/(tabs)/home")}>
+      <PrimaryButton
+        onPress={() =>
+          router.replace({
+            pathname: "/(tabs)/home",
+            params: localUserId ? { localUserId } : undefined
+          })
+        }
+      >
         Enter MONIFlow
       </PrimaryButton>
     </Screen>
