@@ -72,6 +72,12 @@ export const updateNigeriaKycInputSchema = z.object({
     lastName: z.string().trim().min(1),
     dateOfBirth: z.string().min(1),
     gender: z.string().min(1)
+  }).strict(),
+  addressDetails: z.object({
+    street: z.string().trim().min(1),
+    city: z.string().trim().min(1),
+    state: z.string().trim().min(1),
+    countryCode: z.string().trim().length(3).transform((value) => value.toUpperCase())
   }).strict()
 }).strict();
 export type UpdateNigeriaKycInput = z.infer<typeof updateNigeriaKycInputSchema>;
