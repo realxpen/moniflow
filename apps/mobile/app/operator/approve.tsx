@@ -1,64 +1,107 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import {
   ConfirmationButton,
   FlowHeader,
+  PrimaryButton,
   Screen,
   SoftCard,
   StatusPill
 } from "@/components/ui";
-import { mockDisclosure, mockPlan } from "@/constants/mockData";
+import type { MoneyPlan } from "@/services/money-plan";
+import type { GuardResult } from "@/services/moniguard";
 import { colors, radius, spacing, typography } from "@/theme";
 
 export default function ApprovalScreen() {
+  const params = useLocalSearchParams<{ command?: string; localUserId?: string; plan?: string; guard?: string }>();
+  const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
+  const plan = useMemo(() => parseJson<MoneyPlan>(params.plan), [params.plan]);
+  const guard = useMemo(() => parseJson<GuardResult>(params.guard), [params.guard]);
+  const withdrawal = plan?.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
+  const allocations = plan?.actions.filter((action) => action.kind === "ALLOCATE_POCKET") ?? [];
+  const guardCleared = guard?.verdict === "REVIEW" && guard.checks.every((check) => check.passed);
+
+  if (!plan || !guardCleared || !withdrawal) {
+    return (
+      <Screen contentContainerStyle={styles.screen}>
+        <FlowHeader
+          description="Authorization is unavailable until a valid plan passes MONI Guard."
+          eyebrow="AUTHORIZATION GATE"
+          title="Guard clearance required."
+        />
+        <SoftCard style={styles.notice}>
+          <StatusPill label="BLOCKED" tone="warning" />
+          <Text style={styles.noticeCopy}>Open the Money Plan and run MONI Guard before entering the human authorization flow.</Text>
+        </SoftCard>
+        <PrimaryButton onPress={() => router.replace({ pathname: "/(tabs)/home", params: { localUserId } })}>
+          Return to Home
+        </PrimaryButton>
+      </Screen>
+    );
+  }
+
   return (
     <Screen contentContainerStyle={styles.screen}>
       <FlowHeader
-        description="Review the amount and destination without distraction. Approval here advances UI only."
-        eyebrow="CONSEQUENCE MODE"
+        description="MONI Guard passed every deterministic check. Only you can authorize the external movement."
+        eyebrow="HUMAN AUTHORIZATION"
         title="You stay in control."
       />
 
       <View style={styles.consequenceCard}>
         <Text style={styles.consequenceLabel}>YOU WOULD AUTHORIZE</Text>
-        <Text style={styles.amount}>₦40,000</Text>
+        <Text style={styles.amount}>{formatNaira(withdrawal.amount)}</Text>
         <View style={styles.destinationBlock}>
           <Text style={styles.toLabel}>TO</Text>
-          <Text style={styles.destination}>{mockPlan.destination}</Text>
+          <Text style={styles.destination}>{withdrawal.label}</Text>
         </View>
         <View style={styles.darkDivider} />
         <View style={styles.darkRow}>
-          <Text style={styles.darkMeta}>Expected available after both actions</Text>
-          <Text style={styles.darkValue}>₦240,000</Text>
+          <Text style={styles.darkMeta}>Expected available after complete plan</Text>
+          <Text style={styles.darkValue}>{formatNaira(plan.totals.availableAfter)}</Text>
         </View>
       </View>
 
-      <SoftCard style={styles.allocationCard}>
-        <View style={styles.row}>
-          <View style={styles.rowCopy}>
-            <Text style={styles.rowLabel}>Laptop money space</Text>
-            <Text style={styles.rowMeta}>Internal allocation after approval preview</Text>
+      {allocations.map((allocation) => (
+        <SoftCard key={`${allocation.index}-${allocation.label}`} style={styles.allocationCard}>
+          <View style={styles.row}>
+            <View style={styles.rowCopy}>
+              <Text style={styles.rowLabel}>{allocation.label} money space</Text>
+              <Text style={styles.rowMeta}>Internal allocation included in the guarded plan</Text>
+            </View>
+            <Text style={styles.rowValue}>{formatNaira(allocation.amount)}</Text>
           </View>
-          <Text style={styles.rowValue}>₦20,000</Text>
-        </View>
-      </SoftCard>
+        </SoftCard>
+      ))}
 
       <View style={styles.notice}>
-        <StatusPill label="NO EXECUTION" tone="warning" />
-        <Text style={styles.noticeCopy}>
-          This Phase 3 control is not a financial authorization. It does not call BMONI, sign a
-          payload, or move funds.
-        </Text>
+        <StatusPill label="MONI GUARD · REVIEW" tone="warning" />
+        <Text style={styles.noticeCopy}>All eight deterministic checks passed. External movement still requires your explicit device authorization.</Text>
       </View>
 
       <ConfirmationButton
-        label="Approve static preview"
-        onPress={() => router.push("/operator/signing")}
+        label="Authorize guarded plan"
+        onPress={() => router.push({ pathname: "/operator/signing", params: { localUserId, plan: JSON.stringify(plan) } })}
       />
-      <Text style={styles.disclosure}>{mockDisclosure}</Text>
+      <Text style={styles.disclosure}>MONI Guard clearance does not itself move funds or create a signature.</Text>
     </Screen>
   );
+}
+
+function parseJson<T>(value: string | string[] | undefined): T | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function formatNaira(amount: number) {
+  return `₦${new Intl.NumberFormat("en-NG", { maximumFractionDigits: 0 }).format(amount)}`;
 }
 
 const styles = StyleSheet.create({
