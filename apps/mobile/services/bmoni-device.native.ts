@@ -10,6 +10,9 @@ export const bmoniDevice = {
   initialize(options: InitializeOptions) {
     BmoniEmbeddedSdk.initialize(options);
   },
+  hasWallet() {
+    return BmoniEmbeddedSdk.hasWallet();
+  },
   walletAddress() {
     return BmoniEmbeddedSdk.walletAddress();
   },
