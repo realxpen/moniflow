@@ -24,8 +24,12 @@ function createFixture() {
     createUser,
     createManagedSmartWallet: vi.fn(),
     createOwnerProofChallenge: vi.fn(),
+    getNgnDepositAccount: vi.fn(),
     getOnboardingStatus: vi.fn(),
+    getSmartWallet: vi.fn(),
     getSupportedSmartWalletCurrencies: vi.fn(),
+    listAccountBalances: vi.fn(),
+    listAccountWallets: vi.fn(),
     lookupBvn: vi.fn(),
     startNigeriaOnboarding: vi.fn(),
     updateNigeriaKyc: vi.fn()
