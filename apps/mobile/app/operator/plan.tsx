@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { MoneyText, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
 import type { MoniflowIntent } from "@/services/intent-engine";
-import { prepareMoneyPlan, type MoneyPlan } from "@/services/money-plan";
+import { prepareMoneyPlan, type PreparedMoneyPlan } from "@/services/money-plan";
 import { colors, radius, spacing, typography } from "@/theme";
 
 export default function PlanScreen() {
@@ -12,9 +12,10 @@ export default function PlanScreen() {
   const command = typeof params.command === "string" ? params.command : "";
   const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
   const intent = useMemo(() => parseIntentParam(params.intent), [params.intent]);
-  const [plan, setPlan] = useState<MoneyPlan | null>(null);
+  const [prepared, setPrepared] = useState<PreparedMoneyPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const plan = prepared?.plan ?? null;
 
   useEffect(() => {
     let active = true;
@@ -27,8 +28,8 @@ export default function PlanScreen() {
       setLoading(true);
       setError(null);
       try {
-        const result = await prepareMoneyPlan(intent, localUserId);
-        if (active) setPlan(result);
+        const result = await prepareMoneyPlan(intent, localUserId, command || undefined);
+        if (active) setPrepared(result);
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : "Money Plan could not be prepared.");
       } finally {
@@ -36,10 +37,8 @@ export default function PlanScreen() {
       }
     };
     void load();
-    return () => {
-      active = false;
-    };
-  }, [intent, localUserId]);
+    return () => { active = false; };
+  }, [command, intent, localUserId]);
 
   return (
     <Screen contentContainerStyle={styles.screen}>
@@ -56,7 +55,7 @@ export default function PlanScreen() {
         </SoftCard>
       ) : null}
 
-      {plan ? (
+      {plan && prepared ? (
         <>
           <View style={styles.currentBlock}>
             <Text style={styles.metaLabel}>CURRENT</Text>
@@ -109,18 +108,10 @@ export default function PlanScreen() {
           ) : null}
 
           <PrimaryButton
-            onPress={() => {
-              if (!intent) return;
-              router.push({
-                pathname: "/operator/guard",
-                params: {
-                  command,
-                  localUserId,
-                  intent: JSON.stringify(intent),
-                  plan: JSON.stringify(plan)
-                }
-              });
-            }}
+            onPress={() => router.push({
+              pathname: "/operator/guard",
+              params: { command, localUserId, planId: prepared.planId }
+            })}
           >
             Run MONI Guard
           </PrimaryButton>
@@ -136,7 +127,7 @@ export default function PlanScreen() {
         </SoftCard>
       ) : null}
 
-      <Text style={styles.disclosure}>This is a consequence preview only. MONI Guard must approve the plan boundary before authorization can begin.</Text>
+      <Text style={styles.disclosure}>This persisted plan is the server authority. Navigation parameters cannot authorize or alter financial execution.</Text>
     </Screen>
   );
 }
@@ -144,11 +135,7 @@ export default function PlanScreen() {
 function parseIntentParam(value: string | string[] | undefined): MoniflowIntent | null {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) return null;
-  try {
-    return JSON.parse(raw) as MoniflowIntent;
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(raw) as MoniflowIntent; } catch { return null; }
 }
 
 function formatNaira(amount: number) {
@@ -174,12 +161,7 @@ const styles = StyleSheet.create({
   summaryGrid: { flexDirection: "row", gap: spacing.sm },
   summaryCard: { flex: 1, gap: spacing.sm, minHeight: 130 },
   summaryMoney: { fontSize: 27, lineHeight: 32 },
-  afterCard: {
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.card,
-    gap: spacing.sm,
-    padding: spacing.xl
-  },
+  afterCard: { backgroundColor: colors.textPrimary, borderRadius: radius.card, gap: spacing.sm, padding: spacing.xl },
   afterLabel: { ...typography.technical, color: colors.backgroundPrimary, opacity: 0.7, letterSpacing: 1.2 },
   afterMoney: { color: colors.backgroundPrimary, fontSize: 50, lineHeight: 56 },
   formula: { ...typography.technical, color: colors.backgroundPrimary, opacity: 0.72 },
