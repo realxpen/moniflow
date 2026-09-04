@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -11,21 +11,23 @@ const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
 type NigeriaStatus = "idle" | "processing" | "ready" | "action_required" | "failed";
 
 export default function NigeriaOnboardingScreen() {
+  const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
+  const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
+  const localUserId = routedLocalUserId?.trim() || configuredLocalUserId;
+
   const [firstName, setFirstName] = useState("Bunch");
   const [lastName, setLastName] = useState("Dillon");
   const [phoneNumber, setPhoneNumber] = useState("+2348000000000");
   const [email, setEmail] = useState("bunch.dillon@example.com");
   const [bvn, setBvn] = useState("95888168924");
-  const [localUserId, setLocalUserId] = useState(configuredLocalUserId);
-  const [showSandboxDetails, setShowSandboxDetails] = useState(!configuredLocalUserId);
+  const [showSandboxDetails, setShowSandboxDetails] = useState(false);
   const [status, setStatus] = useState<NigeriaStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const start = async () => {
-    if (!localUserId.trim()) {
-      setMessage("Add the Phase 4 local user UUID in Sandbox details before continuing.");
-      setShowSandboxDetails(true);
+    if (!localUserId) {
+      setMessage("Your MONIFlow identity link is missing. Return to Identity and continue again.");
       return;
     }
 
@@ -37,7 +39,7 @@ export default function NigeriaOnboardingScreen() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          localUserId: localUserId.trim(),
+          localUserId,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           phoneNumber: phoneNumber.trim(),
@@ -58,11 +60,11 @@ export default function NigeriaOnboardingScreen() {
   };
 
   const refreshStatus = async () => {
-    if (!localUserId.trim()) return;
+    if (!localUserId) return;
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch(`${apiUrl}/api/onboarding/nigeria/status?localUserId=${encodeURIComponent(localUserId.trim())}`);
+      const response = await fetch(`${apiUrl}/api/onboarding/nigeria/status?localUserId=${encodeURIComponent(localUserId)}`);
       const payload = (await response.json()) as { status?: NigeriaStatus; message?: string };
       if (!response.ok) throw new Error(payload.message ?? "Status could not be checked.");
       setStatus(payload.status ?? "processing");
@@ -108,8 +110,9 @@ export default function NigeriaOnboardingScreen() {
 
       {showSandboxDetails ? (
         <SoftCard style={styles.detailsCard}>
-          <Text style={styles.detailsCopy}>This UUID links the Phase 6 request to the BMONI user and CNGN wallet created in Phases 4–5.</Text>
-          <Field label="LOCAL USER UUID" value={localUserId} onChangeText={setLocalUserId} />
+          <Text style={styles.detailsCopy}>MONIFlow now carries this internal identity automatically. You do not need to type or copy a UUID.</Text>
+          <Text style={styles.label}>LOCAL USER</Text>
+          <Text selectable style={styles.internalId}>{localUserId ? shortId(localUserId) : "Not linked"}</Text>
         </SoftCard>
       ) : null}
 
@@ -120,16 +123,16 @@ export default function NigeriaOnboardingScreen() {
           onPress={() =>
             router.push({
               pathname: "/onboarding/success",
-              params: { localUserId: localUserId.trim() }
+              params: { localUserId }
             })
           }
         >
           Enter MONIFlow
         </PrimaryButton>
       ) : status === "processing" || status === "action_required" ? (
-        <PrimaryButton disabled={busy} onPress={() => void refreshStatus()}>{busy ? "Checking…" : "Check status"}</PrimaryButton>
+        <PrimaryButton disabled={busy || !localUserId} onPress={() => void refreshStatus()}>{busy ? "Checking…" : "Check status"}</PrimaryButton>
       ) : (
-        <PrimaryButton disabled={busy} onPress={() => void start()}>{busy ? "Securing…" : "Continue"}</PrimaryButton>
+        <PrimaryButton disabled={busy || !localUserId} onPress={() => void start()}>{busy ? "Securing…" : "Continue"}</PrimaryButton>
       )}
 
       <Text style={styles.privacy}>BVN is sent to the MONIFlow API for the BMONI sandbox verification flow and is not stored in MONIFlow’s local wallet table.</Text>
@@ -160,6 +163,10 @@ function Field({ label, value, onChangeText, keyboardType, secure, maxLength }: 
       />
     </View>
   );
+}
+
+function shortId(value: string) {
+  return value.length > 16 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
 }
 
 function statusLabel(status: NigeriaStatus) {
@@ -211,6 +218,7 @@ const styles = StyleSheet.create({
   disclosureSymbol: { ...typography.body, color: colors.textPrimary },
   detailsCard: { gap: spacing.md },
   detailsCopy: { ...typography.caption, color: colors.textSecondary },
+  internalId: { ...typography.body, color: colors.textPrimary },
   message: { ...typography.caption, color: colors.textSecondary, textAlign: "center" },
   error: { color: colors.statusError },
   privacy: { ...typography.caption, color: colors.textSecondary, textAlign: "center", paddingHorizontal: spacing.md }
