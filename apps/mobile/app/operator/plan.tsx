@@ -41,11 +41,6 @@ export default function PlanScreen() {
     };
   }, [intent, localUserId]);
 
-  const hasMoneyMovement = useMemo(
-    () => Boolean(plan && plan.totals.totalCommitted > 0),
-    [plan]
-  );
-
   return (
     <Screen contentContainerStyle={styles.screen}>
       <View style={styles.hero}>
@@ -109,15 +104,25 @@ export default function PlanScreen() {
           {plan.totals.availableAfter < 0 ? (
             <SoftCard style={styles.warningCard}>
               <StatusPill label="NEGATIVE OUTCOME" tone="warning" />
-              <Text style={styles.stateCopy}>This plan exceeds the current available balance. Phase 9 shows the arithmetic exactly; Guard enforcement belongs to the next safety stage.</Text>
+              <Text style={styles.stateCopy}>This plan exceeds the current available balance. MONI Guard will block it before authorization.</Text>
             </SoftCard>
           ) : null}
 
           <PrimaryButton
-            onPress={() => router.push({ pathname: "/operator/approve", params: { command, localUserId, plan: JSON.stringify(plan) } })}
-            disabled={!hasMoneyMovement}
+            onPress={() => {
+              if (!intent) return;
+              router.push({
+                pathname: "/operator/guard",
+                params: {
+                  command,
+                  localUserId,
+                  intent: JSON.stringify(intent),
+                  plan: JSON.stringify(plan)
+                }
+              });
+            }}
           >
-            {hasMoneyMovement ? "Review consequences" : "No money movement to approve"}
+            Run MONI Guard
           </PrimaryButton>
         </>
       ) : null}
@@ -131,7 +136,7 @@ export default function PlanScreen() {
         </SoftCard>
       ) : null}
 
-      <Text style={styles.disclosure}>This is a consequence preview only. No withdrawal, allocation, signing, or execution happens on this screen.</Text>
+      <Text style={styles.disclosure}>This is a consequence preview only. MONI Guard must approve the plan boundary before authorization can begin.</Text>
     </Screen>
   );
 }
