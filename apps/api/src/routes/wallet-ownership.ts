@@ -1,8 +1,7 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply } from "fastify";
 import { z } from "zod";
 
-import { env } from "../config/env.js";
-import { SqliteWalletOwnershipRepository } from "../repositories/sqlite-wallet-ownership.js";
+import type { WalletOwnershipRepository } from "../repositories/wallet-ownership.js";
 import {
   BmoniConfigurationError,
   BmoniProviderError,
@@ -25,23 +24,23 @@ const createWalletBodySchema = z.object({
 type WalletOwnershipRouteOptions = {
   getBmoniGateway: () => BmoniGateway;
   getBmoniUserService: () => BmoniUserService;
+  getWalletOwnershipRepository: () => WalletOwnershipRepository;
 };
 
 export const walletOwnershipRoutes: FastifyPluginAsync<WalletOwnershipRouteOptions> = async (app, options) => {
-  const ownership = new SqliteWalletOwnershipRepository(env.DATABASE_URL);
-  app.addHook("onClose", async () => ownership.close());
+  const ownership = options.getWalletOwnershipRepository();
 
   app.get<{ Querystring: { localUserId?: string } }>("/status", async (request, reply) => {
     const parsed = localUserIdSchema.safeParse(request.query.localUserId);
     if (!parsed.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "localUserId must be a UUID." });
-    const result = ownership.findByLocalUserId(parsed.data);
+    const result = await ownership.findByLocalUserId(parsed.data);
     return { status: result ? "created" : "not_created", wallet: result };
   });
 
   app.post<{ Body: unknown }>("/owner-proof-challenge", async (request, reply) => {
     const parsed = challengeBodySchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Invalid owner proof request." });
-    const mapping = options.getBmoniUserService().getMapping(parsed.data.localUserId);
+    const mapping = await options.getBmoniUserService().getMapping(parsed.data.localUserId);
     if (!mapping) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Create the BMONI user before provisioning its wallet." });
 
     try {
@@ -58,7 +57,7 @@ export const walletOwnershipRoutes: FastifyPluginAsync<WalletOwnershipRouteOptio
   app.post<{ Body: unknown }>("/create-managed", async (request, reply) => {
     const parsed = createWalletBodySchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Invalid managed wallet request." });
-    const mapping = options.getBmoniUserService().getMapping(parsed.data.localUserId);
+    const mapping = await options.getBmoniUserService().getMapping(parsed.data.localUserId);
     if (!mapping) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Create the BMONI user before provisioning its wallet." });
 
     try {
@@ -69,8 +68,8 @@ export const walletOwnershipRoutes: FastifyPluginAsync<WalletOwnershipRouteOptio
         ownerProofSignature: parsed.data.signature
       });
       const now = new Date().toISOString();
-      const existing = ownership.findByLocalUserId(parsed.data.localUserId);
-      const saved = ownership.save({
+      const existing = await ownership.findByLocalUserId(parsed.data.localUserId);
+      const saved = await ownership.save({
         localUserId: parsed.data.localUserId,
         ownerAddress: parsed.data.ownerAddress,
         bmoniSmartWalletId: wallet.smartWalletId ?? wallet.id!,
@@ -87,9 +86,7 @@ export const walletOwnershipRoutes: FastifyPluginAsync<WalletOwnershipRouteOptio
 };
 
 function handleBmoniError(app: FastifyInstance, reply: FastifyReply, error: unknown, operation: string) {
-  if (error instanceof BmoniConfigurationError) {
-    return reply.status(503).send({ statusCode: 503, error: "Service Unavailable", message: "BMONI sandbox access is not configured." });
-  }
+  if (error instanceof BmoniConfigurationError) return reply.status(503).send({ statusCode: 503, error: "Service Unavailable", message: "BMONI sandbox access is not configured." });
   if (error instanceof BmoniProviderError) {
     app.log.warn({ errorName: error.name, requestId: error.requestId, statusCode: error.statusCode }, `BMONI ${operation} failed`);
     const statusCode = error.statusCode === 400 || error.statusCode === 409 ? error.statusCode : 502;
