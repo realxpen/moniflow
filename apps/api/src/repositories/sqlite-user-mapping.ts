@@ -12,13 +12,8 @@ const userMappingRowSchema = z.object({
   updated_at: z.string()
 });
 
-type UserMappingRow = z.infer<typeof userMappingRowSchema>;
-
 function toDomain(row: unknown): UserMapping | null {
-  if (row === undefined) {
-    return null;
-  }
-
+  if (row === undefined) return null;
   const parsed = userMappingRowSchema.parse(row);
   return {
     bmoniUserId: parsed.bmoni_user_id,
@@ -30,14 +25,8 @@ function toDomain(row: unknown): UserMapping | null {
 }
 
 function databaseFilename(databaseUrl: string) {
-  if (databaseUrl === ":memory:") {
-    return databaseUrl;
-  }
-
-  if (!databaseUrl.startsWith("file:")) {
-    throw new Error("DATABASE_URL must use the file: scheme or :memory:.");
-  }
-
+  if (databaseUrl === ":memory:") return databaseUrl;
+  if (!databaseUrl.startsWith("file:")) throw new Error("SQLite DATABASE_URL must use file: or :memory:.");
   return databaseUrl.slice("file:".length);
 }
 
@@ -57,53 +46,20 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
     `);
   }
 
-  findByEmail(email: string): UserMapping | null {
-    const row = this.database
-      .prepare(
-        `SELECT local_user_id, email, bmoni_user_id, created_at, updated_at
-         FROM bmoni_user_mappings
-         WHERE email = ? COLLATE NOCASE`
-      )
-      .get(email) as UserMappingRow | undefined;
-
+  async findByEmail(email: string): Promise<UserMapping | null> {
+    const row = this.database.prepare(`SELECT local_user_id, email, bmoni_user_id, created_at, updated_at FROM bmoni_user_mappings WHERE email = ? COLLATE NOCASE`).get(email);
     return toDomain(row);
   }
 
-  findByLocalUserId(localUserId: string): UserMapping | null {
-    const row = this.database
-      .prepare(
-        `SELECT local_user_id, email, bmoni_user_id, created_at, updated_at
-         FROM bmoni_user_mappings
-         WHERE local_user_id = ?`
-      )
-      .get(localUserId) as UserMappingRow | undefined;
-
+  async findByLocalUserId(localUserId: string): Promise<UserMapping | null> {
+    const row = this.database.prepare(`SELECT local_user_id, email, bmoni_user_id, created_at, updated_at FROM bmoni_user_mappings WHERE local_user_id = ?`).get(localUserId);
     return toDomain(row);
   }
 
-  save(mapping: UserMapping): UserMapping {
-    this.database
-      .prepare(
-        `INSERT INTO bmoni_user_mappings (
-          local_user_id,
-          email,
-          bmoni_user_id,
-          created_at,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?)`
-      )
-      .run(
-        mapping.localUserId,
-        mapping.email,
-        mapping.bmoniUserId,
-        mapping.createdAt,
-        mapping.updatedAt
-      );
-
+  async save(mapping: UserMapping): Promise<UserMapping> {
+    this.database.prepare(`INSERT INTO bmoni_user_mappings (local_user_id, email, bmoni_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run(mapping.localUserId, mapping.email, mapping.bmoniUserId, mapping.createdAt, mapping.updatedAt);
     return mapping;
   }
 
-  close() {
-    this.database.close();
-  }
+  async close() { this.database.close(); }
 }
