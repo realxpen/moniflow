@@ -19,13 +19,13 @@ const nigeriaBodySchema = z.object({
   firstName: z.string().trim().min(1),
   lastName: z.string().trim().min(1),
   phoneNumber: e164PhoneSchema,
-  email: z.email(),
   bvn: z.string().regex(/^\d{11}$/),
-  addressDetails: z.object({
-    street: z.string().trim().min(1),
+  address: z.object({
+    streetLine1: z.string().trim().min(1),
     city: z.string().trim().min(1),
     state: z.string().trim().min(1),
-    countryCode: z.string().trim().length(3).transform((value) => value.toUpperCase())
+    postalCode: z.string().regex(/^\d{6}$/),
+    countryCode: z.literal("NGA")
   }).strict()
 }).strict();
 
@@ -44,7 +44,7 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
       return reply.status(400).send({
         statusCode: 400,
         error: "Bad Request",
-        message: "Enter the documented sandbox identity, E.164 phone, email, 11-digit BVN, and Nigeria KYC address details."
+        message: "Enter the documented sandbox identity, E.164 phone, 11-digit BVN, and complete Nigerian address including 6-digit postal code."
       });
     }
 
@@ -77,6 +77,8 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
         });
       }
 
+      // BMONI documents BVN lookup as fetch-only. Use it to confirm the fixed
+      // sandbox persona before we save the NGN profile; the lookup itself writes nothing.
       const identity = await gateway.lookupBvn(mapping.bmoniUserId, parsed.data.bvn);
 
       const namesMatch =
@@ -92,21 +94,30 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
         });
       }
 
+      // Nigeria NGN KYC profile fields follow the Nigeria-specific contract:
+      // personalInfo + Nigerian address + BVN identification number.
       await gateway.updateNigeriaKyc(mapping.bmoniUserId, {
         personalInfo: {
           firstName: parsed.data.firstName,
           lastName: parsed.data.lastName,
+          phoneNumber: parsed.data.phoneNumber,
           dateOfBirth: identity.dateOfBirth,
           gender: identity.gender
         },
-        addressDetails: parsed.data.addressDetails
+        address: parsed.data.address,
+        identificationNumbers: [
+          {
+            type: "bvn",
+            number: parsed.data.bvn,
+            issuingCountryCode: "NGA"
+          }
+        ]
       });
 
-      // BMONI's supplied lifecycle and zero-to-first-send documents disagree on
-      // whether KYC activation/documents occur before or after start-nigeria.
-      // Until that conflict is resolved against the live sandbox contract, this
-      // route preserves the documented quickstart start-nigeria call and never
-      // fabricates a ready state; provider onboarding status remains authoritative.
+      // For the Nigeria NGN local account, the Nigeria-specific documentation
+      // identifies start-nigeria as the rail trigger. It requires only BVN +
+      // the existing CNGN wallet address/index. USD EDD/kyc/activate is a later,
+      // separate stage and is intentionally not performed here.
       await gateway.startNigeriaOnboarding(mapping.bmoniUserId, {
         bvn: parsed.data.bvn,
         ngnWalletAddress: wallet.smartWalletAddress,
