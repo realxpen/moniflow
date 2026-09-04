@@ -24,5 +24,8 @@ export const bmoniDevice = {
   },
   signMessage(message: string, pin: string) {
     return BmoniEmbeddedSdk.signMessage(message, pin);
+  },
+  signTransactionHash(hashHex: string, pin: string) {
+    return BmoniEmbeddedSdk.signTransactionHash(hashHex, pin);
   }
 };
