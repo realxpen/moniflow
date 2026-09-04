@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-09-04
 
-This file records corrections made after the BMONI sandbox/API documentation was added to the MONIFlow project source. BMONI documentation is authoritative for provider behavior. Where supplied BMONI pages conflict, MONIFlow must not guess or fake a successful provider state.
+This file records corrections made after the BMONI sandbox/API documentation was added to the MONIFlow project source. BMONI documentation is authoritative for provider behavior. Where generic and currency-specific pages differ, the Nigeria-specific page governs the NGN-only Phase 6 flow.
 
 ## Confirmed lifecycle
 
@@ -21,7 +21,7 @@ A later stage must not be treated as ready merely because an earlier API call re
 
 ### Sandbox persona consistency
 
-BMONI's sandbox identity matching requires the user record and the later identity verification to use the same documented persona. MONIFlow previously created an `Ayomide` user while using Bunch Dillon's sandbox phone and later Bunch Dillon's BVN. That would deliberately fail identity matching.
+BMONI's sandbox identity matching requires the user record and later identity verification to use the same documented persona. MONIFlow previously created an `Ayomide` user while using Bunch Dillon's sandbox phone and later Bunch Dillon's BVN. That would deliberately fail identity matching.
 
 The onboarding identity screen now defaults to one consistent documented persona from the first provider call onward:
 
@@ -30,7 +30,7 @@ The onboarding identity screen now defaults to one consistent documented persona
 - email: `bunch.dillon@example.com`
 - phoneNumber: `+2348000000000`
 
-The later Nigeria KYC screen uses the same Bunch Dillon persona and BVN `95888168924`.
+The Nigeria NGN screen uses the same Bunch Dillon persona and BVN `95888168924`.
 
 ### Device wallet provisioning
 
@@ -40,47 +40,56 @@ Owner proof remains an EIP-191 text-message signature using `signMessage`.
 
 Proposal/transaction signing remains a raw digest signature using `signTransactionHash`. These methods are intentionally separate.
 
-### Nigeria KYC profile
+### Nigeria NGN KYC profile
 
-The BMONI zero-to-first-send quickstart shows the Nigeria KYC PATCH with both `personalInfo` and `addressDetails`. MONIFlow previously sent only `personalInfo`.
+The current Nigeria-specific BMONI KYC page defines the NGN local-account profile separately from the later USD Enhanced Due Diligence path.
 
-MONIFlow now includes the documented sandbox KYC address fields:
+MONIFlow Phase 6 is NGN/CNGN only. Its saved KYC profile now uses the Nigeria-specific field names:
 
-- street
-- city
-- state
-- countryCode
+- `personalInfo.firstName`
+- `personalInfo.lastName`
+- `personalInfo.phoneNumber`
+- `personalInfo.dateOfBirth`
+- optional `personalInfo.gender`
+- `address.streetLine1`
+- `address.city`
+- `address.state`
+- `address.postalCode` — exactly 6 digits
+- `address.countryCode` — `NGA`
+- `identificationNumbers[0]` with `type: "bvn"`, the 11-digit BVN, and `issuingCountryCode: "NGA"`
 
-The UI defaults to the Bunch Dillon quickstart values in sandbox and explicitly warns not to use real BVN/NIN values in the sandbox.
+The previous `addressDetails.street` shape has been removed.
+
+The BVN helper lookup remains fetch-only and is used to confirm the fixed sandbox persona before saving the profile. It does not itself count as KYC persistence.
+
+### NGN versus Nigerian USD KYC
+
+The Nigeria-specific documentation is explicit that the two capabilities are separate:
+
+- Stage 1 — NGN local account: triggered by `POST /onboarding/start-nigeria` with `bvn`, `ngnWalletAddress`, and `ngnWalletIndex`.
+- Stage 2 — USD international account: later Enhanced Due Diligence using `POST /kyc/activate`, followed by USD onboarding/readiness requirements.
+
+MONIFlow Phase 6 intentionally implements only Stage 1. It must not force the user through Nigerian USD EDD, biometric, occupation, or `sumsubLevelName` requirements just to activate the NGN/CNGN demo rail.
 
 ### Provider status authority
 
 Nigeria onboarding is considered ready only when BMONI onboarding status reports an active/completed/ready state. MONIFlow must not fabricate readiness.
 
-Before resubmitting the Nigeria onboarding request, the route now checks the existing provider status so an already-ready user is not unnecessarily re-onboarded.
+Before resubmitting the Nigeria onboarding request, the route checks the existing provider status so an already-ready user is not unnecessarily re-onboarded.
 
 ### Sandbox funding
 
 Sandbox wallets begin empty. Test funding is a separate lifecycle step and must be provider-backed. The documented default credit is NGN 1,000 and USD 10. The primary MONIFlow demo must either obtain a larger documented/provider-approved sandbox credit or use demo amounts that fit the real funded balance.
 
-## Confirmed but not yet fully implemented
-
-### Nigeria KYC documents / activation
-
-The supplied BMONI files conflict on exact Nigeria sequencing:
-
-- `The integration lifecycle` says: `GET /kyc/options` → document uploads → `PATCH /kyc` → `GET /kyc/readiness` → `POST /kyc/activate`, and says Nigeria omits biometric and `sumsubLevelName`.
-- `Quickstart — zero to first send` shows: `PATCH /kyc` → wallet provisioning → `start-nigeria` → identification + proof-of-address + biometric uploads → poll onboarding status.
-
-Because these supplied pages conflict, MONIFlow does not invent a reconciliation. The current route keeps provider status authoritative and the full document/readiness/activation checkpoint remains unresolved until tested against the live sandbox contract or clarified by BMONI.
+## Still pending after Phase 6
 
 ### NGN virtual bank account creation
 
-The lifecycle confirms `POST /vba/ngn` is the NGN virtual-account funding action. The supplied lifecycle page does not include the request body, so MONIFlow must not invent it from memory. The existing deposit-account read remains valid, but explicit creation should be implemented only from a source that gives the exact body.
+The lifecycle confirms `POST /vba/ngn` is the NGN virtual-account funding action. Explicit creation belongs to the funding/lifecycle verification step after the NGN rail is active.
 
 ### Nigerian bank withdrawal
 
-The product flow requires bank discovery, account verification, withdrawal-account registration, offramp/proposal creation, approval, raw-digest device signing, signature submission, and provider status verification. Exact endpoint bodies must come from the relevant BMONI NGN rail documentation before implementation.
+The product flow requires bank discovery, account verification, withdrawal-account registration, offramp/proposal creation, approval, raw-digest device signing, signature submission, and provider status verification. Those remain future Phase 12/13 work and must follow the NGN rail documentation exactly.
 
 ## Non-negotiable integration rules
 
