@@ -23,4 +23,8 @@ export interface BmoniGateway {
   updateNigeriaKyc(bmoniUserId: string, input: UpdateNigeriaKycInput): Promise<KycProfileResponse>;
   startNigeriaOnboarding(bmoniUserId: string, input: StartNigeriaOnboardingInput): Promise<StartNigeriaOnboardingResponse>;
   getOnboardingStatus(bmoniUserId: string): Promise<OnboardingStatus>;
+  listAccountWallets(bmoniUserId: string): Promise<unknown>;
+  listAccountBalances(bmoniUserId: string): Promise<unknown>;
+  getSmartWallet(bmoniUserId: string, smartWalletId: string): Promise<unknown>;
+  getNgnDepositAccount(bmoniUserId: string): Promise<unknown>;
 }
