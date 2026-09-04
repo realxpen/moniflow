@@ -12,7 +12,7 @@ The required execution flow is:
 
 ## Current phase
 
-Phase 2 — UI Design System. The native-first token system, reusable financial components, bounded motion, and private component showcase are implemented. Full screen composition and navigation are Phase 3 work.
+Phase 3 — Shell and Navigation. The native-first design system now composes the complete static onboarding, tab, bank, and operator journeys. The shell is navigable end to end without contacting BMONI, and every displayed financial value is labeled as mock or preview data.
 
 The backend also contains BMONI API groundwork implemented ahead of its planned Phase 4 checkpoint. It is preserved, but Phase 4 is not complete until live sandbox user creation is exercised with an authorized test identity.
 
@@ -76,7 +76,16 @@ pnpm --filter @moniflow/mobile ios
 
 Expo Go can be used only for temporary UI inspection with `pnpm --filter @moniflow/mobile start:go`; it is not the architectural target.
 
-The private Phase 2 showcase is available at `/_dev/design-system`. It is not part of the product tab bar and all displayed financial values are mock data.
+The app starts with the static onboarding flow and enters the four-tab workspace after setup. MONIFlow Operator is embedded in Home, and the target demo journey can be previewed through Processing, Money Plan, Consequence review, Device boundary, and Result. The private design-system showcase remains available at `/_dev/design-system`; it is not part of the product tab bar.
+
+Phase 3 routes:
+
+```text
+/onboarding/welcome → /onboarding/identity → /onboarding/wallet → /onboarding/success
+/home · /pockets · /activity · /profile
+/operator/processing → /operator/plan → /operator/approve → /operator/signing → /operator/result
+/bank/select → /bank/verify → /bank/success
+```
 
 ## Deploy the UI preview to Vercel
 

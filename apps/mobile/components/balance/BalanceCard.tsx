@@ -28,7 +28,7 @@ export function BalanceCard({
         </View>
         <MoneyText amount={amount} style={styles.amount} />
         <Text style={styles.meta}>
-          {mock ? "Design-system preview only" : "Provider-verified balance"}
+          {mock ? "Static shell mock data" : "Provider-verified balance"}
         </Text>
         {actions ? <View style={styles.actions}>{actions}</View> : null}
       </View>

@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors, spacing } from "@/theme";
+import { colors, layout, spacing } from "@/theme";
 
 type ScreenProps = PropsWithChildren<{
   contentContainerStyle?: StyleProp<ViewStyle>;
@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
   content: {
     alignSelf: "center",
     flexGrow: 1,
-    maxWidth: 480,
+    maxWidth: layout.contentMaxWidth,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     width: "100%"

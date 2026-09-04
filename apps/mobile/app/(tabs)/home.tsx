@@ -1,204 +1,154 @@
 import { router } from "expo-router";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { ActivityRow } from "@/components/activity";
+import { BalanceCard } from "@/components/balance";
+import { PocketCard } from "@/components/pockets";
 import {
-  GlassCard,
-  MoneyText,
-  Pill,
+  BottomSheet,
+  OperatorInput,
+  PrimaryButton,
   Screen,
   SectionTitle,
-  SoftCard,
-  StatusPill
+  SecondaryButton,
+  StatusPill,
+  SuggestionChip
 } from "@/components/ui";
-import { colors, radius, spacing, typography } from "@/theme";
-
-const quickActions = ["Withdraw", "Save", "Activity"] as const;
-const suggestions = [
-  "Show my available balance",
-  "Create a laptop pocket",
-  "Show my recent activity"
-] as const;
+import { mockDisclosure, mockHomeData } from "@/constants/mockData";
+import { colors, layout, spacing, typography } from "@/theme";
 
 export default function HomeScreen() {
+  const [command, setCommand] = useState("");
+  const [showAddMoney, setShowAddMoney] = useState(false);
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  }, []);
+
   return (
     <Screen contentContainerStyle={styles.screen}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Good afternoon</Text>
-          <Text style={styles.name}>Ayomide</Text>
+        <View style={styles.greetingBlock}>
+          <Text style={styles.greeting}>{greeting}</Text>
+          <Text style={styles.name}>{mockHomeData.firstName}</Text>
         </View>
         <StatusPill label="SANDBOX UI" tone="processing" />
       </View>
 
-      <SoftCard style={styles.balanceCard}>
-        <Text style={styles.technicalLabel}>AVAILABLE BALANCE · MOCK DATA</Text>
-        <MoneyText amount={128_450} />
-        <Text style={styles.balanceNote}>Placeholder only — not retrieved from BMONI.</Text>
-      </SoftCard>
+      <BalanceCard
+        actions={
+          <>
+            <SecondaryButton onPress={() => setShowAddMoney(true)} style={styles.balanceAction}>
+              Add money
+            </SecondaryButton>
+            <PrimaryButton
+              onPress={() => router.push("/bank/select")}
+              style={styles.balanceAction}
+            >
+              Withdraw
+            </PrimaryButton>
+          </>
+        }
+        amount={mockHomeData.availableBalance}
+        label="AVAILABLE"
+        mock
+      />
 
-      <View style={styles.quickActions}>
-        {quickActions.map((action) => (
-          <Pressable key={action} style={styles.quickAction}>
-            <Text style={styles.quickActionLabel}>{action}</Text>
+      <View style={styles.section}>
+        <SectionTitle eyebrow="MONIFLOW OPERATOR" title="What should your money do?" />
+        <OperatorInput
+          actionLabel="Preview plan"
+          onChangeText={setCommand}
+          onSubmit={() => router.push("/operator/processing")}
+          placeholder="Ask MONIFlow..."
+          value={command}
+        />
+        <View style={styles.suggestions}>
+          <Text style={styles.technicalLabel}>SUGGESTED</Text>
+          <View style={styles.chipRow}>
+            {mockHomeData.suggestions.map((suggestion) => (
+              <SuggestionChip
+                key={suggestion}
+                label={suggestion}
+                onPress={() => setCommand(suggestion)}
+                selected={command === suggestion}
+              />
+            ))}
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setCommand(mockHomeData.command)}
+            style={({ pressed }) => pressed && styles.pressed}
+          >
+            <Text style={styles.demoCommand}>Use the full demo instruction</Text>
           </Pressable>
-        ))}
+        </View>
       </View>
 
       <View style={styles.section}>
-        <SectionTitle eyebrow="INTELLIGENCE MODE" title="What should your money do?" />
-        <GlassCard style={styles.operatorCard}>
-          <Text style={styles.operatorPrompt}>
-            Withdraw ₦40,000 to my GTBank account and save ₦20,000 for my laptop.
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push("/operator/processing")}
-            style={styles.operatorButton}
-          >
-            <Text style={styles.operatorButtonLabel}>Preview flow</Text>
+        <View style={styles.sectionRow}>
+          <SectionTitle eyebrow="INTERNAL BOOKKEEPING" title="Money spaces" />
+          <Pressable accessibilityRole="button" onPress={() => router.push("/(tabs)/pockets")}>
+            <Text style={styles.textAction}>See all</Text>
           </Pressable>
-        </GlassCard>
-        <View style={styles.suggestions}>
-          {suggestions.map((suggestion) => (
-            <Pill key={suggestion}>{suggestion}</Pill>
+        </View>
+        <View style={styles.pocketRow}>
+          {mockHomeData.pockets.map((pocket) => (
+            <PocketCard key={pocket.name} {...pocket} />
           ))}
         </View>
       </View>
 
       <View style={styles.section}>
-        <SectionTitle eyebrow="MONEY POCKETS" title="Give every naira a purpose" />
-        <View style={styles.twoColumn}>
-          <SoftCard style={styles.smallCard}>
-            <Text style={styles.cardLabel}>Laptop</Text>
-            <Text style={styles.cardValue}>₦20,000</Text>
-            <Text style={styles.cardMeta}>Mock allocation</Text>
-          </SoftCard>
-          <SoftCard style={styles.smallCard}>
-            <Text style={styles.cardLabel}>Emergency</Text>
-            <Text style={styles.cardValue}>₦8,000</Text>
-            <Text style={styles.cardMeta}>Mock allocation</Text>
-          </SoftCard>
+        <View style={styles.sectionRow}>
+          <SectionTitle eyebrow="MOCK ACTIVITY" title="Recent" />
+          <Pressable accessibilityRole="button" onPress={() => router.push("/(tabs)/activity")}>
+            <Text style={styles.textAction}>See all</Text>
+          </Pressable>
+        </View>
+        <View>
+          {mockHomeData.activity.map((item) => (
+            <ActivityRow key={item.label} {...item} />
+          ))}
         </View>
       </View>
 
-      <View style={styles.section}>
-        <SectionTitle eyebrow="ACTIVITY" title="Recent movement" />
-        <SoftCard style={styles.activityCard}>
-          <View>
-            <Text style={styles.cardLabel}>Phase 1 preview</Text>
-            <Text style={styles.cardMeta}>No provider activity is connected.</Text>
-          </View>
-          <StatusPill label="NOT LIVE" tone="warning" />
-        </SoftCard>
-      </View>
+      <Text style={styles.disclosure}>{mockDisclosure}</Text>
+
+      <BottomSheet
+        onClose={() => setShowAddMoney(false)}
+        title="Add money"
+        visible={showAddMoney}
+      >
+        <Text style={styles.sheetCopy}>
+          This static shell reserves the add-money entry point. No virtual account or BMONI
+          funding action is connected in Phase 3.
+        </Text>
+        <PrimaryButton onPress={() => setShowAddMoney(false)}>Got it</PrimaryButton>
+      </BottomSheet>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    gap: spacing.xxl,
-    paddingBottom: spacing.giant
-  },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between"
-  },
-  greeting: {
-    ...typography.caption,
-    color: colors.textSecondary
-  },
-  name: {
-    ...typography.heading,
-    color: colors.textPrimary
-  },
-  balanceCard: {
-    gap: spacing.sm
-  },
-  technicalLabel: {
-    ...typography.technical,
-    color: colors.textSecondary
-  },
-  balanceNote: {
-    ...typography.caption,
-    color: colors.textSecondary
-  },
-  quickActions: {
-    flexDirection: "row",
-    gap: spacing.sm
-  },
-  quickAction: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.borderSoft,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    flex: 1,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm
-  },
-  quickActionLabel: {
-    ...typography.caption,
-    color: colors.textPrimary,
-    fontWeight: "600"
-  },
-  section: {
-    gap: spacing.md
-  },
-  operatorCard: {
-    backgroundColor: colors.accentSoft
-  },
-  operatorPrompt: {
-    ...typography.heading,
-    color: colors.textPrimary,
-    fontSize: 25,
-    lineHeight: 32
-  },
-  operatorButton: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    marginTop: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm
-  },
-  operatorButtonLabel: {
-    ...typography.caption,
-    color: colors.textInverse,
-    fontWeight: "600"
-  },
-  suggestions: {
-    alignItems: "flex-start",
-    gap: spacing.xs
-  },
-  twoColumn: {
-    flexDirection: "row",
-    gap: spacing.sm
-  },
-  smallCard: {
-    flex: 1,
-    gap: spacing.xs,
-    padding: spacing.lg
-  },
-  cardLabel: {
-    ...typography.body,
-    color: colors.textPrimary,
-    fontWeight: "600"
-  },
-  cardValue: {
-    ...typography.section,
-    color: colors.textPrimary,
-    fontVariant: ["tabular-nums"]
-  },
-  cardMeta: {
-    ...typography.caption,
-    color: colors.textSecondary
-  },
-  activityCard: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: spacing.lg
-  }
+  screen: { gap: spacing.xxxl, paddingBottom: layout.tabContentBottomInset, paddingTop: spacing.xl },
+  header: { alignItems: "flex-start", flexDirection: "row", justifyContent: "space-between" },
+  greetingBlock: { gap: spacing.xxs },
+  greeting: { ...typography.caption, color: colors.textSecondary },
+  name: { ...typography.heading, color: colors.textPrimary },
+  balanceAction: { flex: 1, minWidth: 0 },
+  section: { gap: spacing.md },
+  technicalLabel: { ...typography.technical, color: colors.textSecondary },
+  suggestions: { gap: spacing.sm },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  demoCommand: { ...typography.caption, color: colors.statusProcessing, fontWeight: "600" },
+  sectionRow: { alignItems: "flex-end", flexDirection: "row", justifyContent: "space-between" },
+  textAction: { ...typography.caption, color: colors.statusProcessing, fontWeight: "600" },
+  pocketRow: { flexDirection: "row", gap: spacing.sm },
+  disclosure: { ...typography.technical, color: colors.textSecondary, textAlign: "center" },
+  sheetCopy: { ...typography.body, color: colors.textSecondary },
+  pressed: { opacity: 0.65 }
 });

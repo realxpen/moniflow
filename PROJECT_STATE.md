@@ -2,55 +2,54 @@
 
 ## Current Phase
 
-Phase 2 — UI Design System
+Phase 3 — Shell and Navigation
 
-The reusable mobile visual system and private component showcase are implemented and visually verified. Full product screens and navigation composition remain Phase 3 work.
+The complete static mobile product shell is implemented and browser-verified. Onboarding, the four-tab workspace, the Home operator, the bank preview, and the operator review journey can be navigated without contacting BMONI.
 
 ## Working
 
 - Phase 1 pnpm workspace, Expo Router mobile app, Fastify API, and package boundaries
-- Semantic mobile tokens for color, spacing, radius, type, elevation, and motion
-- Editorial and technical typography roles
-- Calm, Intelligence, Safety, and Consequence visual modes
-- `Screen`, `SoftCard`, `GlassCard`, `PrimaryButton`, `SecondaryButton`, `Pill`, `StatusPill`, `MoneyText`, and `SectionTitle`
-- `OperatorInput`, `SuggestionChip`, `GuardCheck`, `ProgressStep`, `PocketCard`, `ActivityRow`, `BalanceCard`, `BottomSheet`, and `ConfirmationButton`
-- Reduced-motion-aware fade/rise entries, sequential checks, and processing pulse
-- Brief tactile confirmation using the platform vibration boundary
-- Private `/_dev/design-system` showcase outside the user-facing tabs
-- Clearly labeled mock values in the showcase
-- Browser-verified operator suggestion, plan sheet, sheet dismissal, and confirmation states
-- Typecheck, lint, tests, build, and Expo web export
+- Phase 2 semantic tokens, foundational components, bounded motion, and private design-system showcase
+- Static onboarding journey: Welcome → Identity → Wallet → Setup preview
+- Floating text-based bottom navigation: Home, Pockets, Activity, and Profile
+- Modular Home composition with greeting, mock available balance, add/withdraw actions, embedded MONIFlow Operator, suggestions, money spaces, and recent activity
+- Static bank journey: Select → Verify → Destination preview
+- Static operator journey: Processing → Money Plan → Consequence review → Device boundary → Honest result
+- Clearly labeled mock balances, destinations, allocations, checks, and activity
+- Explicit consequence review that cannot call BMONI or authorize money movement
+- Result state that reports `No money moved` and never fabricates provider success
+- Browser-verified input, modal, tab, onboarding, bank, and operator navigation
+- Typecheck, lint, tests, workspace build, Expo web export, API startup, and `/health`
 
 The server-side BMONI API foundation was implemented ahead of the agreed Phase 4 sequence and remains preserved. It includes sandbox-only configuration, typed REST access, strict Zod contracts, connectivity, documented user creation, SQLite identity mapping, typed errors, and tests.
 
 ## Not Yet Implemented
 
-- Phase 3 static product shell and finished navigation composition
-- Real full product screens
+- Phase 4 live sandbox user-creation checkpoint with an authorized test identity
 - BMONI React Native SDK, wallet provisioning, ownership, or device signing
 - KYC or Nigeria onboarding flow
-- provider-backed wallet dashboard and balances
-- deterministic Intent Engine or LLM parsing
-- Money Plan Engine and complete plan state machine
-- complete deterministic MONI Guard rule engine
-- approval persistence or execution authorization
-- bank discovery, verification, withdrawal, offramp, or proposals
-- provider-backed Activity or application persistence for Money Pockets
+- Provider-backed wallet dashboard and balances
+- Deterministic Intent Engine or LLM parsing
+- Money Plan Engine and persisted plan state machine
+- Complete deterministic MONI Guard rule engine
+- Approval persistence, invalidation, or execution authorization
+- Provider-backed bank discovery, verification, withdrawal, offramp, or proposals
+- Provider-backed Activity or application persistence for Money Pockets
 - GhostPay, TrustDrop, LifeWallet, analytics, or production payments
 
 ## Known Issues
 
-- The current editorial type role uses the platform sans font. A licensed bundled editorial family may be evaluated during Phase 17; no network font is required for Phase 2 coherence.
-- Native Android/iOS binaries are not compiled in this container because an emulator/Xcode toolchain is unavailable. The Expo web export and cloud-browser interaction pass are the current visual evidence.
+- The editorial type role uses the platform sans font. A licensed bundled editorial family may be evaluated during Phase 17.
+- Native Android/iOS binaries were not compiled in this container because an emulator/Xcode toolchain is unavailable. Expo web export and cloud-browser interaction are the current visual evidence.
 - BMONI documents no idempotency key. A timed-out create-user request therefore has an unknown result and must not be retried automatically.
-- The shared sandbox key proves connectivity but is not a production credential.
+- The shared sandbox key proves connectivity but is not a production credential and is not committed to the repository.
 - The Phase 4 live create-user checkpoint remains incomplete because no authorized test identity has been supplied.
 
 ## Next Phase
 
-Phase 3 — Shell and Navigation
+Phase 4 — BMONI API Foundation
 
-Compose the static onboarding, tab, operator, and bank routes using the Phase 2 components. Keep the MONIFlow Operator within Home, preserve clear mock labels, and prove the complete static journey can be navigated without contacting BMONI.
+Complete the existing foundation checkpoint by exercising documented sandbox user creation with an authorized test identity and verifying the stored BMONI identifier. Do not begin wallet provisioning, device signing, KYC, or bank movement in Phase 4.
 
 ## Environment Variables
 
@@ -65,19 +64,19 @@ Compose the static onboarding, tab, operator, and bank routes using the Phase 2 
 
 ## Architecture Decisions
 
-- The design system is token-led and native-first; no parallel web design system was introduced.
-- Glass is reserved for intelligence/focus moments, while ordinary financial surfaces remain soft and opaque.
-- Financial states use words as well as color, and touch targets remain at least 44 points.
-- Motion is bounded, honors reduced-motion settings, and becomes restrained in Consequence Mode.
-- The showcase is an internal route and must not become a permanent tab.
-- Confirmation remains explicit; a tap and haptic response do not represent provider execution or success.
+- MONIFlow Operator remains embedded in Home instead of becoming a separate chat tab.
+- Route files own screen composition; shared components are introduced only for repeated patterns.
+- All Phase 3 financial values come from a dedicated mock-data module and are visibly labeled.
+- Tab navigation uses a custom text-only bar, avoiding placeholder glyphs and preserving the editorial/technical visual language.
+- Glass remains reserved for intelligence/focus moments; normal financial surfaces stay soft and opaque.
+- Consequence Mode increases contrast and removes decorative motion around approval.
+- A static confirmation advances navigation only; it does not create provider, wallet, approval, or transaction state.
 - BMONI partner credentials and REST calls remain server-side; private wallet keys and future signing stay on-device.
-- Provider-backed and application-level financial state must remain visibly distinguishable.
 
 ## Demo Status
 
-Target future instruction:
+Target instruction:
 
 > Withdraw ₦40,000 to my GTBank account and save ₦20,000 for my laptop.
 
-Phase 2 presents this instruction only as labeled design-showcase content. It is not parsed, approved, signed, executed, settled, or represented as provider success.
+The entire intended UI journey is navigable with explicit static-preview labels. The command is not parsed, approved, signed, submitted, settled, or represented as provider success. Phase 3 demonstrates product structure and consequence clarity only.

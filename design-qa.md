@@ -1,49 +1,53 @@
-# MONIFlow Phase 2 Design QA
+# MONIFlow Phase 3 Design QA
 
-## Result
+## Source and implementation
 
-**Passed**
+- Source visual truth: `/workspace/scratch/2c0931cc75a2/project_sources/02-IMG_5131.png` through `/workspace/scratch/2c0931cc75a2/project_sources/08-IMG_5133.png`
+- Source dimensions: seven `750 × 1334` moodboard captures at their original density
+- Browser-rendered implementation: `docs/qa/phase3-home-browser.jpg` and `docs/qa/phase3-approval-browser.jpg`
+- Implementation dimensions: `500 × 696` browser captures at device scale factor 1
+- CSS viewport: `500 × 696`; app content is constrained to a centered maximum width of 480
+- Comparison input: `/tmp/moniflow-phase3-design-qa-comparison-final.jpg`, containing the source contact sheet, Home capture, and approval capture in one image
+- State: static mock shell; no BMONI session or provider data
 
-The Phase 2 component showcase is visually coherent, interaction-complete for its intended scope, and aligned with the supplied moodboard. No Phase 2 blocker remains.
+## Findings
 
-## Evidence
+No actionable P0, P1, or P2 visual issues remain.
 
-- Source visual truth: the seven supplied `IMG_51xx` moodboard images in `project_sources`
-- Combined source sheet: `/tmp/moniflow-moodboard-contact-sheet.jpg` (`1302 × 2220`)
-- Implementation route: `/_dev/design-system`
-- Browser viewport: `1363 × 936`, with the native showcase constrained to a centered `480`-point content width
-- Comparison state: source contact sheet and implementation displayed side by side in equal rounded mobile frames
-- Focused states reviewed: showcase top, operator input, modal Money Plan preview, status treatments, Guard checks, Pockets, Activity, and explicit confirmation
+- Fonts and typography: the implementation preserves the moodboard's oversized editorial hierarchy and small tracked technical labels. The platform sans is an intentional current-phase constraint; no network font was introduced.
+- Spacing and layout rhythm: Home is modular rather than list-like, uses large section gaps and card radii, and keeps the highest-priority balance and operator modules above the fold. The floating tab bar has dedicated bottom content inset.
+- Colors and visual tokens: warm ivory, pale lavender, soft opaque surfaces, selective glass, charcoal consequence surfaces, and muted semantic states consistently use theme tokens.
+- Image quality and asset fidelity: the shell requires no decorative raster assets. Supplied moodboard content, logos, and imagery were not copied or replaced with code-drawn approximations.
+- Copy and content: mock data, internal allocations, unverified destinations, device boundaries, and non-execution are labeled plainly. The result explicitly says `No money moved`.
 
-## Visual comparison
+## Full-view comparison evidence
 
-The implementation carries forward the source's warm ivory and pale-lavender palette, oversized editorial hierarchy, small tracked technical labels, large rounded modules, selective translucency, charcoal consequence controls, and generous negative space. It intentionally does not reproduce source logos, content, or unrelated imagery.
+The combined comparison shows that Home and Consequence Mode carry the source's editorial/technical contrast, generous negative space, rounded modular surfaces, pale tonal canvas, and restrained dark emphasis without copying unrelated moodboard content.
 
-## Interaction checks
+## Focused region evidence
 
-| Interaction | Expected | Result |
-|---|---|---|
-| Suggestion chip | Selects the command and updates the operator input | Passed |
-| Create plan | Opens the focused bottom sheet | Passed |
-| Sheet close | Dismisses the preview safely | Passed |
-| Confirmation | Requires an explicit press and exposes a confirmed preview state | Passed |
-| Reduced motion | Removes decorative entry/pulse animation while preserving state | Passed by implementation inspection |
+- Home: `docs/qa/phase3-home-browser.jpg` verifies the mock balance, paired actions, embedded operator, suggested-command entry, and floating four-tab navigation.
+- Approval: `docs/qa/phase3-approval-browser.jpg` verifies amount and destination dominance, reduced decoration, strong contrast, internal allocation separation, and the explicit `NO EXECUTION` warning.
 
-## Accessibility and trust checks
+## Comparison history
 
-- Statuses use explicit words in addition to color.
-- Interactive controls meet the 44-point minimum target.
-- Pocket progress exposes an accessibility value.
-- Mock financial values are visibly labeled.
-- The confirmation control never represents provider execution or provider success.
-- Consequence Mode avoids looping decorative animation.
+1. Initial Home capture exposed duplicate default tab glyphs that did not belong to the design language. The default tab renderer was replaced with a custom text-only bar; the revised browser capture contains no placeholder glyphs.
+2. The balance helper still used private showcase wording. It was changed from `Design-system preview only` to `Static shell mock data` for product-shell clarity.
+3. Post-fix captures were reviewed together with the moodboard contact sheet. No further P0/P1/P2 differences remained.
 
-## Issues found and fixed
+## Interaction and runtime checks
 
-1. The web preview stretched the native composition across the desktop viewport. `Screen` now constrains content to a centered `480`-point maximum while remaining full width on mobile.
-2. React Native Web warned about native animation drivers. Motion primitives now select the driver by platform.
-3. The bottom sheet did not reset its entry values between openings. Hidden state now resets before the next presentation.
+- Onboarding: Welcome → Identity → Wallet → Setup preview → Home
+- Home: add-money sheet opens and closes; full demo command populates the operator input
+- Tabs: Home, Pockets, Activity, and Profile all navigate and expose selected state
+- Bank: Select → Verify → Destination preview
+- Operator: Processing → Money Plan → Consequence review → Device boundary → Result
+- Result: View Activity and Return Home paths are available
+- Console: no application-origin errors were observed; only unrelated cloud-browser extension metadata noise appeared
 
-## Non-blocking future consideration
+## Follow-up polish
 
-The editorial role currently uses the platform sans font. A licensed bundled family can be evaluated during Phase 17 polish, but introducing a network font is not necessary for Phase 2 coherence or function.
+- P3: evaluate a licensed bundled editorial family during Phase 17 after native performance and licensing review.
+- P3: confirm native safe-area and text-scaling behavior on physical iOS and Android development builds.
+
+final result: passed

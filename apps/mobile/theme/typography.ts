@@ -4,6 +4,13 @@ const editorialFont = Platform.select({ ios: "System", android: "sans-serif" });
 const technicalFont = Platform.select({ ios: "Menlo", android: "monospace" });
 
 export const typography = {
+  hero: {
+    fontFamily: editorialFont,
+    fontSize: 52,
+    fontWeight: "500",
+    letterSpacing: -1.8,
+    lineHeight: 58
+  },
   display: {
     fontFamily: editorialFont,
     fontSize: 44,
@@ -17,6 +24,20 @@ export const typography = {
     fontWeight: "600",
     letterSpacing: -0.7,
     lineHeight: 34
+  },
+  command: {
+    fontFamily: editorialFont,
+    fontSize: 24,
+    fontWeight: "600",
+    letterSpacing: -0.45,
+    lineHeight: 31
+  },
+  moneyPlan: {
+    fontFamily: editorialFont,
+    fontSize: 34,
+    fontWeight: "500",
+    letterSpacing: -0.8,
+    lineHeight: 40
   },
   section: {
     fontFamily: editorialFont,

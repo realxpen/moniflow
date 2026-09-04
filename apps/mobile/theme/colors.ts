@@ -8,6 +8,7 @@ export const colors = {
   textSecondary: "#716D75",
   textInverse: "#FCFAF5",
   borderSoft: "rgba(50, 45, 55, 0.10)",
+  borderInverseSoft: "rgba(252, 250, 245, 0.14)",
   accentPrimary: "#8270A0",
   accentSoft: "#E5D9EC",
   statusSuccess: "#47715A",

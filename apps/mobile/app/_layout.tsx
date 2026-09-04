@@ -5,6 +5,8 @@ import { useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { colors } from "@/theme";
+
 export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient());
 
@@ -13,7 +15,13 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StatusBar style="dark" />
-          <Stack screenOptions={{ headerShown: false }} />
+          <Stack
+            screenOptions={{
+              animation: "fade",
+              contentStyle: { backgroundColor: colors.backgroundPrimary },
+              headerShown: false
+            }}
+          />
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

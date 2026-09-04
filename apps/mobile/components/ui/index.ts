@@ -2,6 +2,7 @@ export { AnimatedEntry } from "./AnimatedEntry";
 export { BottomSheet } from "./BottomSheet";
 export { PrimaryButton, SecondaryButton } from "./Buttons";
 export { ConfirmationButton } from "./ConfirmationButton";
+export { FlowHeader } from "./FlowHeader";
 export { GlassCard } from "./GlassCard";
 export { MoneyText } from "./MoneyText";
 export { Pill } from "./Pill";
