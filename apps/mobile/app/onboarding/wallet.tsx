@@ -1,16 +1,16 @@
-import { BmoniEmbeddedSdk } from "@bkey-inc/bmoni_embedded_sdk";
 import { BlurView } from "expo-blur";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
-import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 
+import { bmoniDevice } from "@/services/bmoni-device";
 import { PrimaryButton, Screen } from "@/components/ui";
 import { colors, radius, spacing, typography } from "@/theme";
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 const defaultLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
 
-BmoniEmbeddedSdk.initialize({ pinLength: 6, requirePin: true });
+bmoniDevice.initialize({ pinLength: 6, requirePin: true });
 
 type StepState = "idle" | "working" | "done" | "error";
 type Step = { label: string; state: StepState };
@@ -36,8 +36,8 @@ export default function WalletSetupScreen() {
   const update = (key: string, state: StepState) => setStates((current) => ({ ...current, [key]: state }));
 
   const provision = async () => {
-    if (Platform.OS === "web") {
-      setError("BMONI device signing requires the iOS or Android development build.");
+    if (!bmoniDevice.available) {
+      setError("BMONI device signing requires the iOS or Android development build. The web deployment is a safe UI preview only.");
       return;
     }
     if (!localUserId.trim() || pin.length !== 6) {
@@ -49,8 +49,8 @@ export default function WalletSetupScreen() {
     setError(null);
     try {
       update("device", "working");
-      const address = (await BmoniEmbeddedSdk.walletAddress()) ?? (await BmoniEmbeddedSdk.initWallet());
-      if (!(await BmoniEmbeddedSdk.hasPin())) await BmoniEmbeddedSdk.setPin(pin);
+      const address = (await bmoniDevice.walletAddress()) ?? (await bmoniDevice.initWallet());
+      if (!(await bmoniDevice.hasPin())) await bmoniDevice.setPin(pin);
       setOwnerAddress(address);
       update("device", "done");
 
@@ -63,7 +63,7 @@ export default function WalletSetupScreen() {
       const challenge = await challengeResponse.json() as { challengeId?: string; message?: string };
       if (!challengeResponse.ok || !challenge.challengeId || !challenge.message) throw new Error("Ownership challenge could not be created.");
 
-      const signature = await BmoniEmbeddedSdk.signMessage(challenge.message, pin);
+      const signature = await bmoniDevice.signMessage(challenge.message, pin);
       setPin("");
       update("ownership", "done");
 
@@ -125,6 +125,7 @@ export default function WalletSetupScreen() {
           />
         </View>
 
+        {!bmoniDevice.available ? <Text style={styles.preview}>WEB PREVIEW · Native wallet creation is available in the iOS/Android development build.</Text> : null}
         {ownerAddress ? <Text style={styles.address}>Owner · {ownerAddress}</Text> : null}
         {smartWalletAddress ? <Text style={styles.address}>CNGN · {smartWalletAddress}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -169,6 +170,7 @@ const styles = StyleSheet.create({
   symbolDone: { color: colors.statusSuccess, fontWeight: "700" },
   fields: { gap: spacing.sm },
   input: { ...typography.body, minHeight: 52, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.surfaceGlass, color: colors.textPrimary, paddingHorizontal: spacing.md },
+  preview: { ...typography.caption, color: colors.textSecondary, textAlign: "center" },
   address: { ...typography.technical, color: colors.textSecondary },
   error: { ...typography.caption, color: colors.statusError },
   security: { ...typography.caption, color: colors.textSecondary, textAlign: "center" }
