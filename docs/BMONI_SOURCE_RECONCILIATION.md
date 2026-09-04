@@ -19,6 +19,19 @@ A later stage must not be treated as ready merely because an earlier API call re
 
 ## Corrections applied
 
+### Sandbox persona consistency
+
+BMONI's sandbox identity matching requires the user record and the later identity verification to use the same documented persona. MONIFlow previously created an `Ayomide` user while using Bunch Dillon's sandbox phone and later Bunch Dillon's BVN. That would deliberately fail identity matching.
+
+The onboarding identity screen now defaults to one consistent documented persona from the first provider call onward:
+
+- firstName: `Bunch`
+- lastName: `Dillon`
+- email: `bunch.dillon@example.com`
+- phoneNumber: `+2348000000000`
+
+The later Nigeria KYC screen uses the same Bunch Dillon persona and BVN `95888168924`.
+
 ### Device wallet provisioning
 
 Corrected first-launch wallet setup to use `hasWallet()` before choosing between `walletAddress()` and `initWallet()`.
