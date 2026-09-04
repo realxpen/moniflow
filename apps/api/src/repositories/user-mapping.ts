@@ -7,7 +7,8 @@ export type UserMapping = {
 };
 
 export interface UserMappingRepository {
-  findByEmail(email: string): UserMapping | null;
-  findByLocalUserId(localUserId: string): UserMapping | null;
-  save(mapping: UserMapping): UserMapping;
+  findByEmail(email: string): Promise<UserMapping | null>;
+  findByLocalUserId(localUserId: string): Promise<UserMapping | null>;
+  save(mapping: UserMapping): Promise<UserMapping>;
+  close(): Promise<void>;
 }
