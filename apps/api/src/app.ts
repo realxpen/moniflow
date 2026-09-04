@@ -1,7 +1,8 @@
 import Fastify from "fastify";
 
 import { env } from "./config/env.js";
-import { SqliteUserMappingRepository } from "./repositories/sqlite-user-mapping.js";
+import { createRepositories, type RepositorySet } from "./repositories/index.js";
+import type { WalletOwnershipRepository } from "./repositories/wallet-ownership.js";
 import { activityRoutes } from "./routes/activity.js";
 import { bankingRoutes } from "./routes/banking.js";
 import { devRoutes } from "./routes/dev.js";
@@ -18,28 +19,26 @@ import { BmoniUserService } from "./services/bmoni/user-service.js";
 export type AppDependencies = {
   getBmoniGateway: () => BmoniGateway;
   getBmoniUserService: () => BmoniUserService;
+  getWalletOwnershipRepository: () => WalletOwnershipRepository;
+  ready?: Promise<void>;
 };
 
 function createRuntimeDependencies() {
   let gateway: BmoniGateway | undefined;
-  let mappings: SqliteUserMappingRepository | undefined;
+  let repositories: RepositorySet | undefined;
   let userService: BmoniUserService | undefined;
 
-  const getBmoniGateway = () => {
-    gateway ??= createBmoniGateway();
-    return gateway;
-  };
+  const getRepositories = () => (repositories ??= createRepositories(env.DATABASE_URL));
+  const getBmoniGateway = () => (gateway ??= createBmoniGateway());
 
   return {
     dependencies: {
       getBmoniGateway,
-      getBmoniUserService: () => {
-        mappings ??= new SqliteUserMappingRepository(env.DATABASE_URL);
-        userService ??= new BmoniUserService(getBmoniGateway(), mappings);
-        return userService;
-      }
+      getBmoniUserService: () => (userService ??= new BmoniUserService(getBmoniGateway(), getRepositories().users)),
+      getWalletOwnershipRepository: () => getRepositories().wallets,
+      get ready() { return getRepositories().ready; }
     } satisfies AppDependencies,
-    close: () => mappings?.close()
+    async close() { await repositories?.close(); }
   };
 }
 
@@ -58,29 +57,23 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
     }
   });
 
+  if (dependencies.ready) app.addHook("onReady", async () => dependencies.ready);
+
   const operatorOptions = {
     getBmoniGateway: dependencies.getBmoniGateway,
     getBmoniUserService: dependencies.getBmoniUserService
   };
+  const walletOptions = {
+    ...operatorOptions,
+    getWalletOwnershipRepository: dependencies.getWalletOwnershipRepository
+  };
 
   app.register(healthRoutes, { getBmoniGateway: dependencies.getBmoniGateway });
   app.register(onboardingRoutes, { prefix: "/api/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
-  app.register(nigeriaOnboardingRoutes, {
-    prefix: "/api/onboarding/nigeria",
-    getBmoniGateway: dependencies.getBmoniGateway,
-    getBmoniUserService: dependencies.getBmoniUserService
-  });
-  app.register(devRoutes, { prefix: "/api/dev", getBmoniGateway: dependencies.getBmoniGateway, getBmoniUserService: dependencies.getBmoniUserService });
-  app.register(walletOwnershipRoutes, {
-    prefix: "/api/wallet",
-    getBmoniGateway: dependencies.getBmoniGateway,
-    getBmoniUserService: dependencies.getBmoniUserService
-  });
-  app.register(walletRoutes, {
-    prefix: "/api/wallet",
-    getBmoniGateway: dependencies.getBmoniGateway,
-    getBmoniUserService: dependencies.getBmoniUserService
-  });
+  app.register(nigeriaOnboardingRoutes, { prefix: "/api/onboarding/nigeria", ...walletOptions });
+  app.register(devRoutes, { prefix: "/api/dev", ...walletOptions });
+  app.register(walletOwnershipRoutes, { prefix: "/api/wallet", ...walletOptions });
+  app.register(walletRoutes, { prefix: "/api/wallet", ...walletOptions });
   app.register(operatorRoutes, { prefix: "/api/operator", ...operatorOptions });
 
   app.register(onboardingRoutes, { prefix: "/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
