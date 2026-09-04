@@ -10,6 +10,7 @@ const unsupported = async (): Promise<never> => {
 export const bmoniDevice = {
   available: false,
   initialize(_options: InitializeOptions) {},
+  hasWallet: unsupported,
   walletAddress: unsupported,
   initWallet: unsupported,
   hasPin: unsupported,
