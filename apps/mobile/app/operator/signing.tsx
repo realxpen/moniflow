@@ -66,7 +66,7 @@ export default function SigningScreen() {
       setPin("");
       const next = await submitExecutionSignature(planId, localUserId, execution.proposalId, signature);
       setExecution(next);
-      router.replace({ pathname: "/operator/processing", params: { localUserId, planId } });
+      router.replace({ pathname: "/operator/execution", params: { localUserId, planId } });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Secure signing or provider submission failed.");
     } finally {
