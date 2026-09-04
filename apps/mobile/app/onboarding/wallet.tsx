@@ -60,10 +60,11 @@ export default function WalletSetupScreen() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ localUserId: localUserId.trim(), ownerAddress: address })
       });
-      const challenge = await challengeResponse.json() as { challengeId?: string; message?: string; messageText?: string; message?: string };
+      const challenge = await challengeResponse.json() as { challengeId?: string; message?: string };
       if (!challengeResponse.ok || !challenge.challengeId || !challenge.message) throw new Error("Ownership challenge could not be created.");
 
       const signature = await BmoniEmbeddedSdk.signMessage(challenge.message, pin);
+      setPin("");
       update("ownership", "done");
 
       update("cngn", "working");
@@ -78,6 +79,7 @@ export default function WalletSetupScreen() {
       update("cngn", "done");
       update("rail", "idle");
     } catch (cause) {
+      setPin("");
       setError(cause instanceof Error ? cause.message : "Wallet provisioning failed safely.");
       setStates((current) => {
         const active = Object.entries(current).find(([, state]) => state === "working")?.[0];
