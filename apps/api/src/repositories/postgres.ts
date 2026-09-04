@@ -1,6 +1,15 @@
 import postgres, { type Sql } from "postgres";
 import { z } from "zod";
 
+import type { GuardCheck } from "@moniflow/moniguard";
+
+import { moniflowIntentSchema } from "../schemas/intent.js";
+import { moneyPlanSchema } from "../schemas/money-plan.js";
+import type {
+  CreatePersistedMoneyPlanInput,
+  MoneyPlanRepository,
+  PersistedMoneyPlan
+} from "./money-plan.js";
 import type { UserMapping, UserMappingRepository } from "./user-mapping.js";
 import type { WalletOwnership, WalletOwnershipRepository } from "./wallet-ownership.js";
 
@@ -10,6 +19,20 @@ const userRowSchema = z.object({
 const walletRowSchema = z.object({
   local_user_id: z.string(), owner_address: z.string(), bmoni_smart_wallet_id: z.string(), smart_wallet_address: z.string(),
   currency: z.literal("CNGN"), created_at: z.coerce.string(), updated_at: z.coerce.string()
+});
+const moneyPlanRowSchema = z.object({
+  id: z.string(),
+  local_user_id: z.string(),
+  original_instruction: z.string(),
+  status: z.string(),
+  intent_payload: z.unknown(),
+  plan_payload: z.unknown(),
+  guard_verdict: z.string().nullable(),
+  plan_hash: z.string(),
+  approved_plan_hash: z.string().nullable(),
+  approved_at: z.coerce.string().nullable(),
+  created_at: z.coerce.string(),
+  updated_at: z.coerce.string()
 });
 
 export function createPostgresClient(databaseUrl: string) {
@@ -86,12 +109,18 @@ export async function ensureMoniflowSchema(sql: Sql) {
       expected_available_after numeric(20,2) not null,
       guard_verdict text check (guard_verdict in ('ALLOW','REVIEW','BLOCK')),
       plan_hash text,
+      intent_payload jsonb,
+      plan_payload jsonb,
+      approved_plan_hash text,
       created_at timestamptz not null default now(),
       approved_at timestamptz,
       completed_at timestamptz,
       updated_at timestamptz not null default now()
     )
   `;
+  await sql`alter table moniflow_private.money_plans add column if not exists intent_payload jsonb`;
+  await sql`alter table moniflow_private.money_plans add column if not exists plan_payload jsonb`;
+  await sql`alter table moniflow_private.money_plans add column if not exists approved_plan_hash text`;
   await sql`create index if not exists money_plans_local_user_created_idx on moniflow_private.money_plans(local_user_id, created_at desc)`;
 
   await sql`
@@ -193,4 +222,115 @@ export class PostgresWalletOwnershipRepository implements WalletOwnershipReposit
   }
 
   async close() {}
+}
+
+export class PostgresMoneyPlanRepository implements MoneyPlanRepository {
+  constructor(private readonly sql: Sql) {}
+
+  async create(input: CreatePersistedMoneyPlanInput): Promise<PersistedMoneyPlan> {
+    const rows = await this.sql`
+      insert into moniflow_private.money_plans (
+        local_user_id, original_instruction, status, currency, balance_before, external_movement,
+        internal_allocation, expected_available_after, guard_verdict, plan_hash, intent_payload, plan_payload,
+        approved_plan_hash, approved_at
+      ) values (
+        ${input.localUserId}::uuid, ${input.originalInstruction}, 'VALIDATING', ${input.plan.currency}, ${input.plan.currentAvailable},
+        ${input.plan.totals.externalMovement}, ${input.plan.totals.internalAllocation}, ${input.plan.totals.availableAfter},
+        null, ${input.planHash}, ${this.sql.json(input.intent)}, ${this.sql.json(input.plan)}, null, null
+      )
+      returning id
+    `;
+    const id = String(rows[0]?.id ?? "");
+    for (const action of input.plan.actions) {
+      await this.sql`
+        insert into moniflow_private.plan_actions (
+          money_plan_id, type, amount, destination_type, destination_id, label, position, status, requires_approval
+        ) values (
+          ${id}::uuid, ${action.kind}, ${action.amount}, ${action.kind === "BANK_WITHDRAWAL" ? "SAVED_BANK" : null},
+          null, ${action.label}, ${action.index}, 'DRAFT', ${action.requiresApproval}
+        )
+      `;
+    }
+    const stored = await this.findById(id, input.localUserId);
+    if (!stored) throw new Error("Persisted Money Plan could not be reloaded.");
+    return stored;
+  }
+
+  async findById(planId: string, localUserId: string): Promise<PersistedMoneyPlan | null> {
+    const rows = await this.sql`
+      select id, local_user_id, original_instruction, status, intent_payload, plan_payload,
+             guard_verdict, plan_hash, approved_plan_hash, approved_at, created_at, updated_at
+      from moniflow_private.money_plans
+      where id = ${planId}::uuid and local_user_id = ${localUserId}::uuid
+      limit 1
+    `;
+    if (!rows[0]) return null;
+    return mapMoneyPlanRow(moneyPlanRowSchema.parse(rows[0]));
+  }
+
+  async recordGuard(
+    planId: string,
+    localUserId: string,
+    verdict: "ALLOW" | "REVIEW" | "BLOCK",
+    checks: GuardCheck[],
+    currentPlanHash: string
+  ): Promise<PersistedMoneyPlan | null> {
+    const status = verdict === "BLOCK" ? "BLOCKED" : verdict === "REVIEW" ? "AWAITING_USER_APPROVAL" : "APPROVED";
+    await this.sql.begin(async (transaction) => {
+      await transaction`
+        update moniflow_private.money_plans
+        set status = ${status}, guard_verdict = ${verdict}, plan_hash = ${currentPlanHash},
+            approved_plan_hash = ${verdict === "ALLOW" ? currentPlanHash : null},
+            approved_at = ${verdict === "ALLOW" ? new Date().toISOString() : null}::timestamptz,
+            updated_at = now()
+        where id = ${planId}::uuid and local_user_id = ${localUserId}::uuid
+      `;
+      await transaction`delete from moniflow_private.guard_checks where money_plan_id = ${planId}::uuid`;
+      for (const check of checks) {
+        await transaction`
+          insert into moniflow_private.guard_checks (money_plan_id, rule, passed, severity, message)
+          values (${planId}::uuid, ${check.rule}, ${check.passed}, ${check.severity}, ${check.message})
+        `;
+      }
+    });
+    return this.findById(planId, localUserId);
+  }
+
+  async approve(planId: string, localUserId: string, approvedPlanHash: string): Promise<PersistedMoneyPlan | null> {
+    await this.sql`
+      update moniflow_private.money_plans
+      set status = 'APPROVED', approved_plan_hash = ${approvedPlanHash}, approved_at = now(), updated_at = now()
+      where id = ${planId}::uuid and local_user_id = ${localUserId}::uuid and status = 'AWAITING_USER_APPROVAL'
+    `;
+    return this.findById(planId, localUserId);
+  }
+
+  async invalidateApproval(planId: string, localUserId: string, currentPlanHash: string): Promise<PersistedMoneyPlan | null> {
+    await this.sql`
+      update moniflow_private.money_plans
+      set status = 'AWAITING_USER_APPROVAL', plan_hash = ${currentPlanHash}, approved_plan_hash = null,
+          approved_at = null, updated_at = now()
+      where id = ${planId}::uuid and local_user_id = ${localUserId}::uuid
+    `;
+    return this.findById(planId, localUserId);
+  }
+
+  async close() {}
+}
+
+function mapMoneyPlanRow(row: z.infer<typeof moneyPlanRowSchema>): PersistedMoneyPlan {
+  return {
+    id: row.id,
+    localUserId: row.local_user_id,
+    originalInstruction: row.original_instruction,
+    status: row.status as PersistedMoneyPlan["status"],
+    intent: moniflowIntentSchema.parse(row.intent_payload),
+    plan: moneyPlanSchema.parse(row.plan_payload),
+    guardVerdict: row.guard_verdict as PersistedMoneyPlan["guardVerdict"],
+    planHash: row.plan_hash,
+    approvedPlanHash: row.approved_plan_hash,
+    approvedAt: row.approved_at ? iso(row.approved_at) : null,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at)
+  };
 }
