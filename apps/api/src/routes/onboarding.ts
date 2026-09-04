@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 
 import { createMoniflowUserInputSchema } from "../schemas/onboarding.js";
 import {
@@ -20,7 +20,7 @@ export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = asyn
   app,
   options
 ) => {
-  app.post<{ Body: unknown }>("/users", async (request, reply) => {
+  const createUser = async (request: FastifyRequest<{ Body: unknown }>, reply: FastifyReply) => {
     const input = createMoniflowUserInputSchema.safeParse(request.body);
     if (!input.success) {
       return reply.status(400).send({
@@ -99,5 +99,8 @@ export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = asyn
 
       throw error;
     }
-  });
+  };
+
+  app.post<{ Body: unknown }>("/user", createUser);
+  app.post<{ Body: unknown }>("/users", createUser);
 };
