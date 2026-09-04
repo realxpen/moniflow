@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     opacity: 0.7
   },
   panel: {
-    backgroundColor: colors.surfacePrimary,
+    backgroundColor: colors.surface,
     borderColor: colors.borderSoft,
     borderRadius: radius.card,
     borderWidth: 1,
