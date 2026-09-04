@@ -1,98 +1,176 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { GuardCheck } from "@/components/guard";
-import {
-  FlowHeader,
-  MoneyText,
-  PrimaryButton,
-  Screen,
-  SectionTitle,
-  SoftCard,
-  StatusPill
-} from "@/components/ui";
-import { mockDisclosure, mockPlan } from "@/constants/mockData";
+import { MoneyText, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
+import { prepareMoneyPlan, type MoneyPlan } from "@/services/money-plan";
 import { colors, radius, spacing, typography } from "@/theme";
 
 export default function PlanScreen() {
+  const params = useLocalSearchParams<{ command?: string; localUserId?: string }>();
+  const command = typeof params.command === "string" ? params.command : "";
+  const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
+  const [plan, setPlan] = useState<MoneyPlan | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      if (!command || !localUserId) {
+        setError("MONIFlow needs both the validated instruction and wallet identity to prepare this plan.");
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await prepareMoneyPlan(command, localUserId);
+        if (active) setPlan(result);
+      } catch (cause) {
+        if (active) setError(cause instanceof Error ? cause.message : "Money Plan could not be prepared.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [command, localUserId]);
+
+  const hasMoneyMovement = useMemo(
+    () => Boolean(plan && plan.totals.totalCommitted > 0),
+    [plan]
+  );
+
   return (
     <Screen contentContainerStyle={styles.screen}>
-      <FlowHeader
-        description="Two separate actions, one understandable consequence. This plan is static mock UI."
-        eyebrow="MONEY PLAN · PREVIEW"
-        title="Plan before execution."
-      />
+      <View style={styles.hero}>
+        <Text style={styles.eyebrow}>YOUR MONEY PLAN</Text>
+        <Text style={styles.heroTitle}>See the consequence before anything moves.</Text>
+      </View>
 
-      <View style={styles.section}>
-        <SectionTitle eyebrow="01 · EXTERNAL MOVEMENT" title="Withdraw to bank" />
-        <SoftCard style={styles.actionCard}>
-          <View style={styles.actionTop}>
-            <MoneyText amount={mockPlan.bankWithdrawal} style={styles.actionAmount} />
-            <StatusPill label="APPROVAL REQUIRED" tone="warning" />
-          </View>
-          <Text style={styles.destination}>{mockPlan.destination}</Text>
-          <Text style={styles.meta}>Example saved destination · not provider verified</Text>
+      {loading ? (
+        <SoftCard style={styles.stateCard}>
+          <StatusPill label="BUILDING PLAN" tone="processing" />
+          <Text style={styles.stateTitle}>Reading your available CNGN balance…</Text>
+          <Text style={styles.stateCopy}>The plan uses the provider-backed balance, not a hardcoded demo amount.</Text>
         </SoftCard>
-      </View>
+      ) : null}
 
-      <View style={styles.section}>
-        <SectionTitle eyebrow="02 · INTERNAL ALLOCATION" title="Save to a money space" />
-        <SoftCard style={styles.actionCard}>
-          <View style={styles.actionTop}>
-            <MoneyText amount={mockPlan.pocketAllocation} style={styles.actionAmount} />
-            <StatusPill label="INTERNAL" tone="processing" />
+      {plan ? (
+        <>
+          <View style={styles.currentBlock}>
+            <Text style={styles.metaLabel}>CURRENT</Text>
+            <MoneyText amount={plan.currentAvailable} style={styles.currentMoney} />
+            <Text style={styles.availableWord}>Available</Text>
           </View>
-          <Text style={styles.destination}>{mockPlan.pocket} space</Text>
-          <Text style={styles.meta}>Application bookkeeping · no provider-held partition</Text>
+
+          <View style={styles.actionGrid}>
+            {plan.actions.map((action) => (
+              <SoftCard key={`${action.index}-${action.kind}`} style={styles.actionCard}>
+                <View style={styles.actionHeader}>
+                  <Text style={styles.actionIndex}>{String(action.index).padStart(2, "0")}</Text>
+                  <StatusPill
+                    label={action.movement === "EXTERNAL" ? "EXTERNAL" : action.movement === "INTERNAL" ? "INTERNAL" : "NO MOVEMENT"}
+                    tone={action.movement === "EXTERNAL" ? "warning" : action.movement === "INTERNAL" ? "processing" : "neutral"}
+                  />
+                </View>
+                <Text style={styles.actionLabel}>{action.label}</Text>
+                <Text style={styles.actionDescription}>{action.description}</Text>
+                {action.amount > 0 ? <MoneyText amount={action.amount} style={styles.actionMoney} /> : null}
+              </SoftCard>
+            ))}
+          </View>
+
+          <View style={styles.summaryGrid}>
+            <SoftCard style={styles.summaryCard}>
+              <Text style={styles.metaLabel}>EXTERNAL MOVEMENT</Text>
+              <MoneyText amount={plan.totals.externalMovement} style={styles.summaryMoney} />
+            </SoftCard>
+            <SoftCard style={styles.summaryCard}>
+              <Text style={styles.metaLabel}>INTERNAL ALLOCATION</Text>
+              <MoneyText amount={plan.totals.internalAllocation} style={styles.summaryMoney} />
+            </SoftCard>
+          </View>
+
+          <View style={styles.afterCard}>
+            <Text style={styles.afterLabel}>AVAILABLE AFTER</Text>
+            <MoneyText amount={plan.totals.availableAfter} style={styles.afterMoney} />
+            <Text style={styles.formula}>
+              {formatNaira(plan.currentAvailable)} − {formatNaira(plan.totals.externalMovement)} − {formatNaira(plan.totals.internalAllocation)}
+            </Text>
+            <Text style={styles.afterCopy}>Available means money not withdrawn and not logically committed to a pocket.</Text>
+          </View>
+
+          {plan.totals.availableAfter < 0 ? (
+            <SoftCard style={styles.warningCard}>
+              <StatusPill label="NEGATIVE OUTCOME" tone="warning" />
+              <Text style={styles.stateCopy}>This plan exceeds the current available balance. Phase 9 shows the arithmetic exactly; Guard enforcement belongs to the next safety stage.</Text>
+            </SoftCard>
+          ) : null}
+
+          <PrimaryButton
+            onPress={() => router.push({ pathname: "/operator/approve", params: { command, localUserId } })}
+            disabled={!hasMoneyMovement}
+          >
+            {hasMoneyMovement ? "Review consequences" : "No money movement to approve"}
+          </PrimaryButton>
+        </>
+      ) : null}
+
+      {error ? (
+        <SoftCard style={styles.stateCard}>
+          <StatusPill label="PLAN UNAVAILABLE" tone="warning" />
+          <Text style={styles.stateTitle}>I couldn’t prepare this Money Plan.</Text>
+          <Text style={styles.error}>{error}</Text>
+          <PrimaryButton onPress={() => router.back()}>Back</PrimaryButton>
         </SoftCard>
-      </View>
+      ) : null}
 
-      <SoftCard style={styles.mathCard}>
-        <View style={styles.mathRow}>
-          <Text style={styles.mathLabel}>Balance before</Text>
-          <Text style={styles.mathValue}>₦300,000</Text>
-        </View>
-        <View style={styles.mathRow}>
-          <Text style={styles.mathLabel}>External + internal</Text>
-          <Text style={styles.mathValue}>−₦60,000</Text>
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.mathRow}>
-          <Text style={styles.totalLabel}>EXPECTED AVAILABLE AFTER</Text>
-          <Text style={styles.totalValue}>₦240,000</Text>
-        </View>
-      </SoftCard>
-
-      <View style={styles.guardCard}>
-        <Text style={styles.guardTitle}>MONI GUARD · STATIC CHECKS</Text>
-        <GuardCheck rule="SUPPORTED INTENT" message="Both preview actions are in MVP scope." status="pass" />
-        <GuardCheck delay={90} rule="HUMAN APPROVAL" message="External movement still needs your approval." status="review" />
-      </View>
-
-      <PrimaryButton onPress={() => router.push("/operator/approve")}>
-        Review consequences
-      </PrimaryButton>
-      <Text style={styles.disclosure}>{mockDisclosure}</Text>
+      <Text style={styles.disclosure}>This is a consequence preview only. No withdrawal, allocation, signing, or execution happens on this screen.</Text>
     </Screen>
   );
 }
 
+function formatNaira(amount: number) {
+  return `₦${new Intl.NumberFormat("en-NG", { maximumFractionDigits: 0 }).format(amount)}`;
+}
+
 const styles = StyleSheet.create({
-  screen: { gap: spacing.xxl, paddingBottom: spacing.xxl },
-  section: { gap: spacing.md },
-  actionCard: { gap: spacing.sm },
-  actionTop: { alignItems: "flex-start", flexDirection: "row", gap: spacing.sm, justifyContent: "space-between" },
-  actionAmount: { ...typography.moneyPlan, flex: 1 },
-  destination: { ...typography.section, color: colors.textPrimary },
-  meta: { ...typography.caption, color: colors.textSecondary },
-  mathCard: { backgroundColor: colors.backgroundSecondary, gap: spacing.md },
-  mathRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
-  mathLabel: { ...typography.body, color: colors.textSecondary },
-  mathValue: { ...typography.section, color: colors.textPrimary, fontVariant: ["tabular-nums"] },
-  divider: { backgroundColor: colors.borderSoft, height: 1 },
-  totalLabel: { ...typography.technical, color: colors.textSecondary, flex: 1 },
-  totalValue: { ...typography.heading, color: colors.textPrimary, fontVariant: ["tabular-nums"] },
-  guardCard: { backgroundColor: colors.surface, borderColor: colors.borderSoft, borderRadius: radius.card, borderWidth: 1, padding: spacing.lg },
-  guardTitle: { ...typography.technical, color: colors.statusProcessing, marginBottom: spacing.sm },
+  screen: { gap: spacing.xxl, paddingBottom: spacing.xxxl, paddingTop: spacing.xl },
+  hero: { gap: spacing.sm },
+  eyebrow: { ...typography.technical, color: colors.textSecondary, letterSpacing: 1.5 },
+  heroTitle: { ...typography.display, color: colors.textPrimary, maxWidth: 520 },
+  currentBlock: { gap: spacing.xxs, paddingVertical: spacing.md },
+  metaLabel: { ...typography.technical, color: colors.textSecondary, letterSpacing: 1.1 },
+  currentMoney: { fontSize: 54, lineHeight: 60 },
+  availableWord: { ...typography.body, color: colors.textSecondary },
+  actionGrid: { gap: spacing.md },
+  actionCard: { gap: spacing.sm, minHeight: 190 },
+  actionHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
+  actionIndex: { ...typography.technical, color: colors.textSecondary, fontSize: 18 },
+  actionLabel: { ...typography.heading, color: colors.textPrimary, fontSize: 28, lineHeight: 34 },
+  actionDescription: { ...typography.body, color: colors.textSecondary },
+  actionMoney: { fontSize: 34, lineHeight: 40, marginTop: "auto" },
+  summaryGrid: { flexDirection: "row", gap: spacing.sm },
+  summaryCard: { flex: 1, gap: spacing.sm, minHeight: 130 },
+  summaryMoney: { fontSize: 27, lineHeight: 32 },
+  afterCard: {
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.card,
+    gap: spacing.sm,
+    padding: spacing.xl
+  },
+  afterLabel: { ...typography.technical, color: colors.backgroundPrimary, opacity: 0.7, letterSpacing: 1.2 },
+  afterMoney: { color: colors.backgroundPrimary, fontSize: 50, lineHeight: 56 },
+  formula: { ...typography.technical, color: colors.backgroundPrimary, opacity: 0.72 },
+  afterCopy: { ...typography.caption, color: colors.backgroundPrimary, opacity: 0.68 },
+  stateCard: { gap: spacing.md },
+  stateTitle: { ...typography.heading, color: colors.textPrimary },
+  stateCopy: { ...typography.body, color: colors.textSecondary },
+  warningCard: { gap: spacing.sm },
+  error: { ...typography.body, color: colors.statusError },
   disclosure: { ...typography.technical, color: colors.textSecondary, textAlign: "center" }
 });
