@@ -2,30 +2,31 @@
 
 ## Current Phase
 
-Phase 3 — Shell and Navigation
+Phase 4 — BMONI API Foundation
 
-The complete static mobile product shell is implemented and browser-verified. Onboarding, the four-tab workspace, the Home operator, the bank preview, and the operator review journey can be navigated without contacting BMONI.
+The Phase 4 API surface is implemented on `phase-4-bmoni-api-foundation`. MONIFlow now has a centralized sandbox-only BMONI client, documented user creation, SQLite `bmoniUserId` persistence, the canonical `POST /api/onboarding/user` route, and a private developer status surface for checking provider connectivity and stored user mapping without exposing credentials.
 
 ## Working
 
 - Phase 1 pnpm workspace, Expo Router mobile app, Fastify API, and package boundaries
 - Phase 2 semantic tokens, foundational components, bounded motion, and private design-system showcase
-- Static onboarding journey: Welcome → Identity → Wallet → Setup preview
-- Floating text-based bottom navigation: Home, Pockets, Activity, and Profile
-- Modular Home composition with greeting, mock available balance, add/withdraw actions, embedded MONIFlow Operator, suggestions, money spaces, and recent activity
-- Static bank journey: Select → Verify → Destination preview
-- Static operator journey: Processing → Money Plan → Consequence review → Device boundary → Honest result
-- Clearly labeled mock balances, destinations, allocations, checks, and activity
-- Explicit consequence review that cannot call BMONI or authorize money movement
-- Result state that reports `No money moved` and never fabricates provider success
-- Browser-verified input, modal, tab, onboarding, bank, and operator navigation
-- Typecheck, lint, tests, workspace build, Expo web export, API startup, and `/health`
+- Phase 3 static onboarding, tabs, Home operator, bank preview, and operator review journey
+- Centralized server-side BMONI client with `x-api-key` authentication and sandbox-only host enforcement
+- Strict Zod validation for documented BMONI user creation and provider responses
+- Typed provider/configuration/transport/response errors with secret-safe logging
+- SQLite local-user → BMONI-user mapping
+- Canonical `POST /api/onboarding/user` endpoint; legacy `/onboarding/users` remains temporarily compatible
+- `GET /api/dev/bmoni-status` safe developer endpoint
+- `/_dev/bmoni-status` mobile developer screen showing only BMONI connectivity, sandbox environment, user-created state, and BMONI User ID
+- Onboarding route tests updated to the canonical Phase 4 URL
 
-The server-side BMONI API foundation was implemented ahead of the agreed Phase 4 sequence and remains preserved. It includes sandbox-only configuration, typed REST access, strict Zod contracts, connectivity, documented user creation, SQLite identity mapping, typed errors, and tests.
+## Not Yet Verified
+
+- A real sandbox user has not been created from this execution environment because it cannot make outbound POST requests to BMONI and no local runtime with configured credentials is attached here.
+- Therefore the Phase 4 checkpoint is code-complete but still requires one live sandbox execution: create an authorized test user, confirm the returned `bmoniUserId`, and reload the debug page to verify the persisted mapping.
 
 ## Not Yet Implemented
 
-- Phase 4 live sandbox user-creation checkpoint with an authorized test identity
 - BMONI React Native SDK, wallet provisioning, ownership, or device signing
 - KYC or Nigeria onboarding flow
 - Provider-backed wallet dashboard and balances
@@ -39,24 +40,28 @@ The server-side BMONI API foundation was implemented ahead of the agreed Phase 4
 
 ## Known Issues
 
-- The editorial type role uses the platform sans font. A licensed bundled editorial family may be evaluated during Phase 17.
-- Native Android/iOS binaries were not compiled in this container because an emulator/Xcode toolchain is unavailable. Expo web export and cloud-browser interaction are the current visual evidence.
-- BMONI documents no idempotency key. A timed-out create-user request therefore has an unknown result and must not be retried automatically.
-- The shared sandbox key proves connectivity but is not a production credential and is not committed to the repository.
-- The Phase 4 live create-user checkpoint remains incomplete because no authorized test identity has been supplied.
+- Native Android/iOS binaries are not compiled in this environment.
+- BMONI documents no idempotency key for create-user; a timed-out request must not be blindly retried.
+- The shared sandbox key documented by BMONI is suitable only for development and is never committed to this repository.
+- This workspace could not run the pnpm verification commands because its container has no outbound DNS/network access to clone/install the repository. The changed files were contract-reviewed against the existing code and design tokens; local verification remains required before merge.
 
-## Next Phase
+## Next Checkpoint
 
-Phase 4 — BMONI API Foundation
+Run the API locally with sandbox configuration, then:
 
-Complete the existing foundation checkpoint by exercising documented sandbox user creation with an authorized test identity and verifying the stored BMONI identifier. Do not begin wallet provisioning, device signing, KYC, or bank movement in Phase 4.
+1. `POST /api/onboarding/user` with an authorized test identity.
+2. Confirm the response contains a real `bmoniUserId`.
+3. Open `/_dev/bmoni-status`, paste the same local user UUID, and confirm `BMONI API: Connected`, `Environment: sandbox`, `User: Created`, and the persisted BMONI User ID.
+4. Run `pnpm typecheck`, `pnpm test`, and the normal workspace build before merging.
+
+Do not begin Phase 5 wallet provisioning until this checkpoint passes.
 
 ## Environment Variables
 
 - `NODE_ENV` — API environment
 - `API_HOST` — API listen host
 - `API_PORT` — API port, default `4000`
-- `BMONI_BASE_URL` — API only; confirmed development origin
+- `BMONI_BASE_URL` — API only; must be the confirmed sandbox origin
 - `BMONI_API_KEY` — API only; never exposed to mobile
 - `BMONI_REQUEST_TIMEOUT_MS` — API provider timeout
 - `DATABASE_URL` — SQLite identity-mapping URL
@@ -64,19 +69,8 @@ Complete the existing foundation checkpoint by exercising documented sandbox use
 
 ## Architecture Decisions
 
-- MONIFlow Operator remains embedded in Home instead of becoming a separate chat tab.
-- Route files own screen composition; shared components are introduced only for repeated patterns.
-- All Phase 3 financial values come from a dedicated mock-data module and are visibly labeled.
-- Tab navigation uses a custom text-only bar, avoiding placeholder glyphs and preserving the editorial/technical visual language.
-- Glass remains reserved for intelligence/focus moments; normal financial surfaces stay soft and opaque.
-- Consequence Mode increases contrast and removes decorative motion around approval.
-- A static confirmation advances navigation only; it does not create provider, wallet, approval, or transaction state.
-- BMONI partner credentials and REST calls remain server-side; private wallet keys and future signing stay on-device.
-
-## Demo Status
-
-Target instruction:
-
-> Withdraw ₦40,000 to my GTBank account and save ₦20,000 for my laptop.
-
-The entire intended UI journey is navigable with explicit static-preview labels. The command is not parsed, approved, signed, submitted, settled, or represented as provider success. Phase 3 demonstrates product structure and consequence clarity only.
+- The BMONI API key remains server-side and is redacted from logs.
+- Provider contracts live in the centralized BMONI service layer; mobile code never calls BMONI REST directly.
+- User creation is idempotent only at the MONIFlow mapping layer: an already-mapped local user returns the persisted identifier instead of creating a second provider user.
+- Provider failures are surfaced honestly; MONIFlow never substitutes a mock provider success.
+- The developer page is informational only and cannot display secrets or perform financial execution.
