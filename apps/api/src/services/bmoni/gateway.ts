@@ -27,4 +27,18 @@ export interface BmoniGateway {
   listAccountBalances(bmoniUserId: string): Promise<unknown>;
   getSmartWallet(bmoniUserId: string, smartWalletId: string): Promise<unknown>;
   getNgnDepositAccount(bmoniUserId: string): Promise<unknown>;
+
+  getNigerianBanks(bmoniUserId: string): Promise<unknown>;
+  verifyNigerianAccount(bmoniUserId: string, input: { bankCode: string; accountNumber: string }): Promise<unknown>;
+  registerNigerianWithdrawalAccount(bmoniUserId: string, input: {
+    accountNumber: string;
+    bankCode: string;
+    bankName: string;
+    accountHolderName: string;
+  }): Promise<unknown>;
+  offrampNigeria(bmoniUserId: string, smartWalletId: string, input: { bankAccountId: string; fromAmount: string }): Promise<unknown>;
+  approveProposal(bmoniUserId: string, proposalId: string): Promise<unknown>;
+  getProposalSignPayload(bmoniUserId: string, proposalId: string): Promise<unknown>;
+  signProposal(bmoniUserId: string, proposalId: string, signature: string): Promise<unknown>;
+  getProposal(bmoniUserId: string, proposalId: string): Promise<unknown>;
 }
