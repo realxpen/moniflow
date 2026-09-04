@@ -21,10 +21,13 @@ function createFixture() {
     updatedAt: "2026-09-03T12:00:00.000Z"
   });
   const gateway: BmoniGateway = {
+    activateKyc: vi.fn(),
     approveProposal: vi.fn(),
     createUser,
     createManagedSmartWallet: vi.fn(),
+    createNgnVirtualAccount: vi.fn(),
     createOwnerProofChallenge: vi.fn(),
+    getKycReadiness: vi.fn(),
     getNgnDepositAccount: vi.fn(),
     getNigerianBanks: vi.fn(),
     getOnboardingStatus: vi.fn(),
@@ -40,6 +43,8 @@ function createFixture() {
     signProposal: vi.fn(),
     startNigeriaOnboarding: vi.fn(),
     updateNigeriaKyc: vi.fn(),
+    uploadKycIdentification: vi.fn(),
+    uploadKycProofOfAddress: vi.fn(),
     verifyNigerianAccount: vi.fn()
   };
   const repository = new SqliteUserMappingRepository(":memory:");
