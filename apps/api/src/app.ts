@@ -6,6 +6,7 @@ import { activityRoutes } from "./routes/activity.js";
 import { bankingRoutes } from "./routes/banking.js";
 import { devRoutes } from "./routes/dev.js";
 import { healthRoutes } from "./routes/health.js";
+import { nigeriaOnboardingRoutes } from "./routes/nigeria-onboarding.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
 import { operatorRoutes } from "./routes/operator.js";
 import { pocketRoutes } from "./routes/pockets.js";
@@ -52,13 +53,18 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
       redact: [
         "req.headers.authorization", "req.headers.cookie", "req.headers.x-api-key",
         "headers.authorization", "headers.x-api-key", "BMONI_API_KEY",
-        "req.body.signature", "req.body.ownerProofSignature"
+        "req.body.signature", "req.body.ownerProofSignature", "req.body.bvn"
       ]
     }
   });
 
   app.register(healthRoutes, { getBmoniGateway: dependencies.getBmoniGateway });
   app.register(onboardingRoutes, { prefix: "/api/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
+  app.register(nigeriaOnboardingRoutes, {
+    prefix: "/api/onboarding/nigeria",
+    getBmoniGateway: dependencies.getBmoniGateway,
+    getBmoniUserService: dependencies.getBmoniUserService
+  });
   app.register(devRoutes, { prefix: "/api/dev", getBmoniGateway: dependencies.getBmoniGateway, getBmoniUserService: dependencies.getBmoniUserService });
   app.register(walletOwnershipRoutes, {
     prefix: "/api/wallet",
