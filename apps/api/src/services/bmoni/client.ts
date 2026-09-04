@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 
 import type { BmoniConfig } from "./config.js";
 import { BmoniProviderError, BmoniResponseValidationError, BmoniTransportError } from "./errors.js";
@@ -30,6 +30,7 @@ import {
 
 type FetchImplementation = typeof fetch;
 type RequestOptions = { body?: unknown; method: "GET" | "POST" | "PATCH" };
+const providerPayloadSchema = z.unknown();
 
 export class BmoniClient implements BmoniGateway {
   constructor(private readonly config: BmoniConfig, private readonly fetchImplementation: FetchImplementation = fetch) {}
@@ -65,6 +66,22 @@ export class BmoniClient implements BmoniGateway {
 
   async getOnboardingStatus(bmoniUserId: string): Promise<OnboardingStatus> {
     return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/onboarding/status`, onboardingStatusSchema, { method: "GET" });
+  }
+
+  async listAccountWallets(bmoniUserId: string): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/smart-wallets/account/wallets`, providerPayloadSchema, { method: "GET" });
+  }
+
+  async listAccountBalances(bmoniUserId: string): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/smart-wallets/account/balances`, providerPayloadSchema, { method: "GET" });
+  }
+
+  async getSmartWallet(bmoniUserId: string, smartWalletId: string): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/smart-wallets/${encodeURIComponent(smartWalletId)}`, providerPayloadSchema, { method: "GET" });
+  }
+
+  async getNgnDepositAccount(bmoniUserId: string): Promise<unknown> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/bank-accounts/deposit-accounts/NGN`, providerPayloadSchema, { method: "GET" });
   }
 
   private async request<TSchema extends z.ZodType>(path: `/v1/${string}`, responseSchema: TSchema, options: RequestOptions): Promise<z.infer<TSchema>> {
