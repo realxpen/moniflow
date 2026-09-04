@@ -26,15 +26,31 @@ export type MoneyPlan = {
   sourceIntent: "CHECK_BALANCE" | "BANK_WITHDRAWAL" | "CREATE_POCKET" | "ALLOCATE_POCKET" | "SHOW_ACTIVITY" | "MULTI_ACTION";
 };
 
-export async function prepareMoneyPlan(intent: MoniflowIntent, localUserId: string): Promise<MoneyPlan> {
+export type PreparedMoneyPlan = {
+  plan: MoneyPlan;
+  planId: string;
+  planHash: string;
+  status: "VALIDATING";
+};
+
+export async function prepareMoneyPlan(
+  intent: MoniflowIntent,
+  localUserId: string,
+  originalInstruction?: string
+): Promise<PreparedMoneyPlan> {
   const response = await fetch(`${apiUrl}/api/operator/plan`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ intent, localUserId })
+    body: JSON.stringify({ intent, localUserId, originalInstruction })
   });
-  const payload = (await response.json()) as { plan?: MoneyPlan; message?: string };
-  if (!response.ok || !payload.plan) {
+  const payload = (await response.json()) as Partial<PreparedMoneyPlan> & { message?: string };
+  if (!response.ok || !payload.plan || !payload.planId || !payload.planHash) {
     throw new Error(payload.message ?? "MONIFlow could not prepare a money plan.");
   }
-  return payload.plan;
+  return {
+    plan: payload.plan,
+    planId: payload.planId,
+    planHash: payload.planHash,
+    status: "VALIDATING"
+  };
 }
