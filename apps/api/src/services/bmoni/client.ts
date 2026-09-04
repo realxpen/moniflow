@@ -5,21 +5,31 @@ import { BmoniProviderError, BmoniResponseValidationError, BmoniTransportError }
 import type { BmoniGateway } from "./gateway.js";
 import {
   bmoniErrorEnvelopeSchema,
+  bvnLookupSchema,
   createBmoniUserResponseSchema,
+  kycProfileResponseSchema,
   managedSmartWalletResponseSchema,
+  onboardingStatusSchema,
   ownerProofChallengeResponseSchema,
+  startNigeriaOnboardingResponseSchema,
   supportedSmartWalletCurrenciesSchema,
   type BmoniUser,
+  type BvnLookup,
   type CreateBmoniUserInput,
   type CreateManagedWalletInput,
+  type KycProfileResponse,
   type ManagedSmartWallet,
+  type OnboardingStatus,
   type OwnerProofChallenge,
   type OwnerProofChallengeInput,
-  type SupportedSmartWalletCurrencies
+  type StartNigeriaOnboardingInput,
+  type StartNigeriaOnboardingResponse,
+  type SupportedSmartWalletCurrencies,
+  type UpdateNigeriaKycInput
 } from "./schemas.js";
 
 type FetchImplementation = typeof fetch;
-type RequestOptions = { body?: unknown; method: "GET" | "POST" };
+type RequestOptions = { body?: unknown; method: "GET" | "POST" | "PATCH" };
 
 export class BmoniClient implements BmoniGateway {
   constructor(private readonly config: BmoniConfig, private readonly fetchImplementation: FetchImplementation = fetch) {}
@@ -39,6 +49,22 @@ export class BmoniClient implements BmoniGateway {
 
   async createManagedSmartWallet(bmoniUserId: string, input: CreateManagedWalletInput): Promise<ManagedSmartWallet> {
     return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/smart-wallets/create-managed`, managedSmartWalletResponseSchema, { body: input, method: "POST" });
+  }
+
+  async lookupBvn(bmoniUserId: string, bvn: string): Promise<BvnLookup> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc/bvn-lookup/${encodeURIComponent(bvn)}`, bvnLookupSchema, { method: "GET" });
+  }
+
+  async updateNigeriaKyc(bmoniUserId: string, input: UpdateNigeriaKycInput): Promise<KycProfileResponse> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc`, kycProfileResponseSchema, { body: input, method: "PATCH" });
+  }
+
+  async startNigeriaOnboarding(bmoniUserId: string, input: StartNigeriaOnboardingInput): Promise<StartNigeriaOnboardingResponse> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/onboarding/start-nigeria`, startNigeriaOnboardingResponseSchema, { body: input, method: "POST" });
+  }
+
+  async getOnboardingStatus(bmoniUserId: string): Promise<OnboardingStatus> {
+    return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/onboarding/status`, onboardingStatusSchema, { method: "GET" });
   }
 
   private async request<TSchema extends z.ZodType>(path: `/v1/${string}`, responseSchema: TSchema, options: RequestOptions): Promise<z.infer<TSchema>> {
@@ -69,6 +95,7 @@ export class BmoniClient implements BmoniGateway {
 
   private async readJson(response: Response, requestId: string | null): Promise<unknown> {
     const rawBody = await response.text();
+    if (!rawBody.trim()) return {};
     try { return JSON.parse(rawBody) as unknown; }
     catch (error) { throw new BmoniResponseValidationError(requestId, { cause: error }); }
   }
