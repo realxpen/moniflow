@@ -11,6 +11,21 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
+function gatewayMethods(): Omit<BmoniGateway, "createUser" | "getSupportedSmartWalletCurrencies"> {
+  return {
+    createManagedSmartWallet: vi.fn(),
+    createOwnerProofChallenge: vi.fn(),
+    getNgnDepositAccount: vi.fn(),
+    getOnboardingStatus: vi.fn(),
+    getSmartWallet: vi.fn(),
+    listAccountBalances: vi.fn(),
+    listAccountWallets: vi.fn(),
+    lookupBvn: vi.fn(),
+    startNigeriaOnboarding: vi.fn(),
+    updateNigeriaKyc: vi.fn()
+  };
+}
+
 describe("GET /health", () => {
   it("reports the API service and environment", async () => {
     const app = buildApp();
@@ -31,7 +46,8 @@ describe("GET /health", () => {
       createUser: vi.fn(),
       getSupportedSmartWalletCurrencies: vi
         .fn()
-        .mockResolvedValue({ currencies: ["CNGN", "USDB"] })
+        .mockResolvedValue({ currencies: ["CNGN", "USDB"] }),
+      ...gatewayMethods()
     };
     const repository = new SqliteUserMappingRepository(":memory:");
     const app = buildApp({
