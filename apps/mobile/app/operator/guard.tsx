@@ -39,6 +39,7 @@ export default function MoniGuardScreen() {
   }, [localUserId, planId]);
 
   const humanApproval = result?.checks.find((check) => check.rule === "HUMAN_APPROVAL");
+  const destinationBlocked = Boolean(result?.checks.find((check) => check.rule === "DESTINATION" && !check.passed));
 
   return (
     <Screen contentContainerStyle={styles.screen}>
@@ -78,7 +79,9 @@ export default function MoniGuardScreen() {
           <Text style={styles.verdictTitle}>{result.status.replaceAll("_", " ")}</Text>
           <Text style={styles.verdictCopy}>
             {result.verdict === "BLOCK"
-              ? "MONI Guard found a critical mismatch. The server marked this plan BLOCKED."
+              ? destinationBlocked
+                ? "This withdrawal destination has not yet been verified and registered with BMONI. Verify it before approval can begin."
+                : "MONI Guard found a critical mismatch. The server marked this plan BLOCKED."
               : result.verdict === "REVIEW"
                 ? humanApproval?.message ?? "The server is now waiting for your explicit approval."
                 : "No external human authorization is required for this plan."}
@@ -97,20 +100,24 @@ export default function MoniGuardScreen() {
       ) : null}
 
       {result?.status === "AWAITING_USER_APPROVAL" ? (
-        <PrimaryButton
-          onPress={() => router.push({ pathname: "/operator/approve", params: { localUserId, planId } })}
-        >
+        <PrimaryButton onPress={() => router.push({ pathname: "/operator/approve", params: { localUserId, planId } })}>
           Continue to human authorization
         </PrimaryButton>
       ) : result?.status === "APPROVED" ? (
-        <PrimaryButton onPress={() => router.replace({ pathname: "/(tabs)/home", params: { localUserId } })}>
-          Return to Home
+        <PrimaryButton onPress={() => router.push({ pathname: "/operator/signing", params: { localUserId, planId } })}>
+          Continue to secure execution
+        </PrimaryButton>
+      ) : result?.status === "BLOCKED" && destinationBlocked ? (
+        <PrimaryButton
+          onPress={() => router.push({ pathname: "/banking/nigeria", params: { localUserId, planId, desiredLabel: "GTBank" } })}
+        >
+          Verify Nigerian bank destination
         </PrimaryButton>
       ) : result?.status === "BLOCKED" ? (
         <PrimaryButton onPress={() => router.back()}>Return to plan</PrimaryButton>
       ) : null}
 
-      <Text style={styles.disclosure}>The client never supplies the plan to MONI Guard in Phase 11. The API loads the authoritative stored plan by planId.</Text>
+      <Text style={styles.disclosure}>The client never supplies the plan to MONI Guard. The API loads the authoritative stored plan by planId and checks any bank withdrawal against a BMONI-verified destination.</Text>
     </Screen>
   );
 }
@@ -120,7 +127,7 @@ function humanLabel(rule: string) {
   if (rule === "POSITIVE_AMOUNT") return "Positive amounts";
   if (rule === "CURRENCY") return "NGN currency preserved";
   if (rule === "BALANCE") return "Balance sufficient";
-  if (rule === "DESTINATION") return "Destination integrity";
+  if (rule === "DESTINATION") return "BMONI bank destination verified";
   if (rule === "AMOUNT_INTEGRITY") return "Requested amount preserved";
   if (rule === "PLAN_INTEGRITY") return "Plan totals verified";
   if (rule === "HUMAN_APPROVAL") return "Human authorization boundary";
