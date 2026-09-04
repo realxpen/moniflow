@@ -11,24 +11,29 @@ type BalanceCardProps = {
   amount: number;
   label?: string;
   mock?: boolean;
+  status?: string;
 };
 
 export function BalanceCard({
   actions,
   amount,
   label = "Available balance",
-  mock = false
+  mock = false,
+  status = "active"
 }: BalanceCardProps) {
+  const providerLabel = `CNGN · ${status.toUpperCase()}`;
+  const tone = status === "active" ? "success" : status === "inactive" ? "error" : "processing";
+
   return (
     <AnimatedEntry>
       <View style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.label}>{label}</Text>
-          <StatusPill label={mock ? "MOCK DATA" : "CNGN"} tone={mock ? "warning" : "success"} />
+          <StatusPill label={mock ? "MOCK DATA" : providerLabel} tone={mock ? "warning" : tone} />
         </View>
         <MoneyText amount={amount} style={styles.amount} />
         <Text style={styles.meta}>
-          {mock ? "Static shell mock data" : "Provider-verified balance"}
+          {mock ? "Static shell mock data" : "Provider-verified available balance"}
         </Text>
         {actions ? <View style={styles.actions}>{actions}</View> : null}
       </View>
