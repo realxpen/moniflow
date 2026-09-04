@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { UserMappingRepository } from "../../repositories/user-mapping.js";
 import type { CreateMoniflowUserInput } from "../../schemas/onboarding.js";
 
@@ -39,29 +41,40 @@ export class BmoniUserService {
   async createOrFindMapping(
     input: CreateMoniflowUserInput
   ): Promise<ProvisionBmoniUserResult> {
-    const localMapping = this.mappings.findByLocalUserId(input.localUserId);
-    if (localMapping) {
-      if (localMapping.email.toLowerCase() !== input.email.toLowerCase()) {
-        throw new UserMappingConflictError(
-          "The local user is already associated with a different BMONI identity."
-        );
-      }
+    if (input.localUserId) {
+      const localMapping = this.mappings.findByLocalUserId(input.localUserId);
+      if (localMapping) {
+        if (localMapping.email.toLowerCase() !== input.email.toLowerCase()) {
+          throw new UserMappingConflictError(
+            "The local user is already associated with a different BMONI identity."
+          );
+        }
 
-      return {
-        bmoniUserId: localMapping.bmoniUserId,
-        localUserId: localMapping.localUserId,
-        status: "existing"
-      };
+        return {
+          bmoniUserId: localMapping.bmoniUserId,
+          localUserId: localMapping.localUserId,
+          status: "existing"
+        };
+      }
     }
 
     const emailMapping = this.mappings.findByEmail(input.email);
     if (emailMapping) {
-      throw new UserMappingConflictError(
-        "The email is already associated with another local user."
-      );
+      if (input.localUserId && emailMapping.localUserId !== input.localUserId) {
+        throw new UserMappingConflictError(
+          "The email is already associated with another local user."
+        );
+      }
+
+      return {
+        bmoniUserId: emailMapping.bmoniUserId,
+        localUserId: emailMapping.localUserId,
+        status: "existing"
+      };
     }
 
-    const { localUserId, ...providerInput } = input;
+    const localUserId = input.localUserId ?? randomUUID();
+    const { localUserId: _ignoredLocalUserId, ...providerInput } = input;
     const user = await this.gateway.createUser(providerInput);
 
     if (user.email.toLowerCase() !== input.email.toLowerCase()) {
