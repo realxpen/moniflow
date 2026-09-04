@@ -24,7 +24,11 @@ function createFixture() {
     createUser,
     createManagedSmartWallet: vi.fn(),
     createOwnerProofChallenge: vi.fn(),
-    getSupportedSmartWalletCurrencies: vi.fn()
+    getOnboardingStatus: vi.fn(),
+    getSupportedSmartWalletCurrencies: vi.fn(),
+    lookupBvn: vi.fn(),
+    startNigeriaOnboarding: vi.fn(),
+    updateNigeriaKyc: vi.fn()
   };
   const repository = new SqliteUserMappingRepository(":memory:");
   repositories.push(repository);
