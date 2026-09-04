@@ -54,6 +54,44 @@ export const managedSmartWalletResponseSchema = z.union([
   z.object({ wallet: managedSmartWalletSchema }).passthrough().transform((value) => value.wallet)
 ]);
 
+export const bvnLookupSchema = z.object({
+  bvn: z.string().regex(/^\d{11}$/),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  middleName: z.string().nullable().optional(),
+  dateOfBirth: z.string().min(1),
+  gender: z.string().min(1),
+  email: z.string().nullable().optional(),
+  phoneNumber: z.string().nullable().optional()
+}).passthrough();
+export type BvnLookup = z.infer<typeof bvnLookupSchema>;
+
+export const updateNigeriaKycInputSchema = z.object({
+  personalInfo: z.object({
+    firstName: z.string().trim().min(1),
+    lastName: z.string().trim().min(1),
+    dateOfBirth: z.string().min(1),
+    gender: z.string().min(1)
+  }).strict()
+}).strict();
+export type UpdateNigeriaKycInput = z.infer<typeof updateNigeriaKycInputSchema>;
+
+export const kycProfileResponseSchema = z.unknown();
+export type KycProfileResponse = z.infer<typeof kycProfileResponseSchema>;
+
+export const startNigeriaOnboardingInputSchema = z.object({
+  bvn: z.string().regex(/^\d{11}$/),
+  ngnWalletAddress: evmAddressSchema,
+  ngnWalletIndex: z.number().int().nonnegative()
+}).strict();
+export type StartNigeriaOnboardingInput = z.infer<typeof startNigeriaOnboardingInputSchema>;
+
+export const startNigeriaOnboardingResponseSchema = z.unknown();
+export type StartNigeriaOnboardingResponse = z.infer<typeof startNigeriaOnboardingResponseSchema>;
+
+export const onboardingStatusSchema = z.record(z.string(), z.unknown());
+export type OnboardingStatus = z.infer<typeof onboardingStatusSchema>;
+
 export const bmoniErrorEnvelopeSchema = z.object({
   statusCode: z.number().int(), message: z.union([z.string(), z.array(z.string())]), error: z.string().optional()
 }).strict();
