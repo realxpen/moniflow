@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-Phase 5 — Device Wallet + Ownership
+Phase 6 — Nigeria Onboarding / KYC
 
-Phase 5 is code-complete on `phase-5-device-wallet-ownership`. The mobile app now integrates the actual BMONI React Native signer SDK for secure on-device wallet provisioning and EIP-191 challenge signing. The API requests BMONI owner-proof challenges, creates managed CNGN smart wallets after successful ownership proof, and persists only public ownership/wallet metadata.
+Phase 6 is implemented on `main` as the Nigeria sandbox onboarding layer that follows the Phase 5 CNGN smart-wallet flow. MONIFlow now validates the sandbox identity, submits the matching KYC personal profile, starts BMONI Nigeria onboarding with the persisted CNGN wallet address and wallet index `0`, and reads provider onboarding status before presenting the user as ready.
 
 ## Working
 
@@ -12,58 +12,48 @@ Phase 5 is code-complete on `phase-5-device-wallet-ownership`. The mobile app no
 - Phase 2 semantic tokens, foundational components, bounded motion, and private design-system showcase
 - Phase 3 onboarding, tabs, Home operator, bank preview, and operator review journey
 - Phase 4 centralized sandbox-only BMONI REST client, canonical user creation, SQLite `bmoniUserId` mapping, and safe developer status surface
-- Actual `@bkey-inc/bmoni_embedded_sdk` integrated into mobile
-- Device wallet load/provision flow using BMONI SDK secure storage
-- Six-digit SDK PIN gate for device signing
-- `POST /api/wallet/owner-proof-challenge`
-- EIP-191 challenge signing on-device; raw private key never crosses the device boundary
-- `POST /api/wallet/create-managed` for managed CNGN smart-wallet creation
-- SQLite persistence of device owner address, BMONI smart-wallet ID, smart-wallet address, currency, and timestamps only
-- API log redaction for signature-bearing request fields
-- `GET /api/wallet/status` for safe persisted wallet metadata lookup
-- Frosted/blurred provisioning UI matching the Phase 5 moodboard direction and showing Device wallet → Ownership → CNGN Wallet → Nigerian rail progress
-- Android Expo config plugin adds Bkey Maven repository and arm64-v8a requirement for the BMONI native signer
+- Phase 5 BMONI React Native signer integration, owner-proof challenge signing, managed CNGN wallet creation, and public wallet metadata persistence
+- `GET /v1/users/{userId}/kyc/bvn-lookup/{bvn}` integrated server-side for Nigeria sandbox identity confirmation
+- `PATCH /v1/users/{userId}/kyc` integrated for the matching Nigeria personal profile
+- `POST /v1/users/{userId}/onboarding/start-nigeria` integrated with the persisted CNGN smart-wallet address and `ngnWalletIndex: 0`
+- `GET /v1/users/{userId}/onboarding/status` integrated as the source of truth for Ready / Processing / Action required states
+- MONIFlow routes: `POST /api/onboarding/nigeria/start` and `GET /api/onboarding/nigeria/status`
+- Phase 6 mobile/web screen at `/onboarding/nigeria` with compact identity cards and progressive sandbox details
+- Phase 5 wallet flow now continues into Nigeria onboarding rather than skipping directly to success
+- API log redaction includes BVN and signing fields
+- BVN is not persisted in the local wallet ownership table
 
 ## Security Boundary
 
 - BMONI REST API key remains server-side only.
 - Device private key is generated and retained by the BMONI native SDK secure-storage boundary.
 - MONIFlow backend never receives or persists the private key or raw device PIN.
-- Mobile sends only owner address, BMONI challenge signature, challenge identifier, and local identity context required for provisioning.
-- Signature request fields are redacted from Fastify logs.
+- BVN is accepted only for the provider onboarding request path and is redacted from Fastify request logs.
+- The Nigeria route derives the smart-wallet address server-side from Phase 5 persistence rather than trusting a wallet address supplied by the client.
+- MONIFlow does not mark Nigeria onboarding ready from a local flag; BMONI onboarding status is the authority.
+
+## Sandbox Identity Rules
+
+BMONI sandbox identity matching is deterministic. The Phase 6 UI defaults to one of BMONI's documented sandbox personas so the identity fields and BVN can resolve together. Do not substitute a real BVN or mismatched name/phone while using the development BMONI environment.
 
 ## Not Yet Verified
 
-- A real Phase 4 BMONI sandbox user has not been created from this execution environment.
-- The Phase 5 native checkpoint has not been executed on a physical/emulated arm64 iOS/Android development build with live BMONI sandbox credentials.
-- Therefore wallet existence and provider-side ownership proof are implemented but must still be proven with one live device run.
-- This execution environment cannot run the workspace install/typecheck/test cycle because outbound package/network access is unavailable.
-- `pnpm-lock.yaml` still requires regeneration after adding the BMONI SDK/config-plugin dependencies; run `pnpm install` in a networked development environment before using `--frozen-lockfile`.
-
-## Not Yet Implemented
-
-- Nigerian fiat rail activation after the CNGN smart wallet
-- KYC/Nigeria onboarding completion
-- Provider-backed wallet dashboard and balances
-- Deterministic Intent Engine or LLM parsing
-- Money Plan Engine and persisted plan state machine
-- Complete deterministic MONI Guard rule engine
-- Approval persistence, invalidation, or execution authorization
-- Provider-backed bank discovery, verification, withdrawal, offramp, or proposals
-- Provider-backed Activity or application persistence for Money Pockets
-- GhostPay, TrustDrop, LifeWallet, analytics, or production payments
+- The Phase 4 live BMONI user checkpoint still needs to be proven with the configured sandbox API deployment.
+- The Phase 5 native owner-wallet checkpoint still needs one real iOS/Android development build run.
+- The Phase 6 Nigeria onboarding checkpoint still needs a live BMONI sandbox run through `/api/onboarding/nigeria/start` and `/api/onboarding/nigeria/status`.
+- The provider may return `action_required`; MONIFlow intentionally surfaces that state instead of pretending the rail is active.
+- If the live sandbox status requires document uploads for this BMONI account, implement only those provider-requested documents as the next Phase 6 completion substep.
+- Workspace typecheck/tests have not been run from this execution environment.
 
 ## Next Checkpoint
 
-In a networked local environment:
-
-1. Run `pnpm install` to refresh `pnpm-lock.yaml`, then `pnpm typecheck`, `pnpm test`, and the workspace build.
-2. Configure API-only BMONI sandbox credentials and create/confirm the Phase 4 BMONI user.
-3. Build the mobile app as an iOS/Android development client; Expo Go is not sufficient for the native BMONI SDK.
-4. Open `/onboarding/wallet`, provide the mapped local user UUID, and create/load the device wallet.
-5. Confirm Device wallet ✓ and Ownership ✓ after the SDK signs BMONI's owner-proof challenge.
-6. Confirm CNGN Wallet ✓ and verify `GET /api/wallet/status` returns the same owner address, BMONI smart-wallet ID, and smart-wallet address.
-7. Restart the app and confirm `walletAddress()` returns the same device owner address.
+1. Deploy the MONIFlow API with server-side `BMONI_BASE_URL`, `BMONI_API_KEY`, and persistent `DATABASE_URL`.
+2. Ensure the Phase 4 local user maps to the same documented BMONI sandbox persona used in Phase 6.
+3. Complete the Phase 5 native CNGN wallet flow for that same `localUserId`.
+4. Open `/onboarding/nigeria` and submit the matching sandbox identity.
+5. Confirm BVN lookup succeeds, the KYC profile submission succeeds, and `start-nigeria` is accepted.
+6. Check `GET /api/onboarding/nigeria/status?localUserId=...` until BMONI reports the required active/ready state.
+7. If BMONI reports `action_required`, capture that provider response and implement only the specific missing requirement rather than expanding into the USD/EDD flow.
 
 ## Environment Variables
 
@@ -75,12 +65,13 @@ In a networked local environment:
 - `BMONI_REQUEST_TIMEOUT_MS` — API provider timeout
 - `DATABASE_URL` — SQLite persistence URL
 - `EXPO_PUBLIC_API_URL` — public mobile-to-API URL; never contains secrets
-- `EXPO_PUBLIC_DEV_LOCAL_USER_ID` — optional development-only local UUID convenience for the provisioning screen
+- `EXPO_PUBLIC_DEV_LOCAL_USER_ID` — optional development-only local UUID convenience for wallet and Nigeria onboarding
 
 ## Architecture Decisions
 
-- Device ownership is proven cryptographically using the exact owner address produced by the BMONI React Native SDK and an EIP-191 signature over BMONI's challenge message.
-- Managed CNGN wallet creation occurs only after the backend receives the signed owner-proof challenge.
-- The backend persists public wallet identity, never key material.
-- Provider failures are surfaced honestly; MONIFlow never substitutes mock wallet success.
-- Phase 6 must not treat the Nigerian rail as active until BMONI/provider-backed rail provisioning is verified.
+- Device ownership is proven cryptographically before Nigeria onboarding.
+- Nigeria onboarding always uses the CNGN wallet persisted by Phase 5.
+- The BMONI sandbox identity is checked before starting the Nigeria rail to make persona mismatches explicit.
+- `ngnWalletIndex` follows BMONI's documented sandbox quickstart value of `0`.
+- Provider failures and action-required states are surfaced honestly.
+- Phase 6 does not implement the separate Nigeria-to-USD Enhanced Due Diligence flow.
