@@ -1,5 +1,5 @@
 import { evaluateMoniGuard } from "@moniflow/moniguard";
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { z } from "zod";
 
 import type { MoneyPlanRepository } from "../repositories/money-plan.js";
@@ -180,7 +180,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
   });
 };
 
-function handleApprovalError(reply: Parameters<Parameters<FastifyPluginAsync<OperatorRouteOptions>>[0]>[0] extends never ? never : any, error: unknown) {
+function handleApprovalError(reply: FastifyReply, error: unknown) {
   if (error instanceof ApprovalStateError) {
     const statusCode = error.code === "NOT_FOUND" ? 404 : 409;
     return reply.status(statusCode).send({ statusCode, error: "Approval State Error", code: error.code, message: error.message });
