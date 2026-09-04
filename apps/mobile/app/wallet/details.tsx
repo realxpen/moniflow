@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -14,6 +14,10 @@ import { colors, spacing, typography } from "@/theme";
 const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
 
 export default function WalletDetailsScreen() {
+  const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
+  const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
+  const localUserId = routedLocalUserId?.trim() || configuredLocalUserId;
+
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [depositAccount, setDepositAccount] = useState<DepositAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -21,14 +25,14 @@ export default function WalletDetailsScreen() {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      if (!configuredLocalUserId) {
-        setError("No sandbox user is configured for this build.");
+      if (!localUserId) {
+        setError("No sandbox user is connected to this wallet view.");
         return;
       }
       try {
         const [nextWallet, nextDeposit] = await Promise.all([
-          loadWallet(configuredLocalUserId),
-          loadDepositAccount(configuredLocalUserId)
+          loadWallet(localUserId),
+          loadDepositAccount(localUserId).catch(() => null)
         ]);
         if (!active) return;
         setWallet(nextWallet);
@@ -39,7 +43,7 @@ export default function WalletDetailsScreen() {
     };
     void load();
     return () => { active = false; };
-  }, []);
+  }, [localUserId]);
 
   return (
     <Screen contentContainerStyle={styles.screen}>
