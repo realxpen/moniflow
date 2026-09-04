@@ -15,7 +15,11 @@ function additionalGatewayMethods(): Omit<BmoniGateway, "createUser" | "getSuppo
   return {
     createManagedSmartWallet: vi.fn(),
     createOwnerProofChallenge: vi.fn(),
+    getNgnDepositAccount: vi.fn(),
     getOnboardingStatus: vi.fn(),
+    getSmartWallet: vi.fn(),
+    listAccountBalances: vi.fn(),
+    listAccountWallets: vi.fn(),
     lookupBvn: vi.fn(),
     startNigeriaOnboarding: vi.fn(),
     updateNigeriaKyc: vi.fn()
