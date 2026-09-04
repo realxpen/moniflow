@@ -58,6 +58,11 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
     }
   });
 
+  const operatorOptions = {
+    getBmoniGateway: dependencies.getBmoniGateway,
+    getBmoniUserService: dependencies.getBmoniUserService
+  };
+
   app.register(healthRoutes, { getBmoniGateway: dependencies.getBmoniGateway });
   app.register(onboardingRoutes, { prefix: "/api/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
   app.register(nigeriaOnboardingRoutes, {
@@ -76,11 +81,11 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
     getBmoniGateway: dependencies.getBmoniGateway,
     getBmoniUserService: dependencies.getBmoniUserService
   });
-  app.register(operatorRoutes, { prefix: "/api/operator" });
+  app.register(operatorRoutes, { prefix: "/api/operator", ...operatorOptions });
 
   app.register(onboardingRoutes, { prefix: "/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
   app.register(bankingRoutes, { prefix: "/banking" });
-  app.register(operatorRoutes, { prefix: "/operator" });
+  app.register(operatorRoutes, { prefix: "/operator", ...operatorOptions });
   app.register(activityRoutes, { prefix: "/activity" });
   app.register(pocketRoutes, { prefix: "/pockets" });
 
