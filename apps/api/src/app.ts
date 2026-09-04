@@ -71,9 +71,13 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
     getBmoniGateway: dependencies.getBmoniGateway,
     getBmoniUserService: dependencies.getBmoniUserService
   });
+  app.register(walletRoutes, {
+    prefix: "/api/wallet",
+    getBmoniGateway: dependencies.getBmoniGateway,
+    getBmoniUserService: dependencies.getBmoniUserService
+  });
 
   app.register(onboardingRoutes, { prefix: "/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
-  app.register(walletRoutes, { prefix: "/wallet" });
   app.register(bankingRoutes, { prefix: "/banking" });
   app.register(operatorRoutes, { prefix: "/operator" });
   app.register(activityRoutes, { prefix: "/activity" });
