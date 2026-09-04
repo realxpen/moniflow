@@ -116,7 +116,16 @@ export default function NigeriaOnboardingScreen() {
       {message ? <Text style={[styles.message, status === "failed" && styles.error]}>{message}</Text> : null}
 
       {status === "ready" ? (
-        <PrimaryButton onPress={() => router.push("/onboarding/success")}>Enter MONIFlow</PrimaryButton>
+        <PrimaryButton
+          onPress={() =>
+            router.push({
+              pathname: "/onboarding/success",
+              params: { localUserId: localUserId.trim() }
+            })
+          }
+        >
+          Enter MONIFlow
+        </PrimaryButton>
       ) : status === "processing" || status === "action_required" ? (
         <PrimaryButton disabled={busy} onPress={() => void refreshStatus()}>{busy ? "Checking…" : "Check status"}</PrimaryButton>
       ) : (
