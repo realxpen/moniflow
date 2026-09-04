@@ -1,36 +1,68 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ProgressStep } from "@/components/operator";
 import { FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
-import { mockDisclosure } from "@/constants/mockData";
+import { getExecutionReadiness } from "@/services/approval";
 import { colors, spacing, typography } from "@/theme";
 
 export default function SigningScreen() {
+  const params = useLocalSearchParams<{ localUserId?: string; planId?: string }>();
+  const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
+  const planId = typeof params.planId === "string" ? params.planId : "";
+  const [ready, setReady] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const check = async () => {
+      if (!localUserId || !planId) {
+        setError("A persisted approved plan is required before device signing.");
+        setLoading(false);
+        return;
+      }
+      try {
+        const result = await getExecutionReadiness(planId, localUserId);
+        if (!active) return;
+        setReady(result.canExecute && result.approvalHashMatches);
+        if (!result.canExecute) setError(result.message ?? "This plan is not approved for execution.");
+      } catch (cause) {
+        if (active) setError(cause instanceof Error ? cause.message : "Approval state could not be verified.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void check();
+    return () => { active = false; };
+  }, [localUserId, planId]);
+
   return (
     <Screen contentContainerStyle={styles.screen}>
       <FlowHeader
-        description="Future signing stays on-device. This route demonstrates the boundary without simulating a signature."
+        description="Phase 11 verifies that this exact persisted plan is approved before the device-signing boundary can open."
         eyebrow="DEVICE BOUNDARY"
-        title="Your device. Your authorization."
+        title="Approval first. Signing next."
       />
       <SoftCard style={styles.card}>
-        <StatusPill label="SDK NOT CONNECTED" tone="warning" />
-        <Text style={styles.cardTitle}>No private key leaves the device.</Text>
+        <StatusPill label={loading ? "VERIFYING APPROVAL" : ready ? "APPROVAL VERIFIED" : "BLOCKED"} tone={loading ? "processing" : ready ? "success" : "warning"} />
+        <Text style={styles.cardTitle}>{ready ? "The approved plan fingerprint still matches." : "Device signing is unavailable."}</Text>
         <Text style={styles.cardCopy}>
-          Phase 5 will implement the verified BMONI wallet and ownership flow. No signing payload,
-          proposal, or signature exists in this static preview.
+          {ready
+            ? "No BMONI proposal or transaction signature is created in Phase 11. Phase 12 must reuse this server execution gate before requesting a signing payload."
+            : error ?? "MONIFlow requires an approved, unchanged Money Plan."}
         </Text>
       </SoftCard>
       <View style={styles.steps}>
-        <ProgressStep index={1} state="complete" title="Human review" detail="Static UI confirmation recorded locally" />
-        <ProgressStep index={2} state="active" title="Device signature" detail="Not connected in Phase 3" />
-        <ProgressStep index={3} state="pending" title="Provider submission" detail="BMONI is not contacted" />
+        <ProgressStep index={1} state={ready ? "complete" : "active"} title="Human approval" detail={ready ? "Persisted server state: APPROVED" : "Required before any execution path"} />
+        <ProgressStep index={2} state={ready ? "active" : "pending"} title="Device signature" detail="Phase 12 — not executed here" />
+        <ProgressStep index={3} state="pending" title="Provider submission" detail="No BMONI financial proposal is created in Phase 11" />
       </View>
-      <PrimaryButton onPress={() => router.push("/operator/result")}>
-        Continue to result preview
+      <PrimaryButton onPress={() => router.replace({ pathname: "/(tabs)/home", params: { localUserId } })}>
+        Return to Home
       </PrimaryButton>
-      <Text style={styles.disclosure}>{mockDisclosure}</Text>
+      <Text style={styles.disclosure}>Direct navigation to this route cannot bypass approval because readiness is checked against the persisted server plan.</Text>
     </Screen>
   );
 }
