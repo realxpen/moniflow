@@ -20,7 +20,13 @@ const nigeriaBodySchema = z.object({
   lastName: z.string().trim().min(1),
   phoneNumber: e164PhoneSchema,
   email: z.email(),
-  bvn: z.string().regex(/^\d{11}$/)
+  bvn: z.string().regex(/^\d{11}$/),
+  addressDetails: z.object({
+    street: z.string().trim().min(1),
+    city: z.string().trim().min(1),
+    state: z.string().trim().min(1),
+    countryCode: z.string().trim().length(3).transform((value) => value.toUpperCase())
+  }).strict()
 }).strict();
 
 type NigeriaOnboardingRouteOptions = {
@@ -38,7 +44,7 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
       return reply.status(400).send({
         statusCode: 400,
         error: "Bad Request",
-        message: "Enter a valid identity, E.164 phone number, email, and 11-digit BVN."
+        message: "Enter the documented sandbox identity, E.164 phone, email, 11-digit BVN, and Nigeria KYC address details."
       });
     }
 
@@ -62,6 +68,15 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
 
     try {
       const gateway = options.getBmoniGateway();
+      const existingStatus = await gateway.getOnboardingStatus(mapping.bmoniUserId);
+      if (deriveNigeriaStatus(existingStatus) === "ready") {
+        return reply.send({
+          environment: "sandbox",
+          status: "ready",
+          providerStatus: existingStatus
+        });
+      }
+
       const identity = await gateway.lookupBvn(mapping.bmoniUserId, parsed.data.bvn);
 
       const namesMatch =
@@ -83,9 +98,15 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
           lastName: parsed.data.lastName,
           dateOfBirth: identity.dateOfBirth,
           gender: identity.gender
-        }
+        },
+        addressDetails: parsed.data.addressDetails
       });
 
+      // BMONI's supplied lifecycle and zero-to-first-send documents disagree on
+      // whether KYC activation/documents occur before or after start-nigeria.
+      // Until that conflict is resolved against the live sandbox contract, this
+      // route preserves the documented quickstart start-nigeria call and never
+      // fabricates a ready state; provider onboarding status remains authoritative.
       await gateway.startNigeriaOnboarding(mapping.bmoniUserId, {
         bvn: parsed.data.bvn,
         ngnWalletAddress: wallet.smartWalletAddress,
