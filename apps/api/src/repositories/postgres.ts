@@ -5,11 +5,7 @@ import type { GuardCheck } from "@moniflow/moniguard";
 
 import { moniflowIntentSchema } from "../schemas/intent.js";
 import { moneyPlanSchema } from "../schemas/money-plan.js";
-import type {
-  CreatePersistedMoneyPlanInput,
-  MoneyPlanRepository,
-  PersistedMoneyPlan
-} from "./money-plan.js";
+import type { CreatePersistedMoneyPlanInput, MoneyPlanRepository, PersistedMoneyPlan } from "./money-plan.js";
 import type { UserMapping, UserMappingRepository } from "./user-mapping.js";
 import type { WalletOwnership, WalletOwnershipRepository } from "./wallet-ownership.js";
 
@@ -21,18 +17,9 @@ const walletRowSchema = z.object({
   currency: z.literal("CNGN"), created_at: z.coerce.string(), updated_at: z.coerce.string()
 });
 const moneyPlanRowSchema = z.object({
-  id: z.string(),
-  local_user_id: z.string(),
-  original_instruction: z.string(),
-  status: z.string(),
-  intent_payload: z.unknown(),
-  plan_payload: z.unknown(),
-  guard_verdict: z.string().nullable(),
-  plan_hash: z.string(),
-  approved_plan_hash: z.string().nullable(),
-  approved_at: z.coerce.string().nullable(),
-  created_at: z.coerce.string(),
-  updated_at: z.coerce.string()
+  id: z.string(), local_user_id: z.string(), original_instruction: z.string(), status: z.string(),
+  intent_payload: z.unknown(), plan_payload: z.unknown(), guard_verdict: z.string().nullable(), plan_hash: z.string(),
+  approved_plan_hash: z.string().nullable(), approved_at: z.coerce.string().nullable(), created_at: z.coerce.string(), updated_at: z.coerce.string()
 });
 
 export function createPostgresClient(databaseUrl: string) {
@@ -101,52 +88,57 @@ export async function ensureMoniflowSchema(sql: Sql) {
       id uuid primary key default gen_random_uuid(),
       local_user_id uuid not null references moniflow_private.bmoni_user_mappings(local_user_id) on delete cascade,
       original_instruction text not null,
-      status text not null check (status in ('DRAFT','PARSING','VALIDATING','BLOCKED','AWAITING_USER_APPROVAL','APPROVED','EXECUTING','AWAITING_DEVICE_SIGNATURE','PROCESSING','COMPLETED','FAILED','CANCELLED')),
+      source_intent text not null,
       currency text not null default 'NGN' check (currency = 'NGN'),
-      balance_before numeric(20,2) not null check (balance_before >= 0),
+      current_available numeric(20,2) not null check (current_available >= 0),
       external_movement numeric(20,2) not null default 0 check (external_movement >= 0),
       internal_allocation numeric(20,2) not null default 0 check (internal_allocation >= 0),
-      expected_available_after numeric(20,2) not null,
-      guard_verdict text check (guard_verdict in ('ALLOW','REVIEW','BLOCK')),
-      plan_hash text,
-      intent_payload jsonb,
-      plan_payload jsonb,
+      total_committed numeric(20,2) not null default 0 check (total_committed >= 0),
+      available_after numeric(20,2) not null,
+      requires_approval boolean not null,
+      status text not null check (status in ('DRAFT','PARSING','VALIDATING','BLOCKED','AWAITING_USER_APPROVAL','APPROVED','EXECUTING','AWAITING_DEVICE_SIGNATURE','PROCESSING','COMPLETED','FAILED','CANCELLED')),
+      guard_verdict text check (guard_verdict is null or guard_verdict in ('ALLOW','REVIEW','BLOCK')),
+      plan_hash text not null,
+      intent_payload jsonb not null,
+      plan_payload jsonb not null,
       approved_plan_hash text,
-      created_at timestamptz not null default now(),
       approved_at timestamptz,
-      completed_at timestamptz,
+      created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     )
   `;
+  await sql`alter table moniflow_private.money_plans add column if not exists original_instruction text`;
+  await sql`alter table moniflow_private.money_plans add column if not exists guard_verdict text`;
+  await sql`alter table moniflow_private.money_plans add column if not exists plan_hash text`;
   await sql`alter table moniflow_private.money_plans add column if not exists intent_payload jsonb`;
   await sql`alter table moniflow_private.money_plans add column if not exists plan_payload jsonb`;
   await sql`alter table moniflow_private.money_plans add column if not exists approved_plan_hash text`;
+  await sql`alter table moniflow_private.money_plans add column if not exists approved_at timestamptz`;
   await sql`create index if not exists money_plans_local_user_created_idx on moniflow_private.money_plans(local_user_id, created_at desc)`;
 
   await sql`
     create table if not exists moniflow_private.plan_actions (
       id uuid primary key default gen_random_uuid(),
-      money_plan_id uuid not null references moniflow_private.money_plans(id) on delete cascade,
-      type text not null,
+      plan_id uuid not null references moniflow_private.money_plans(id) on delete cascade,
+      action_index integer not null check (action_index > 0),
+      kind text not null,
+      label text not null,
+      description text not null,
       amount numeric(20,2) not null default 0 check (amount >= 0),
-      destination_type text,
-      destination_id text,
-      label text,
-      position integer not null check (position > 0),
-      status text not null default 'DRAFT',
+      movement text not null,
       requires_approval boolean not null default false,
       created_at timestamptz not null default now(),
-      unique(money_plan_id, position)
+      unique(plan_id, action_index)
     )
   `;
 
   await sql`
     create table if not exists moniflow_private.guard_checks (
       id uuid primary key default gen_random_uuid(),
-      money_plan_id uuid not null references moniflow_private.money_plans(id) on delete cascade,
+      plan_id uuid not null references moniflow_private.money_plans(id) on delete cascade,
       rule text not null,
       passed boolean not null,
-      severity text not null default 'CRITICAL',
+      severity text not null,
       message text,
       created_at timestamptz not null default now()
     )
@@ -156,13 +148,11 @@ export async function ensureMoniflowSchema(sql: Sql) {
     create table if not exists moniflow_private.activities (
       id uuid primary key default gen_random_uuid(),
       local_user_id uuid not null references moniflow_private.bmoni_user_mappings(local_user_id) on delete cascade,
-      money_plan_id uuid references moniflow_private.money_plans(id) on delete set null,
-      type text not null,
-      amount numeric(20,2),
-      currency text not null default 'NGN',
-      source text not null check (source in ('BMONI','MONIFLOW')),
-      provider_reference text,
+      kind text not null,
       status text not null,
+      amount numeric(20,2),
+      currency text,
+      reference text,
       metadata jsonb not null default '{}'::jsonb,
       created_at timestamptz not null default now()
     )
@@ -211,12 +201,8 @@ export class PostgresWalletOwnershipRepository implements WalletOwnershipReposit
     await this.sql`
       insert into moniflow_private.wallet_ownership (local_user_id, owner_address, bmoni_smart_wallet_id, smart_wallet_address, currency, created_at, updated_at)
       values (${value.localUserId}::uuid, ${value.ownerAddress}, ${value.bmoniSmartWalletId}, ${value.smartWalletAddress}, ${value.currency}, ${value.createdAt}::timestamptz, ${value.updatedAt}::timestamptz)
-      on conflict (local_user_id) do update set
-        owner_address = excluded.owner_address,
-        bmoni_smart_wallet_id = excluded.bmoni_smart_wallet_id,
-        smart_wallet_address = excluded.smart_wallet_address,
-        currency = excluded.currency,
-        updated_at = excluded.updated_at
+      on conflict (local_user_id) do update set owner_address = excluded.owner_address, bmoni_smart_wallet_id = excluded.bmoni_smart_wallet_id,
+        smart_wallet_address = excluded.smart_wallet_address, currency = excluded.currency, updated_at = excluded.updated_at
     `;
     return value;
   }
@@ -230,25 +216,21 @@ export class PostgresMoneyPlanRepository implements MoneyPlanRepository {
   async create(input: CreatePersistedMoneyPlanInput): Promise<PersistedMoneyPlan> {
     const rows = await this.sql`
       insert into moniflow_private.money_plans (
-        local_user_id, original_instruction, status, currency, balance_before, external_movement,
-        internal_allocation, expected_available_after, guard_verdict, plan_hash, intent_payload, plan_payload,
-        approved_plan_hash, approved_at
+        local_user_id, original_instruction, source_intent, currency, current_available, external_movement,
+        internal_allocation, total_committed, available_after, requires_approval, status, guard_verdict,
+        plan_hash, intent_payload, plan_payload, approved_plan_hash, approved_at
       ) values (
-        ${input.localUserId}::uuid, ${input.originalInstruction}, 'VALIDATING', ${input.plan.currency}, ${input.plan.currentAvailable},
-        ${input.plan.totals.externalMovement}, ${input.plan.totals.internalAllocation}, ${input.plan.totals.availableAfter},
-        null, ${input.planHash}, ${this.sql.json(input.intent)}, ${this.sql.json(input.plan)}, null, null
-      )
-      returning id
+        ${input.localUserId}::uuid, ${input.originalInstruction}, ${input.plan.sourceIntent}, ${input.plan.currency}, ${input.plan.currentAvailable},
+        ${input.plan.totals.externalMovement}, ${input.plan.totals.internalAllocation}, ${input.plan.totals.totalCommitted},
+        ${input.plan.totals.availableAfter}, ${input.plan.requiresApproval}, 'VALIDATING', null, ${input.planHash},
+        ${JSON.stringify(input.intent)}::jsonb, ${JSON.stringify(input.plan)}::jsonb, null, null
+      ) returning id
     `;
     const id = String(rows[0]?.id ?? "");
     for (const action of input.plan.actions) {
       await this.sql`
-        insert into moniflow_private.plan_actions (
-          money_plan_id, type, amount, destination_type, destination_id, label, position, status, requires_approval
-        ) values (
-          ${id}::uuid, ${action.kind}, ${action.amount}, ${action.kind === "BANK_WITHDRAWAL" ? "SAVED_BANK" : null},
-          null, ${action.label}, ${action.index}, 'DRAFT', ${action.requiresApproval}
-        )
+        insert into moniflow_private.plan_actions (plan_id, action_index, kind, label, description, amount, movement, requires_approval)
+        values (${id}::uuid, ${action.index}, ${action.kind}, ${action.label}, ${action.description}, ${action.amount}, ${action.movement}, ${action.requiresApproval})
       `;
     }
     const stored = await this.findById(id, input.localUserId);
@@ -260,9 +242,7 @@ export class PostgresMoneyPlanRepository implements MoneyPlanRepository {
     const rows = await this.sql`
       select id, local_user_id, original_instruction, status, intent_payload, plan_payload,
              guard_verdict, plan_hash, approved_plan_hash, approved_at, created_at, updated_at
-      from moniflow_private.money_plans
-      where id = ${planId}::uuid and local_user_id = ${localUserId}::uuid
-      limit 1
+      from moniflow_private.money_plans where id = ${planId}::uuid and local_user_id = ${localUserId}::uuid limit 1
     `;
     if (!rows[0]) return null;
     return mapMoneyPlanRow(moneyPlanRowSchema.parse(rows[0]));
@@ -276,19 +256,18 @@ export class PostgresMoneyPlanRepository implements MoneyPlanRepository {
     currentPlanHash: string
   ): Promise<PersistedMoneyPlan | null> {
     const status = verdict === "BLOCK" ? "BLOCKED" : verdict === "REVIEW" ? "AWAITING_USER_APPROVAL" : "APPROVED";
+    const approvedAt = verdict === "ALLOW" ? new Date().toISOString() : null;
     await this.sql.begin(async (transaction) => {
       await transaction`
         update moniflow_private.money_plans
         set status = ${status}, guard_verdict = ${verdict}, plan_hash = ${currentPlanHash},
-            approved_plan_hash = ${verdict === "ALLOW" ? currentPlanHash : null},
-            approved_at = ${verdict === "ALLOW" ? new Date().toISOString() : null}::timestamptz,
-            updated_at = now()
+            approved_plan_hash = ${verdict === "ALLOW" ? currentPlanHash : null}, approved_at = ${approvedAt}::timestamptz, updated_at = now()
         where id = ${planId}::uuid and local_user_id = ${localUserId}::uuid
       `;
-      await transaction`delete from moniflow_private.guard_checks where money_plan_id = ${planId}::uuid`;
+      await transaction`delete from moniflow_private.guard_checks where plan_id = ${planId}::uuid`;
       for (const check of checks) {
         await transaction`
-          insert into moniflow_private.guard_checks (money_plan_id, rule, passed, severity, message)
+          insert into moniflow_private.guard_checks (plan_id, rule, passed, severity, message)
           values (${planId}::uuid, ${check.rule}, ${check.passed}, ${check.severity}, ${check.message})
         `;
       }
@@ -300,16 +279,16 @@ export class PostgresMoneyPlanRepository implements MoneyPlanRepository {
     await this.sql`
       update moniflow_private.money_plans
       set status = 'APPROVED', approved_plan_hash = ${approvedPlanHash}, approved_at = now(), updated_at = now()
-      where id = ${planId}::uuid and local_user_id = ${localUserId}::uuid and status = 'AWAITING_USER_APPROVAL'
+      where id = ${planId}::uuid and local_user_id = ${localUserId}::uuid
+        and status = 'AWAITING_USER_APPROVAL' and guard_verdict = 'REVIEW'
     `;
     return this.findById(planId, localUserId);
   }
 
-  async invalidateApproval(planId: string, localUserId: string, currentPlanHash: string): Promise<PersistedMoneyPlan | null> {
+  async invalidateApproval(planId: string, localUserId: string, _currentPlanHash: string): Promise<PersistedMoneyPlan | null> {
     await this.sql`
       update moniflow_private.money_plans
-      set status = 'AWAITING_USER_APPROVAL', plan_hash = ${currentPlanHash}, approved_plan_hash = null,
-          approved_at = null, updated_at = now()
+      set status = 'VALIDATING', guard_verdict = null, approved_plan_hash = null, approved_at = null, updated_at = now()
       where id = ${planId}::uuid and local_user_id = ${localUserId}::uuid
     `;
     return this.findById(planId, localUserId);
