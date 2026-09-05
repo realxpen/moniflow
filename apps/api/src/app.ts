@@ -131,7 +131,3 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   if (runtime) app.addHook("onClose", async () => runtime.close());
   return app;
 };
-
-const app = buildApp();
-
-export default app;
