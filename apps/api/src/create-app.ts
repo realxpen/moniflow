@@ -85,7 +85,9 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
     limits: { fields: 12, files: 4, fileSize: 8 * 1024 * 1024, parts: 16 }
   });
 
-  if (dependencies.ready) app.addHook("onReady", async () => dependencies.ready);
+  // Do not make Fastify boot depend on database readiness. Repository-backed
+  // routes initialize the repository set lazily when they are actually used,
+  // while /health and /health/bmoni remain independent of database startup.
   if (testRepositories) app.addHook("onClose", async () => testRepositories.close());
 
   const operatorOptions = {
