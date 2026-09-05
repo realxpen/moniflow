@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildApp } from "../app.js";
+import { buildApp } from "../create-app.js";
 import { SqliteUserMappingRepository } from "../repositories/sqlite-user-mapping.js";
 import type { BmoniGateway } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
