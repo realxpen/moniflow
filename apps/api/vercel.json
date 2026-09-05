@@ -1,5 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "fastify",
-  "installCommand": "cd ../.. && pnpm install --no-frozen-lockfile"
+  "framework": null,
+  "installCommand": "cd ../.. && pnpm install --no-frozen-lockfile",
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "destination": "/api/index?__moniflow_path=:path*"
+    }
+  ]
 }
