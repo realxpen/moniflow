@@ -2,6 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "cd ../.. && pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm run build && mkdir -p public",
+  "outputDirectory": "public",
   "rewrites": [
     {
       "source": "/:path*",
