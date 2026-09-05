@@ -50,6 +50,26 @@ describe("GET /health", () => {
     expect(response.json()).toEqual({ status: "ok", service: "moniflow-api", environment: "test" });
   });
 
+  it("does not block health checks on database readiness", async () => {
+    const gateway: BmoniGateway = {
+      createUser: vi.fn(),
+      getSupportedSmartWalletCurrencies: vi.fn(),
+      ...gatewayMethods()
+    };
+    const repository = new SqliteUserMappingRepository(":memory:");
+    const app = buildApp({
+      getBmoniGateway: () => gateway,
+      getBmoniUserService: () => new BmoniUserService(gateway, repository),
+      ready: new Promise<void>(() => {})
+    });
+    app.addHook("onClose", async () => repository.close());
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/health" });
+
+    expect(response.statusCode).toBe(200);
+  });
+
   it("checks BMONI connectivity without returning credentials", async () => {
     const gateway: BmoniGateway = {
       createUser: vi.fn(),
