@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "pnpm --filter @moniflow/moniguard build && tsc -p tsconfig.build.json",
     "dev": "node --watch --import tsx src/server.ts",
     "start": "node --import tsx src/server.ts",
     "start:prod": "node dist/server.js",
