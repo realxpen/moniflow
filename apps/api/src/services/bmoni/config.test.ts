@@ -11,8 +11,8 @@ async function loadConfig() {
 }
 
 describe("getBmoniConfig", () => {
-  it("accepts only the documented sandbox origin", async () => {
-    vi.stubEnv("NODE_ENV", "test");
+  it("accepts the documented sandbox origin in a production Node runtime", async () => {
+    vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BMONI_BASE_URL", "https://embedded-dev.bmoni.com");
     vi.stubEnv("BMONI_API_KEY", "test-key");
     const { getBmoniConfig } = await loadConfig();
@@ -23,21 +23,21 @@ describe("getBmoniConfig", () => {
     });
   });
 
-  it("rejects the sandbox client in production mode", async () => {
+  it("rejects a different provider host even in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("BMONI_BASE_URL", "https://embedded-dev.bmoni.com");
-    vi.stubEnv("BMONI_API_KEY", "test-key");
-    const { getBmoniConfig } = await loadConfig();
-
-    expect(() => getBmoniConfig()).toThrow("cannot run in production mode");
-  });
-
-  it("rejects a different provider host", async () => {
-    vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("BMONI_BASE_URL", "https://embedded.bmoni.com");
     vi.stubEnv("BMONI_API_KEY", "test-key");
     const { getBmoniConfig } = await loadConfig();
 
     expect(() => getBmoniConfig()).toThrow("development host");
+  });
+
+  it("rejects a sandbox URL that is not origin-only", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BMONI_BASE_URL", "https://embedded-dev.bmoni.com/v1");
+    vi.stubEnv("BMONI_API_KEY", "test-key");
+    const { getBmoniConfig } = await loadConfig();
+
+    expect(() => getBmoniConfig()).toThrow("origin only");
   });
 });

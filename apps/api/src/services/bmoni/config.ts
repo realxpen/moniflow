@@ -12,12 +12,6 @@ export type BmoniConfig = {
 };
 
 export function getBmoniConfig(): BmoniConfig {
-  if (env.NODE_ENV === "production") {
-    throw new BmoniConfigurationError(
-      "The Phase 2 BMONI client is sandbox-only and cannot run in production mode."
-    );
-  }
-
   if (!env.BMONI_BASE_URL || !env.BMONI_API_KEY) {
     throw new BmoniConfigurationError(
       "BMONI sandbox configuration is incomplete. Set BMONI_BASE_URL and BMONI_API_KEY server-side."

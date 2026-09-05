@@ -30,6 +30,16 @@ export type RepositorySet = {
   close(): Promise<void>;
 };
 
+function observeReadiness(ready: Promise<void>) {
+  // Repository initialization may run in the background after the first
+  // repository-backed route is touched. Observe a rejection immediately so
+  // a transient database connection failure cannot become an unhandled
+  // rejection and terminate unrelated Vercel requests. Callers that await
+  // `ready` still receive the original rejection.
+  void ready.catch(() => undefined);
+  return ready;
+}
+
 export function createRepositories(databaseUrl: string): RepositorySet {
   if (databaseUrl === ":memory:" || databaseUrl.startsWith("file:")) {
     const users = new SqliteUserMappingRepository(databaseUrl);
@@ -60,17 +70,19 @@ export function createRepositories(databaseUrl: string): RepositorySet {
   const plans = new PostgresMoneyPlanRepository(sql);
   const banks = new PostgresBankAccountRepository(sql);
   const executions = new PostgresExecutionRepository(sql);
+  const ready = observeReadiness((async () => {
+    await ensureMoniflowSchema(sql);
+    await ensureBankAccountSchema(sql);
+    await ensureExecutionSchema(sql);
+  })());
+
   return {
     users,
     wallets,
     plans,
     banks,
     executions,
-    ready: (async () => {
-      await ensureMoniflowSchema(sql);
-      await ensureBankAccountSchema(sql);
-      await ensureExecutionSchema(sql);
-    })(),
+    ready,
     async close() {
       await sql.end({ timeout: 5 });
     }
