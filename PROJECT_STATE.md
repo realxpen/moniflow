@@ -1,212 +1,248 @@
 # MONIFlow Project State
 
-## Current Phase
+## Current Gate
 
-Phase 13 — Provider Submission & Verification
+**Stabilization before live BMONI verification.**
 
-Phases 11–13 are implemented at the application/code boundary. The remaining blockers are live sandbox/provider verification and deployment environment verification, not missing execution architecture.
+MONIFlow's core MVP architecture is substantially implemented, but the project must not advance into Pockets, Activity, optional LLM work, or additional polish until the repository is green and the real BMONI sandbox lifecycle has been proven.
 
-## Working in Code
+The pre-stabilization reference commit is:
 
-- Phase 1 pnpm workspace, Expo Router mobile app, Fastify API, package boundaries
-- Phase 2 visual system and reusable components
-- Phase 3 shell/navigation
-- Phase 4 BMONI REST client + user mapping
-- Phase 5 native BMONI wallet + owner-proof flow
-- Phase 6 Nigeria NGN KYC flow in provider-required order
-- Phase 7 provider wallet/balance + NGN funding-account support
-- Phase 8 deterministic Intent Engine
-- Phase 9 provider-balance Money Plan
-- Phase 10 deterministic MONI Guard
-- Phase 11 persisted Human Approval state machine
-- Phase 12 Nigerian withdrawal proposal + raw proposal-hash device signing
-- Phase 13 provider signature submission + proposal polling/result
+`e24b9ce0a6876dae7e1591031046977acdd1ef8c` — **Align MONIFlow with real BMONI sandbox lifecycle**
 
-## Non-Negotiable Execution Boundary
+GitHub Actions run **MONIFlow CI #116** for that commit failed during **Typecheck**, so its Test step was skipped. Do not describe TypeScript/tests as verified from that run. The stabilization change that follows must re-prove CI and deployment health.
 
-No external financial movement may be initiated from client-generated plan data.
+## Canonical Build State
 
-Every execution begins with:
+| Area | State | Meaning |
+| --- | --- | --- |
+| Phases 0–3 — foundation/UI/shell | ✅ Built | Monorepo, API, mobile shell, design system and navigation exist. |
+| Phase 4 — BMONI foundation | 🟡 Partial | Real `/health/bmoni` connectivity was proven, but live create-user + persisted `bmoniUserId` checkpoint has not passed yet. |
+| Phase 5 — device wallet | 🟡 Code built | Native BMONI SDK, PIN, owner key, owner-proof challenge, `signMessage`, managed CNGN wallet and persistence path exist; real-device run still required. |
+| Phase 6 — Nigeria KYC | 🟡 Code built | Current NGN onboarding flow is implemented, including sandbox-persona data handling; provider completion is not yet proven. |
+| Phase 7 — wallet/balance | 🟡 Code built | Provider wallet, balance and NGN account readback routes exist; waiting for a real sandbox user/wallet. |
+| Phase 8 — Intent Engine | ✅ Built | Deterministic intent parsing. |
+| Phase 9 — Money Plan | ✅ Built | Structured consequences and calculations. |
+| Phase 10 — MONI Guard | ✅ Built | Deterministic safety rules. |
+| Phase 11 — Human Approval | ✅ Built | Persisted approval + fingerprint protection. |
+| Phase 12 — Nigerian bank destination | 🟡 Built, unverified live | Real bank list → verify → register path exists; no fake GTBank fixture. |
+| Phase 13 — BMONI execution | 🟡 Built, unverified live | Offramp → provider proposal state → signing digest → device signature → BMONI status; no fake completion. |
+| Phase 14 — Pockets | ❌ Not real yet | Current Pockets experience is still mock/static and must not be presented as persistent financial state. |
+| Phase 15 — Activity | ❌ Not real yet | Current Activity experience is still a static preview. |
+| Phases 16–19 | ⏳ Later | Optional LLM, UI polish, demo hardening and presentation. |
 
-`requireApprovedPlanForExecution(planRepository, planId, localUserId)`
+## Stabilization Blocker from CI #116
 
-It only accepts an explicitly approved, unchanged persisted plan whose approval fingerprint still matches the current stored Money Plan.
+Two concrete TypeScript failures were confirmed on `e24b9ce…`:
 
-If amount, destination, action structure, totals, or another approval-sensitive field changes, approval is invalidated and the plan returns to validation/Guard before it can be approved again.
+1. `apps/mobile/app/landing.tsx` used unsupported React Native `fontWeight: "650"` values. These must use a supported weight such as `"600"`.
+2. `apps/mobile/services/bmoni-device.ts` (and the web fallback with the same implementation) exposed unsupported methods as `Promise<never>`. That made `wallet-native.tsx` infer values such as the wallet address as `never`, producing `toLowerCase` errors. The fallback must preserve the native interface types while still throwing at runtime outside iOS/Android development builds.
 
-Before BMONI proposal creation MONIFlow also re-reads the provider-backed CNGN balance. A balance change invalidates the approved consequence snapshot and returns `BALANCE_CHANGED_REPLAN_REQUIRED`; no proposal is created.
+The native implementation in `bmoni-device.native.ts` remains the real BMONI SDK wrapper; the fallback must not emulate wallet/signing functionality.
 
-## Nigeria NGN KYC Lifecycle
+## Phase 4 Live Checkpoint
 
-The current React Native integration follows the provider order:
+Phase 4 is not complete until MONIFlow proves all of the following against the deployed API and BMONI sandbox:
 
-1. Create BMONI user.
-2. Create/recover device owner wallet.
-3. Owner-proof challenge + EIP-191 `signMessage`.
-4. Create managed CNGN wallet.
-5. BVN lookup for sandbox-persona match.
-6. PATCH Nigerian KYC profile.
-7. Upload identification document.
-8. Upload proof-of-address document.
-9. GET `/kyc/readiness`.
-10. POST `/kyc/activate` with `{}` for NGN; no `sumsubLevelName`.
-11. POST `/onboarding/start-nigeria` using persisted CNGN wallet address/index.
-12. GET onboarding status until BMONI reports the rail active/ready.
-13. Read existing NGN deposit account or POST `/vba/ngn` with `{ smartWalletId }`.
-14. Use BMONI account balances as the financial source of truth.
+1. `GET /health` succeeds.
+2. `GET /health/bmoni` succeeds.
+3. A fresh BMONI sandbox user is created through MONIFlow.
+4. The returned `bmoniUserId` is persisted in Supabase/Postgres.
+5. Repeating the same local-user onboarding request resolves to `EXISTING_LOCAL_MAPPING` rather than creating another BMONI user.
 
-No biometric upload is used for the NGN flow.
+Until that passes, downstream wallet/KYC/balance code is **built but not provider-verified**.
 
-KYC uploads accept only bounded JPEG/PNG multipart data in the MONIFlow API before being forwarded to BMONI.
+## BMONI User Mapping Safety
+
+`POST /api/onboarding/user` and `/api/onboarding/users` call the server-side BMONI user service.
+
+Expected provisioning states include:
+
+- `CREATED`
+- `EXISTING_LOCAL_MAPPING`
+- `RECONCILIATION_REQUIRED`
+- `NOT_CONFIGURED`
+- `NOT_CREATED`
+- `OUTCOME_UNKNOWN`
+
+MONIFlow must not automatically retry an ambiguous create-user outcome because that can fork provider identity state.
+
+## Device Wallet Boundary
+
+The intended native lifecycle is:
+
+1. Create or recover the on-device owner wallet.
+2. Configure/verify the signing PIN.
+3. Request a BMONI owner-proof challenge.
+4. Sign the challenge with `signMessage` (EIP-191 message signing).
+5. Create the managed CNGN wallet.
+6. Persist only provider wallet/owner metadata required by MONIFlow.
+
+Private keys and the raw PIN remain on the device.
+
+The non-native/web fallback must throw for wallet/signing operations; it exists only so shared/web builds retain correct TypeScript contracts.
+
+## Current Nigeria NGN KYC Implementation
+
+The current code path does **not** depend on a separate BVN-lookup step before KYC submission.
+
+Current application flow:
+
+1. Load BMONI KYC options.
+2. Load a provider occupation code where required.
+3. Submit the Nigerian KYC profile, including the BVN in `identificationNumbers`.
+4. Upload the identification and proof-of-address document payloads accepted by the MONIFlow API.
+5. Activate the Nigerian KYC/rail flow.
+6. Start/continue Nigerian onboarding with the persisted managed CNGN wallet.
+7. Poll provider onboarding status until active/ready or a provider failure/action-required state is returned.
+8. Read or create the NGN deposit account.
+9. Read BMONI account balances as the source of truth.
+
+For the sandbox persona currently targeted by the build, BVN `22222222222` belongs to **Samson Jabo**. The sandbox profile details must match the provider persona; do not combine the BVN with arbitrary names or real identity data.
+
+Provider completion of this path has **not** yet been proven. If live BMONI behavior differs from the checked-in assumptions, current BMONI documentation/provider responses win; do not fabricate a successful state.
 
 ## Nigerian Bank Destination
 
 Implemented provider path:
 
-1. `GET /bank-accounts/nigerian-banks`
-2. `POST /bank-accounts/verify-nigerian-account`
-3. Server re-verifies the holder name before registration.
-4. `POST /bank-accounts/withdrawal-accounts/nigeria`
-5. Persist only provider withdrawal-account ID + bank metadata + masked account number + verified holder name.
+1. Load Nigerian banks from BMONI.
+2. Verify the entered Nigerian bank account through BMONI.
+3. Confirm the provider-returned account-holder identity.
+4. Register the provider withdrawal account.
+5. Persist provider withdrawal-account ID plus safe bank metadata/masked account data.
 
-MONI Guard treats a bank withdrawal destination as valid only when its saved label resolves to a locally persisted BMONI-verified withdrawal account.
+MONI Guard considers a bank-withdrawal destination valid only when the saved label resolves to a persisted BMONI-verified destination.
 
-The authorization screen displays the actual verified provider metadata; it does not fabricate `•••• 8241` or a holder name.
+There is no seeded fake GTBank account. A provider-valid account must be used for live verification.
 
-The uploaded BMONI material does not provide a guaranteed sandbox GTBank 10-digit account fixture, so MONIFlow does not seed a fake verified GTBank account.
+## Human Approval Boundary
 
-## Human Approval
+A Money Plan must be explicitly approved and remain unchanged before external execution.
 
-Persisted state:
+Approval-sensitive state is protected by a SHA-256 fingerprint. If the plan's amount, destination, action structure, totals, provider-backed balance snapshot or another approval-sensitive field changes, approval is invalidated and execution is blocked until the plan is rebuilt/revalidated/reapproved.
 
-`VALIDATING → AWAITING_USER_APPROVAL → APPROVED`
+Human approval is separate from device signing.
 
-The approval fingerprint is SHA-256 over the approval-sensitive Money Plan snapshot.
+## Current BMONI Nigerian Offramp Execution
 
-Execution routes reject:
+The current execution route follows this application flow:
 
-- missing plans
-- non-approved plans
-- stale approval hashes
-- changed plans
-- missing verified bank destinations
-- changed provider balance snapshots
+1. Load the approved persisted Money Plan server-side.
+2. Require exactly one bank-withdrawal action for the MVP execution path.
+3. Load the persisted BMONI user mapping.
+4. Load the managed CNGN wallet.
+5. Load the verified BMONI Nigerian withdrawal destination.
+6. Re-read the provider-backed CNGN balance.
+7. If the provider balance differs from the approved snapshot, invalidate approval and return `BALANCE_CHANGED_REPLAN_REQUIRED`.
+8. Call the BMONI Nigeria offramp operation and persist the returned proposal ID idempotently — one provider execution per Money Plan.
+9. Read the provider proposal state.
+10. Wait until the provider reports the proposal ready for signatures (`PENDING_SIGNATURES`).
+11. Request the proposal sign payload.
+12. Require the documented raw 32-byte `hashToSign`.
+13. Native device signs with `signTransactionHash(hashToSign, pin)`.
+14. Submit only the signature to BMONI.
+15. Move local execution state to `PROCESSING` after BMONI accepts the signature.
+16. Follow-up provider reads drive `COMPLETED`, `FAILED`, or continued processing.
 
-## BMONI Nigerian Offramp Execution
+The current MONIFlow execution route does **not** insert a separate application-side proposal `/approve` call between offramp creation and sign-payload retrieval. Do not reintroduce the older manual-approve assumption unless current provider documentation/live behavior explicitly requires it.
 
-Implemented provider path:
+Owner proof and proposal signing are deliberately different:
 
-1. Approved persisted plan loaded server-side.
-2. Exactly one bank-withdrawal action selected for the current MVP execution route.
-3. Managed CNGN wallet loaded.
-4. Verified BMONI bank destination loaded.
-5. Fresh BMONI balance checked against approved snapshot.
-6. `POST /smart-wallets/{smartWalletId}/offramp/nigeria` with `{ bankAccountId, fromAmount }`.
-7. Proposal ID persisted idempotently — one provider execution per Money Plan.
-8. `POST /smart-wallets/proposals/{proposalId}/approve`.
-9. `GET /smart-wallets/proposals/{proposalId}/sign-payload`.
-10. Require documented raw 32-byte `hashToSign`.
-11. Native device signs with `signTransactionHash(hashToSign, pin)`.
-12. PIN/private key stay on device.
-13. `POST /smart-wallets/proposals/{proposalId}/sign` with the signature only.
-14. `GET /smart-wallets/proposals/{proposalId}` drives processing/completion state.
-
-Owner proof and transaction signing are deliberately different:
-
-- owner proof: `signMessage`
-- proposal: `signTransactionHash`
+- owner proof → `signMessage`
+- proposal digest → `signTransactionHash`
 
 They must never be interchanged.
 
 ## Provider Result Policy
 
-MONIFlow never declares an external withdrawal successful because a local timer finished or a signature was submitted.
+MONIFlow never declares an external withdrawal successful because a local timer finished, a proposal was created, or a signature was submitted.
 
-Provider mapping:
+Provider mapping remains:
 
-- BMONI `COMPLETED` → MONIFlow execution `COMPLETED`
-- BMONI failed/rejected/cancelled terminal states → `FAILED`
-- every other non-terminal state → `PROCESSING`
+- BMONI terminal success such as `COMPLETED` → MONIFlow `COMPLETED`
+- BMONI terminal failed/rejected/cancelled state → MONIFlow `FAILED`
+- non-terminal provider state → `PREPARING`, `AWAITING_DEVICE_SIGNATURE`, or `PROCESSING` as appropriate
 
-The mobile execution/result UI polls the BMONI proposal and displays the provider state.
+The BMONI proposal/status response is authoritative for external execution success.
 
 ## Persistence
 
-Supabase/Postgres private schema is used for durable server state.
+Supabase/Postgres private schema is the durable server-state layer for the deployed API.
 
-Execution-related persistence includes:
+Persisted execution-related data includes:
 
-- money plans and approval hashes
+- local ↔ BMONI user mapping
+- managed wallet ownership metadata
+- Money Plans and approval hashes
 - plan actions / Guard state
-- BMONI wallet ownership metadata
 - BMONI-verified bank destination metadata
 - provider proposal/execution state
 
-`moniflow_private.provider_executions` has one row per Money Plan and a unique provider proposal ID to prevent automatic duplicate proposal creation on retries.
+`moniflow_private.provider_executions` keeps one provider execution per Money Plan and prevents automatic duplicate proposal creation on retries.
 
-The Supabase migration for bank labels/provider executions has been applied to the connected MONIFlow project. Security advisor returned no findings after the migration.
+## Deployment Snapshot Before Stabilization
 
-## Deployment
+At the `e24b9ce…` checkpoint:
 
-`apps/api/vercel.json` now identifies the API project as Fastify. Vercel officially recognizes `src/server.ts` as a Fastify entrypoint.
+- `moniflow` Vercel deployment: ✅ success
+- `moniflow-api` Vercel deployment: ❌ failure
+- GitHub CI #116: ❌ Typecheck failure
+- Tests in CI #116: ⏭ skipped because Typecheck failed
 
-For the API deployment, configure a separate Vercel project rooted at `apps/api` with server-only environment variables:
+The exact `moniflow-api` Vercel failure cause was not confirmed because the available Vercel session did not expose the `swifnatechnologyltd` team scope. Do not speculate about that failure from this file.
 
-- `NODE_ENV=production`
-- `BMONI_BASE_URL=https://embedded-dev.bmoni.com`
-- `BMONI_API_KEY=<sandbox secret>`
-- `BMONI_REQUEST_TIMEOUT_MS`
-- `DATABASE_URL=<persistent Supabase/Postgres URL>`
+After stabilization, verify **both** Vercel deployments and the new GitHub CI run before beginning the live BMONI user test.
 
-The mobile/web deployment receives only:
+## Critical Live Verification Chain
 
-- `EXPO_PUBLIC_API_URL=https://<deployed-api>`
-- optional dev-only `EXPO_PUBLIC_DEV_LOCAL_USER_ID`
+After the stabilization gate is green, execute this exact chain:
 
-Never expose `BMONI_API_KEY` in `EXPO_PUBLIC_*`.
+1. `GET /health`
+2. `GET /health/bmoni`
+3. Create fresh BMONI sandbox user
+4. Persist `bmoniUserId`
+5. Repeat onboarding request → `EXISTING_LOCAL_MAPPING`
+6. Native device wallet
+7. Owner-proof challenge
+8. `signMessage`
+9. Managed CNGN wallet
+10. Read real wallet + CNGN balance
+11. Nigeria KYC
+12. NGN rail active
+13. NGN funding/deposit account
+14. Nigerian bank verification + registration
+15. Real sandbox Nigerian withdrawal/offramp proposal
+16. Provider proposal reaches signing-ready state
+17. `signTransactionHash`
+18. BMONI accepts signature
+19. BMONI returns a terminal proposal state
 
-## Verification Status
-
-### Verified
-
-- GitHub CI install succeeds.
-- TypeScript typecheck succeeds.
-- Test suite succeeds.
-- Supabase execution schema migration applied.
-- Supabase security advisor has no findings.
-- Vercel-compatible Fastify entrypoint/project configuration is committed.
-
-### Still Requires a Real Provider/Device Run
-
-- deployed API environment actually contains the intended `DATABASE_URL`
-- deployed API can reach BMONI with the real sandbox API key
-- one BMONI sandbox user completes the entire lifecycle
-- native owner wallet/owner-proof run on a development build
-- sandbox KYC document images accepted
-- BMONI reports NGN rail active
-- NGN virtual account created/read for that user
-- sandbox funds credited and visible
-- a provider-valid Nigerian/GTBank account verifies and registers
-- real BMONI offramp proposal is created
-- raw `hashToSign` is signed by the native device
-- BMONI accepts the proposal signature
-- BMONI returns a terminal proposal state
-
-These are intentionally not marked complete until the external provider/device actually reports them.
+Do not build Phase 14 Pockets, Phase 15 Activity, optional LLM work, or additional UI polish before the live chain reaches at least **user → wallet → KYC → balance**.
 
 ## Sandbox Funding Reality
 
-BMONI sandbox wallets begin empty. The documented standard sandbox credit is NGN 1,000 and USD 10; larger amounts can be requested for a specific scenario.
+BMONI sandbox wallets begin empty. The documented standard sandbox credit is NGN 1,000 and USD 10; a larger amount may need to be requested for the canonical demo.
 
-The canonical MONIFlow demo uses NGN 300,000 current available, NGN 40,000 external withdrawal, and NGN 20,000 internal allocation. Request NGN 300,000 for the sandbox demo if BMONI permits it; otherwise the demo must use the actual provider-backed balance.
+The canonical MONIFlow demo uses:
 
-## Architecture Decisions
+- current available: NGN 300,000
+- external withdrawal: NGN 40,000
+- internal Laptop allocation: NGN 20,000
+
+If the provider does not supply NGN 300,000 in sandbox, the live demo must use the actual provider-backed balance and mathematically valid amounts. Never hardcode a fake provider balance as though it were live.
+
+## Non-Negotiable Architecture Decisions
 
 - Intent Engine decides only what the user explicitly requested.
+- Natural-language/AI output never directly executes money movement.
 - Money Plan explains financial consequences before execution.
 - MONI Guard is deterministic and server-authoritative.
 - Human approval is separate from Guard clearance.
 - Device signature is separate from human approval.
 - BMONI provider status is the source of truth for external execution success.
 - Pockets remain MONIFlow application bookkeeping unless BMONI explicitly provides equivalent partitioning semantics.
+- No BMONI API key may be exposed through `EXPO_PUBLIC_*` or client bundles.
+- Never store the user's private wallet key on the MONIFlow backend.
 - Never use real identity data in BMONI sandbox.
+- Never fake provider success to unblock the demo.

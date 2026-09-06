@@ -307,14 +307,19 @@ export function extractSignableHash(payload: unknown): string | null {
 }
 
 function proposalRecord(payload: unknown): JsonRecord | null {
-  let record = asRecord(payload);
-  if (!record) return null;
+  const initial = asRecord(payload);
+  if (!initial) return null;
+
+  let record: JsonRecord = initial;
   for (let depth = 0; depth < 3; depth += 1) {
-    const nested = asRecord(record.data) ?? asRecord(record.value);
+    const nestedFromData: JsonRecord | null = asRecord(record["data"]);
+    const nestedFromValue: JsonRecord | null = asRecord(record["value"]);
+    const nested: JsonRecord | null = nestedFromData ?? nestedFromValue;
     if (!nested) break;
     record = nested;
   }
-  return asRecord(record.proposal) ?? record;
+
+  return asRecord(record["proposal"]) ?? record;
 }
 
 function isProviderReadinessPending(error: unknown) {
