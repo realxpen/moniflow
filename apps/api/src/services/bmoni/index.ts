@@ -7,8 +7,10 @@ export {
   BmoniConfigurationError,
   BmoniProviderError,
   BmoniResponseValidationError,
-  BmoniTransportError
+  BmoniTransportError,
+  summarizeBmoniProviderPayload
 } from "./errors.js";
+export type { BmoniProviderDiagnostic } from "./errors.js";
 export type { BmoniGateway, BmoniUploadFile } from "./gateway.js";
 export {
   bmoniErrorEnvelopeSchema,

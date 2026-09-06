@@ -5,7 +5,8 @@ import {
   BmoniConfigurationError,
   BmoniProviderError,
   BmoniResponseValidationError,
-  BmoniTransportError
+  BmoniTransportError,
+  summarizeBmoniProviderPayload
 } from "../services/bmoni/index.js";
 import {
   BmoniUserService,
@@ -56,8 +57,18 @@ export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = asyn
       }
 
       if (error instanceof BmoniProviderError) {
+        const reconciliationDiagnostics =
+          error.statusCode === 409
+            ? summarizeBmoniProviderPayload(error.providerError)
+            : undefined;
+
         app.log.warn(
-          { errorName: error.name, requestId: error.requestId, statusCode: error.statusCode },
+          {
+            errorName: error.name,
+            requestId: error.requestId,
+            statusCode: error.statusCode,
+            ...(reconciliationDiagnostics ? { reconciliationDiagnostics } : {})
+          },
           "BMONI user creation failed"
         );
 
