@@ -22,6 +22,9 @@ export const bmoniDevice = {
   hasPin() {
     return BmoniEmbeddedSdk.hasPin();
   },
+  matchPin(pin: string) {
+    return BmoniEmbeddedSdk.matchPin(pin);
+  },
   setPin(pin: string) {
     return BmoniEmbeddedSdk.setPin(pin);
   },

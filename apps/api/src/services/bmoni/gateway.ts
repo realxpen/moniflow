@@ -25,7 +25,12 @@ export interface BmoniGateway {
   getSupportedSmartWalletCurrencies(): Promise<SupportedSmartWalletCurrencies>;
   createOwnerProofChallenge(bmoniUserId: string, input: OwnerProofChallengeInput): Promise<OwnerProofChallenge>;
   createManagedSmartWallet(bmoniUserId: string, input: CreateManagedWalletInput): Promise<ManagedSmartWallet>;
+
+  // Retained for backwards compatibility with older BMONI integrations. The
+  // current Nigeria flow does not depend on a BVN lookup/name-match gate.
   lookupBvn(bmoniUserId: string, bvn: string): Promise<BvnLookup>;
+  getKycOptions?(bmoniUserId: string): Promise<unknown>;
+  getKycOccupations?(bmoniUserId: string, search: string): Promise<unknown>;
   updateNigeriaKyc(bmoniUserId: string, input: UpdateNigeriaKycInput): Promise<KycProfileResponse>;
   getKycReadiness(bmoniUserId: string): Promise<unknown>;
   activateKyc(bmoniUserId: string): Promise<unknown>;
@@ -43,6 +48,7 @@ export interface BmoniGateway {
   }): Promise<unknown>;
   startNigeriaOnboarding(bmoniUserId: string, input: StartNigeriaOnboardingInput): Promise<StartNigeriaOnboardingResponse>;
   getOnboardingStatus(bmoniUserId: string): Promise<OnboardingStatus>;
+
   listAccountWallets(bmoniUserId: string): Promise<unknown>;
   listAccountBalances(bmoniUserId: string): Promise<unknown>;
   getSmartWallet(bmoniUserId: string, smartWalletId: string): Promise<unknown>;
@@ -58,6 +64,9 @@ export interface BmoniGateway {
     accountHolderName: string;
   }): Promise<unknown>;
   offrampNigeria(bmoniUserId: string, smartWalletId: string, input: { bankAccountId: string; fromAmount: string }): Promise<unknown>;
+
+  // Kept for older callers only. Current Nigeria execution waits for BMONI to
+  // move proposals from PENDING_APPROVALS to PENDING_SIGNATURES itself.
   approveProposal(bmoniUserId: string, proposalId: string): Promise<unknown>;
   getProposalSignPayload(bmoniUserId: string, proposalId: string): Promise<unknown>;
   signProposal(bmoniUserId: string, proposalId: string, signature: string): Promise<unknown>;

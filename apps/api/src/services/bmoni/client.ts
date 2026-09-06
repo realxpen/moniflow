@@ -56,6 +56,18 @@ export class BmoniClient implements BmoniGateway {
     return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc/bvn-lookup/${encodeURIComponent(bvn)}`, bvnLookupSchema, { method: "GET" });
   }
 
+  async getKycOptions(bmoniUserId: string): Promise<unknown> {
+    const payload = await this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc/options`, providerPayloadSchema, { method: "GET" });
+    return unwrapProviderValue(payload);
+  }
+
+  async getKycOccupations(bmoniUserId: string, search: string): Promise<unknown> {
+    const trimmed = search.trim();
+    const suffix = trimmed ? `?search=${encodeURIComponent(trimmed)}` : "";
+    const payload = await this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc/occupations${suffix}`, providerPayloadSchema, { method: "GET" });
+    return unwrapProviderValue(payload);
+  }
+
   async updateNigeriaKyc(bmoniUserId: string, input: UpdateNigeriaKycInput): Promise<KycProfileResponse> {
     return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc`, kycProfileResponseSchema, { body: input, method: "PATCH" });
   }
@@ -65,7 +77,7 @@ export class BmoniClient implements BmoniGateway {
   }
 
   async activateKyc(bmoniUserId: string): Promise<unknown> {
-    // NGN intentionally omits sumsubLevelName. BMONI's current RN reference sends an empty JSON object.
+    // NGN intentionally omits sumsubLevelName. BMONI's current reference sends an empty JSON object.
     return this.request(`/v1/users/${encodeURIComponent(bmoniUserId)}/kyc/activate`, providerPayloadSchema, { method: "POST", body: {} });
   }
 
@@ -160,14 +172,20 @@ export class BmoniClient implements BmoniGateway {
     try {
       const response = await this.fetchImplementation(new URL(path.slice(1), this.config.baseUrl), {
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
-        headers: { accept: "application/json", ...(options.body === undefined ? {} : { "content-type": "application/json" }), "x-api-key": this.config.apiKey },
+        headers: {
+          accept: "application/json",
+          ...(options.body === undefined ? {} : { "content-type": "application/json" }),
+          "x-api-key": this.config.apiKey
+        },
         method: options.method,
         signal: controller.signal
       });
       return this.parseResponse(response, responseSchema);
     } catch (error) {
       return this.handleRequestError(error, controller);
-    } finally { clearTimeout(timeout); }
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private async requestForm(path: `/v1/${string}`, form: FormData): Promise<unknown> {
@@ -183,7 +201,9 @@ export class BmoniClient implements BmoniGateway {
       return this.parseResponse(response, providerPayloadSchema);
     } catch (error) {
       return this.handleRequestError(error, controller);
-    } finally { clearTimeout(timeout); }
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private async parseResponse<TSchema extends z.ZodType>(response: Response, responseSchema: TSchema): Promise<z.infer<TSchema>> {
@@ -207,12 +227,23 @@ export class BmoniClient implements BmoniGateway {
   private async readJson(response: Response, requestId: string | null): Promise<unknown> {
     const rawBody = await response.text();
     if (!rawBody.trim()) return {};
-    try { return JSON.parse(rawBody) as unknown; }
-    catch (error) { throw new BmoniResponseValidationError(requestId, { cause: error }); }
+    try {
+      return JSON.parse(rawBody) as unknown;
+    } catch (error) {
+      throw new BmoniResponseValidationError(requestId, { cause: error });
+    }
   }
 }
 
 function appendFile(form: FormData, file: BmoniUploadFile) {
   const bytes = new Uint8Array(file.bytes);
   form.append("files", new Blob([bytes], { type: file.contentType }), file.filename);
+}
+
+function unwrapProviderValue(value: unknown): unknown {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  if (record.data !== undefined && record.data !== null) return record.data;
+  if (record.value !== undefined && record.value !== null) return record.value;
+  return value;
 }

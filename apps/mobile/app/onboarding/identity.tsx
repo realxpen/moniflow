@@ -33,12 +33,13 @@ function resolveApiUrl() {
 }
 
 export default function IdentityScreen() {
-  const [firstName, setFirstName] = useState("Bunch");
-  const [lastName, setLastName] = useState("Dillon");
-  const [email, setEmail] = useState("bunch.dillon@example.com");
-  const [phoneNumber, setPhoneNumber] = useState("+2348000000000");
+  const [firstName, setFirstName] = useState("Chiamaka");
+  const [lastName, setLastName] = useState("Okafor");
+  const [email, setEmail] = useState(() => `embedded.demo+${Date.now()}@example.com`);
+  const [phoneNumber, setPhoneNumber] = useState("+2348012345678");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<string | null>(null);
 
   const continueOnboarding = async () => {
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !phoneNumber.trim()) {
@@ -48,6 +49,7 @@ export default function IdentityScreen() {
 
     setBusy(true);
     setError(null);
+    setState(null);
     try {
       const apiUrl = resolveApiUrl();
       const response = await fetch(`${apiUrl}/api/onboarding/user`, {
@@ -62,8 +64,11 @@ export default function IdentityScreen() {
       });
       const payload = (await response.json()) as {
         localUserId?: string;
+        provisioningState?: string;
+        retryable?: boolean;
         message?: string;
       };
+      setState(payload.provisioningState ?? null);
       if (!response.ok || !payload.localUserId) {
         throw new Error(payload.message ?? "MONIFlow could not create your sandbox identity.");
       }
@@ -83,7 +88,7 @@ export default function IdentityScreen() {
     <Screen contentContainerStyle={styles.screen} scroll={false}>
       <View style={styles.content}>
         <FlowHeader
-          description="BMONI sandbox verification uses fixed identity personas. These defaults keep user creation and later BVN verification on the same documented persona."
+          description="These defaults follow BMONI's current React Native sandbox reference. A unique email is generated for this screen; MONIFlow also supplies stable partner identity keys server-side."
           eyebrow="01 · SANDBOX IDENTITY"
           title="Create the test workspace."
         />
@@ -91,53 +96,28 @@ export default function IdentityScreen() {
           <View style={styles.row}>
             <View style={styles.field}>
               <Text style={styles.label}>FIRST NAME</Text>
-              <TextInput
-                accessibilityLabel="First name"
-                autoCapitalize="words"
-                onChangeText={setFirstName}
-                style={styles.input}
-                value={firstName}
-              />
+              <TextInput accessibilityLabel="First name" autoCapitalize="words" onChangeText={setFirstName} style={styles.input} value={firstName} />
             </View>
             <View style={styles.field}>
               <Text style={styles.label}>LAST NAME</Text>
-              <TextInput
-                accessibilityLabel="Last name"
-                autoCapitalize="words"
-                onChangeText={setLastName}
-                style={styles.input}
-                value={lastName}
-              />
+              <TextInput accessibilityLabel="Last name" autoCapitalize="words" onChangeText={setLastName} style={styles.input} value={lastName} />
             </View>
           </View>
           <View style={styles.field}>
-            <Text style={styles.label}>EMAIL</Text>
-            <TextInput
-              accessibilityLabel="Email address"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              onChangeText={setEmail}
-              style={styles.input}
-              value={email}
-            />
+            <Text style={styles.label}>EMAIL · UNIQUE SANDBOX TEST</Text>
+            <TextInput accessibilityLabel="Email address" autoCapitalize="none" keyboardType="email-address" onChangeText={setEmail} style={styles.input} value={email} />
           </View>
           <View style={styles.field}>
             <Text style={styles.label}>PHONE</Text>
-            <TextInput
-              accessibilityLabel="Phone number"
-              autoCapitalize="none"
-              keyboardType="phone-pad"
-              onChangeText={setPhoneNumber}
-              style={styles.input}
-              value={phoneNumber}
-            />
+            <TextInput accessibilityLabel="Phone number" autoCapitalize="none" keyboardType="phone-pad" onChangeText={setPhoneNumber} style={styles.input} value={phoneNumber} />
           </View>
           <View style={styles.sandboxRow}>
             <StatusPill label="BMONI SANDBOX" tone="processing" />
-            <Text style={styles.persona}>BUNCH DILLON PERSONA</Text>
+            <Text style={styles.persona}>CURRENT REFERENCE PERSONA</Text>
           </View>
         </SoftCard>
-        <Text style={styles.note}>Do not replace these sandbox identity fields with your real BVN/NIN identity. BMONI’s sandbox only resolves its documented test personas.</Text>
+        <Text style={styles.note}>Do not replace these sandbox values with your real BVN/NIN identity. Nigeria KYC later uses BMONI's documented sandbox BVN.</Text>
+        {state ? <Text style={styles.state}>STATE · {state}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
       <PrimaryButton disabled={busy} onPress={() => void continueOnboarding()}>
@@ -148,11 +128,7 @@ export default function IdentityScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    gap: spacing.xl,
-    justifyContent: "space-between",
-    paddingBottom: spacing.xxl
-  },
+  screen: { gap: spacing.xl, justifyContent: "space-between", paddingBottom: spacing.xxl },
   content: { gap: spacing.xl },
   form: { gap: spacing.lg },
   row: { flexDirection: "row", gap: spacing.sm },
@@ -171,5 +147,6 @@ const styles = StyleSheet.create({
   sandboxRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   persona: { ...typography.technical, color: colors.textSecondary },
   note: { ...typography.caption, color: colors.textSecondary, textAlign: "center" },
+  state: { ...typography.technical, color: colors.textSecondary, textAlign: "center" },
   error: { ...typography.caption, color: colors.statusError, textAlign: "center" }
 });

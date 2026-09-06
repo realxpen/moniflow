@@ -6,7 +6,12 @@ import { ProgressStep } from "@/components/operator";
 import { FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
 import { getExecutionReadiness } from "@/services/approval";
 import { bmoniDevice } from "@/services/bmoni-device";
-import { prepareExecution, submitExecutionSignature, type ExecutionSnapshot } from "@/services/execution";
+import {
+  getExecutionStatus,
+  prepareExecution,
+  submitExecutionSignature,
+  type ExecutionSnapshot
+} from "@/services/execution";
 import { colors, radius, spacing, typography } from "@/theme";
 
 bmoniDevice.initialize({ pinLength: 6, requirePin: true });
@@ -35,7 +40,13 @@ export default function SigningScreen() {
           throw new Error(readiness.message ?? "This plan is not approved for execution.");
         }
         const next = await prepareExecution(planId, localUserId);
-        if (active) setExecution(next);
+        if (!active) return;
+        setExecution(next);
+        if (next.state === "PROCESSING") {
+          router.replace({ pathname: "/operator/execution", params: { localUserId, planId } });
+        } else if (next.state === "COMPLETED" || next.state === "FAILED") {
+          router.replace({ pathname: "/operator/result", params: { localUserId, planId } });
+        }
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : "Execution preparation failed.");
       } finally {
@@ -45,6 +56,29 @@ export default function SigningScreen() {
     void prepare();
     return () => { active = false; };
   }, [localUserId, planId]);
+
+  useEffect(() => {
+    if (!localUserId || !planId || execution?.state !== "PREPARING") return;
+    let active = true;
+
+    const refresh = async () => {
+      try {
+        const next = await getExecutionStatus(planId, localUserId);
+        if (!active) return;
+        setExecution(next);
+        setError(null);
+      } catch (cause) {
+        if (!active) return;
+        setError(cause instanceof Error ? cause.message : "Could not refresh BMONI proposal readiness.");
+      }
+    };
+
+    const timer = setInterval(() => { void refresh(); }, 4000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [execution?.state, localUserId, planId]);
 
   const sign = async () => {
     if (!execution?.hashToSign || execution.state !== "AWAITING_DEVICE_SIGNATURE") return;
@@ -61,7 +95,7 @@ export default function SigningScreen() {
     setError(null);
     try {
       // BMONI proposal signing is deliberately NOT signMessage/EIP-191.
-      // hashToSign is the provider's raw 32-byte digest and must use signTransactionHash.
+      // The provider's raw 32-byte digest must use signTransactionHash.
       const signature = await bmoniDevice.signTransactionHash(execution.hashToSign, pin);
       setPin("");
       const next = await submitExecutionSignature(planId, localUserId, execution.proposalId, signature);
@@ -74,36 +108,57 @@ export default function SigningScreen() {
     }
   };
 
+  const waitingForProvider = execution?.state === "PREPARING";
   const readyToSign = execution?.state === "AWAITING_DEVICE_SIGNATURE" && Boolean(execution.hashToSign);
 
   return (
     <Screen contentContainerStyle={styles.screen}>
       <FlowHeader
-        description="The approved plan has been mapped to a real BMONI Nigerian offramp proposal. Your device signs only BMONI's raw 32-byte proposal digest."
+        description="The approved plan maps to a real BMONI Nigerian offramp proposal. MONIFlow waits for BMONI approvals and only signs once the provider exposes a valid 32-byte digest."
         eyebrow="SECURE SIGNING"
         title="Your key never leaves this device."
       />
 
       <SoftCard style={styles.card}>
         <StatusPill
-          label={loading ? "PREPARING PROPOSAL" : readyToSign ? "AWAITING DEVICE SIGNATURE" : execution?.state ?? "BLOCKED"}
-          tone={loading ? "processing" : readyToSign ? "warning" : execution?.state === "COMPLETED" ? "success" : "processing"}
+          label={
+            loading
+              ? "PREPARING PROPOSAL"
+              : waitingForProvider
+                ? execution?.providerStatus ?? "WAITING FOR BMONI APPROVALS"
+                : readyToSign
+                  ? "AWAITING DEVICE SIGNATURE"
+                  : execution?.state ?? "BLOCKED"
+          }
+          tone={loading || waitingForProvider ? "processing" : readyToSign ? "warning" : execution?.state === "COMPLETED" ? "success" : "processing"}
         />
         <Text style={styles.cardTitle}>
-          {readyToSign ? `${formatNaira(execution?.amount ?? 0)} proposal ready for secure signing.` : "Preparing the BMONI execution boundary."}
+          {readyToSign
+            ? `${formatNaira(execution?.amount ?? 0)} proposal ready for secure signing.`
+            : waitingForProvider
+              ? "BMONI is completing provider approvals."
+              : "Preparing the BMONI execution boundary."}
         </Text>
         <Text style={styles.cardCopy}>
           {readyToSign
-            ? "MONIFlow never receives your PIN or private key. The signature returned by the BMONI SDK is submitted to the provider for this exact proposal only."
-            : error ?? "Creating or recovering the idempotent BMONI proposal…"}
+            ? "MONIFlow never receives your PIN or private key. The SDK signature is submitted for this exact provider proposal only."
+            : waitingForProvider
+              ? "No signature is requested while the proposal is PENDING_APPROVALS. This screen checks BMONI again every few seconds and unlocks signing only at PENDING_SIGNATURES."
+              : error ?? "Creating or recovering the idempotent BMONI proposal…"}
         </Text>
       </SoftCard>
 
       <View style={styles.steps}>
         <ProgressStep index={1} state="complete" title="MONI Guard + approval" detail="Persisted approved plan fingerprint verified" />
         <ProgressStep index={2} state={execution ? "complete" : "active"} title="BMONI proposal" detail={execution ? `Proposal ${shortId(execution.proposalId)}` : "Creating Nigerian offramp proposal"} />
-        <ProgressStep index={3} state={readyToSign ? "active" : "pending"} title="Secure device signature" detail="Raw 32-byte hash · no EIP-191 prefix" />
-        <ProgressStep index={4} state="pending" title="Provider processing" detail="BMONI status drives the result" />
+        <ProgressStep
+          index={3}
+          state={waitingForProvider ? "active" : execution ? "complete" : "pending"}
+          title="Provider approvals"
+          detail={waitingForProvider ? execution?.providerStatus ?? "Waiting for BMONI" : "BMONI cleared the proposal for signing"}
+        />
+        <ProgressStep index={4} state={readyToSign ? "active" : "pending"} title="Secure device signature" detail="Raw 32-byte digest · no EIP-191 prefix" />
+        <ProgressStep index={5} state="pending" title="Provider processing" detail="BMONI status drives the result" />
       </View>
 
       {readyToSign ? (
@@ -127,12 +182,12 @@ export default function SigningScreen() {
 
       {error ? (
         <SoftCard style={styles.errorCard}>
-          <StatusPill label="EXECUTION BLOCKED" tone="warning" />
+          <StatusPill label="PROVIDER CHECK" tone="warning" />
           <Text style={styles.error}>{error}</Text>
         </SoftCard>
       ) : null}
 
-      <Text style={styles.disclosure}>Owner-proof text signing and proposal-hash signing remain separate. This screen only uses signTransactionHash.</Text>
+      <Text style={styles.disclosure}>Owner-proof text signing and proposal-digest signing remain separate. This screen only uses signTransactionHash after BMONI exposes a valid digest.</Text>
     </Screen>
   );
 }

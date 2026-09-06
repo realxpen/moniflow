@@ -14,6 +14,7 @@ export const bmoniDevice = {
   walletAddress: unsupported,
   initWallet: unsupported,
   hasPin: unsupported,
+  matchPin: async (_pin: string) => unsupported(),
   setPin: async (_pin: string) => unsupported(),
   signMessage: async (_message: string, _pin: string) => unsupported(),
   signTransactionHash: async (_hashHex: string, _pin: string) => unsupported()

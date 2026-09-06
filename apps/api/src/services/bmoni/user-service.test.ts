@@ -14,11 +14,8 @@ afterEach(async () => {
 function createFixture() {
   const createUser = vi.fn<BmoniGateway["createUser"]>().mockResolvedValue({
     bmoniUserId: "bmoni-user-1",
-    createdAt: "2026-09-03T12:00:00.000Z",
     email: "ada@example.com",
-    firstName: "Ada",
-    id: "provider-row-1",
-    updatedAt: "2026-09-03T12:00:00.000Z"
+    firstName: "Ada"
   });
   const gateway: BmoniGateway = {
     activateKyc: vi.fn(),
@@ -61,12 +58,22 @@ const input = {
 };
 
 describe("BmoniUserService", () => {
-  it("creates and persists a provider mapping once", async () => {
+  it("creates and persists a provider mapping once with stable partner identity keys", async () => {
     const { createUser, service } = createFixture();
 
     await expect(service.createOrFindMapping(input)).resolves.toMatchObject({ bmoniUserId: "bmoni-user-1", status: "created" });
     await expect(service.createOrFindMapping(input)).resolves.toMatchObject({ bmoniUserId: "bmoni-user-1", status: "existing" });
     expect(createUser).toHaveBeenCalledTimes(1);
+    expect(createUser).toHaveBeenCalledWith(expect.objectContaining({
+      employeeId: "MF-11111111111141118111111111111111",
+      identityId: "moniflow-11111111111141118111111111111111"
+    }));
+  });
+
+  it("preserves explicitly supplied partner identity keys", async () => {
+    const { createUser, service } = createFixture();
+    await service.createOrFindMapping({ ...input, employeeId: "EMP-CUSTOM", identityId: "IDENTITY-CUSTOM" });
+    expect(createUser).toHaveBeenCalledWith(expect.objectContaining({ employeeId: "EMP-CUSTOM", identityId: "IDENTITY-CUSTOM" }));
   });
 
   it("blocks an email from being attached to a second local identity", async () => {

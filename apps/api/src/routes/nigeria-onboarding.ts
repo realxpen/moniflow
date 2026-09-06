@@ -7,31 +7,24 @@ import {
   BmoniProviderError,
   BmoniResponseValidationError,
   BmoniTransportError,
+  updateNigeriaKycInputSchema,
   type BmoniGateway,
   type BmoniUploadFile
 } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
 
 const localUserIdSchema = z.uuid();
-const e164PhoneSchema = z.string().regex(/^\+[1-9]\d{7,14}$/);
-const nigeriaBodySchema = z.object({
-  localUserId: localUserIdSchema,
-  firstName: z.string().trim().min(1),
-  lastName: z.string().trim().min(1),
-  phoneNumber: e164PhoneSchema,
-  bvn: z.string().regex(/^\d{11}$/),
-  address: z.object({
-    streetLine1: z.string().trim().min(1),
-    city: z.string().trim().min(1),
-    state: z.string().trim().min(1),
-    postalCode: z.string().regex(/^\d{6}$/),
-    countryCode: z.literal("NGA")
-  }).strict()
-}).strict();
+const nigeriaBodySchema = updateNigeriaKycInputSchema.extend({ localUserId: localUserIdSchema }).strict();
 const activateBodySchema = z.object({ localUserId: localUserIdSchema, bvn: z.string().regex(/^\d{11}$/) }).strict();
-const identificationTypes = new Set(["passport", "drivers_license", "national_id"]);
-const proofTypes = new Set(["utility_bill", "bank_statement", "government_letter", "tax_document", "lease_agreement"]);
+const metadataQuerySchema = z.object({ localUserId: localUserIdSchema }).strict();
+const occupationsQuerySchema = z.object({
+  localUserId: localUserIdSchema,
+  search: z.string().trim().max(80).optional().default("")
+}).strict();
+const identificationTypes = new Set(["passport", "drivers_license", "national_id", "government_id", "other"]);
+const proofTypes = new Set(["utility_bill", "bank_statement", "rental_agreement", "tax_document", "other"]);
 const allowedImageTypes = new Set(["image/jpeg", "image/png"]);
+const isoDate = /^\d{4}-\d{2}-\d{2}$/;
 
 type NigeriaOnboardingRouteOptions = {
   getBmoniGateway: () => BmoniGateway;
@@ -39,50 +32,63 @@ type NigeriaOnboardingRouteOptions = {
   getWalletOwnershipRepository: () => WalletOwnershipRepository;
 };
 
+type JsonRecord = Record<string, unknown>;
+
 export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteOptions> = async (app, options) => {
-  const ownership = options.getWalletOwnershipRepository();
-
-  // Step 1: BVN match + PATCH /kyc. This route deliberately does NOT start the rail.
-  app.post<{ Body: unknown }>("/start", async (request, reply) => {
-    const parsed = nigeriaBodySchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Enter the documented sandbox identity, E.164 phone, 11-digit BVN, and complete Nigerian address including 6-digit postal code." });
-    }
-
+  app.get<{ Querystring: unknown }>("/options", async (request, reply) => {
+    const parsed = metadataQuerySchema.safeParse(request.query);
+    if (!parsed.success) return reply.status(400).send({ message: "A valid localUserId is required." });
     const mapping = await options.getBmoniUserService().getMapping(parsed.data.localUserId);
-    if (!mapping) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Create the BMONI sandbox user before Nigeria onboarding." });
-    const wallet = await ownership.findByLocalUserId(parsed.data.localUserId);
-    if (!wallet) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Create the CNGN smart wallet before Nigeria onboarding." });
+    if (!mapping) return reply.status(409).send({ message: "Create the BMONI user before loading KYC options." });
 
     try {
       const gateway = options.getBmoniGateway();
-      const existingStatus = await gateway.getOnboardingStatus(mapping.bmoniUserId);
-      if (deriveNigeriaStatus(existingStatus) === "ready") {
-        return reply.send({ environment: "sandbox", status: "ready", providerStatus: existingStatus });
-      }
+      if (!gateway.getKycOptions) return reply.status(502).send({ message: "The configured BMONI client does not expose KYC options." });
+      const provider = await gateway.getKycOptions(mapping.bmoniUserId);
+      return reply.send({ environment: "sandbox", options: provider });
+    } catch (error) {
+      return handleBmoniError(app, reply, error, "KYC options");
+    }
+  });
 
-      const identity = await gateway.lookupBvn(mapping.bmoniUserId, parsed.data.bvn);
-      const namesMatch = identity.firstName.trim().toLowerCase() === parsed.data.firstName.toLowerCase() && identity.lastName.trim().toLowerCase() === parsed.data.lastName.toLowerCase();
-      const phoneMatches = !identity.phoneNumber || identity.phoneNumber === parsed.data.phoneNumber;
-      if (!namesMatch || !phoneMatches) {
-        return reply.status(422).send({ statusCode: 422, error: "Identity Mismatch", message: "The submitted identity does not match the BMONI sandbox BVN persona." });
-      }
+  app.get<{ Querystring: unknown }>("/occupations", async (request, reply) => {
+    const parsed = occupationsQuerySchema.safeParse(request.query);
+    if (!parsed.success) return reply.status(400).send({ message: "A valid localUserId and optional occupation search are required." });
+    const mapping = await options.getBmoniUserService().getMapping(parsed.data.localUserId);
+    if (!mapping) return reply.status(409).send({ message: "Create the BMONI user before searching occupations." });
 
-      await gateway.updateNigeriaKyc(mapping.bmoniUserId, {
-        personalInfo: {
-          firstName: parsed.data.firstName,
-          lastName: parsed.data.lastName,
-          phoneNumber: parsed.data.phoneNumber,
-          dateOfBirth: identity.dateOfBirth,
-          gender: identity.gender
-        },
-        address: parsed.data.address,
-        identificationNumbers: [{ type: "bvn", number: parsed.data.bvn, issuingCountryCode: "NGA" }]
+    try {
+      const gateway = options.getBmoniGateway();
+      if (!gateway.getKycOccupations) return reply.status(502).send({ message: "The configured BMONI client does not expose occupation search." });
+      const provider = await gateway.getKycOccupations(mapping.bmoniUserId, parsed.data.search);
+      return reply.send({ environment: "sandbox", occupations: provider });
+    } catch (error) {
+      return handleBmoniError(app, reply, error, "occupation search");
+    }
+  });
+
+  // Step 1: PATCH /kyc with the current BMONI NGN profile contract.
+  app.post<{ Body: unknown }>("/start", async (request, reply) => {
+    const parsed = nigeriaBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        statusCode: 400,
+        error: "Bad Request",
+        message: "The Nigeria KYC profile is incomplete or invalid.",
+        fields: parsed.error.issues.map((issue) => issue.path.join("."))
       });
+    }
 
+    const { localUserId, ...kycInput } = parsed.data;
+    const mapping = await options.getBmoniUserService().getMapping(localUserId);
+    if (!mapping) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Create the BMONI sandbox user before Nigeria onboarding." });
+    const wallet = await options.getWalletOwnershipRepository().findByLocalUserId(localUserId);
+    if (!wallet) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Create the CNGN smart wallet before Nigeria onboarding." });
+
+    try {
+      await options.getBmoniGateway().updateNigeriaKyc(mapping.bmoniUserId, kycInput);
       return reply.status(202).send({
         environment: "sandbox",
-        identity: { firstName: identity.firstName, lastName: identity.lastName },
         status: "documents_required",
         next: "Upload identification and proof-of-address documents before KYC activation."
       });
@@ -105,7 +111,11 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
             return reply.status(415).send({ message: "KYC document files must be JPEG or PNG images." });
           }
           const bytes = await part.toBuffer();
-          files.set(part.fieldname, { bytes, filename: part.filename || `${part.fieldname}.jpg`, contentType: part.mimetype });
+          files.set(part.fieldname, {
+            bytes,
+            filename: part.filename || `${part.fieldname}.jpg`,
+            contentType: part.mimetype
+          });
         } else {
           fields.set(part.fieldname, String(part.value));
         }
@@ -119,10 +129,21 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
     const idType = fields.get("idType");
     const documentNumber = fields.get("documentNumber");
     const issuingCountry = fields.get("issuingCountry");
+    const expirationDate = fields.get("expirationDate");
     const proofAddressType = fields.get("proofAddressType");
-    if (!localUserIdSchema.safeParse(localUserId).success || !idType || !identificationTypes.has(idType) || !documentNumber?.trim() || issuingCountry !== "NGA" || !proofAddressType || !proofTypes.has(proofAddressType)) {
-      return reply.status(400).send({ message: "Valid localUserId, supported ID type, document number, NGA issuing country, and proof-of-address type are required." });
+    if (
+      !localUserIdSchema.safeParse(localUserId).success ||
+      !idType || !identificationTypes.has(idType) ||
+      !documentNumber?.trim() ||
+      issuingCountry !== "NGA" ||
+      !expirationDate || !isoDate.test(expirationDate) ||
+      !proofAddressType || !proofTypes.has(proofAddressType)
+    ) {
+      return reply.status(400).send({
+        message: "Valid localUserId, supported ID type, document number, NGA issuing country, expiration date, and proof-of-address type are required."
+      });
     }
+
     const idFront = files.get("idFront");
     const poaFront = files.get("poaFront");
     if (!idFront || !poaFront) return reply.status(400).send({ message: "ID front and proof-of-address front images are required." });
@@ -139,7 +160,7 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
         type: idType!,
         documentNumber: documentNumber!.trim(),
         issuingCountry: "NGA",
-        expirationDate: nonEmpty(fields.get("expirationDate")),
+        expirationDate,
         issueDate: nonEmpty(fields.get("issueDate"))
       });
       await gateway.uploadKycProofOfAddress(mapping.bmoniUserId, { files: poaFiles, type: proofAddressType! });
@@ -155,7 +176,7 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
     if (!parsed.success) return reply.status(400).send({ message: "Valid localUserId and 11-digit sandbox BVN are required." });
     const mapping = await options.getBmoniUserService().getMapping(parsed.data.localUserId);
     if (!mapping) return reply.status(409).send({ message: "Create the BMONI user before KYC activation." });
-    const wallet = await ownership.findByLocalUserId(parsed.data.localUserId);
+    const wallet = await options.getWalletOwnershipRepository().findByLocalUserId(parsed.data.localUserId);
     if (!wallet) return reply.status(409).send({ message: "Create the CNGN smart wallet before KYC activation." });
 
     try {
@@ -207,13 +228,19 @@ function nonEmpty(value: string | undefined) {
 }
 
 function handleBmoniError(app: FastifyInstance, reply: FastifyReply, error: unknown, operation: string) {
-  if (error instanceof BmoniConfigurationError) return reply.status(503).send({ statusCode: 503, error: "Service Unavailable", message: "BMONI sandbox access is not configured." });
+  if (error instanceof BmoniConfigurationError) {
+    return reply.status(503).send({ statusCode: 503, error: "Service Unavailable", message: "BMONI sandbox access is not configured." });
+  }
   if (error instanceof BmoniProviderError) {
     app.log.warn({ errorName: error.name, requestId: error.requestId, statusCode: error.statusCode }, `BMONI ${operation} failed`);
-    const statusCode = error.statusCode === 400 || error.statusCode === 409 || error.statusCode === 422 ? error.statusCode : 502;
+    const statusCode = error.statusCode === 400 || error.statusCode === 404 || error.statusCode === 409 || error.statusCode === 422 ? error.statusCode : 502;
     return reply.status(statusCode).send({ statusCode, error: "Upstream Error", message: `BMONI rejected the ${operation}.`, requestId: error.requestId });
   }
-  if (error instanceof BmoniTransportError) return reply.status(503).send({ statusCode: 503, error: "Service Unavailable", message: "BMONI could not be reached." });
-  if (error instanceof BmoniResponseValidationError) return reply.status(502).send({ statusCode: 502, error: "Bad Gateway", message: "BMONI returned an undocumented Nigeria onboarding response." });
+  if (error instanceof BmoniTransportError) {
+    return reply.status(503).send({ statusCode: 503, error: "Service Unavailable", message: "BMONI could not be reached." });
+  }
+  if (error instanceof BmoniResponseValidationError) {
+    return reply.status(502).send({ statusCode: 502, error: "Bad Gateway", message: "BMONI returned an undocumented Nigeria onboarding response." });
+  }
   throw error;
 }

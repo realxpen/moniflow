@@ -2,78 +2,76 @@ import { describe, expect, it } from "vitest";
 
 import { updateNigeriaKycInputSchema } from "./schemas.js";
 
-describe("Nigeria NGN KYC contract", () => {
-  it("accepts the documented NGN local profile shape", () => {
-    const result = updateNigeriaKycInputSchema.safeParse({
-      personalInfo: {
-        firstName: "Bunch",
-        lastName: "Dillon",
-        phoneNumber: "+2348000000000",
-        dateOfBirth: "1990-01-15",
-        gender: "male"
-      },
-      address: {
-        streetLine1: "15 Admiralty Way",
-        city: "Lagos",
-        state: "Lagos",
-        postalCode: "101241",
-        countryCode: "NGA"
-      },
-      identificationNumbers: [
-        {
-          type: "bvn",
-          number: "95888168924",
-          issuingCountryCode: "NGA"
-        }
-      ]
-    });
+const currentNigeriaProfile = {
+  personalInfo: {
+    firstName: "Chiamaka",
+    lastName: "Okafor",
+    phoneNumber: "+2348012345678",
+    dateOfBirth: "1990-01-01",
+    gender: "female"
+  },
+  address: {
+    streetLine1: "15 Admiralty Way",
+    city: "Lagos",
+    state: "Lagos",
+    postalCode: "101241",
+    countryCode: "NGA" as const
+  },
+  employment: {
+    occupationCode: "15-1252",
+    employerName: "ACME Corp",
+    employmentStatus: "employed"
+  },
+  sourceOfFunds: "salary",
+  estimatedMonthlyVolume: 4999,
+  accountPurpose: "personal",
+  actingAsIntermediary: false,
+  identificationNumbers: [
+    {
+      type: "bvn" as const,
+      number: "22222222222",
+      issuingCountryCode: "NGA" as const
+    }
+  ]
+};
 
+describe("Nigeria NGN KYC contract", () => {
+  it("accepts the current BMONI NGN profile shape", () => {
+    const result = updateNigeriaKycInputSchema.safeParse(currentNigeriaProfile);
     expect(result.success).toBe(true);
   });
 
-  it("rejects the old addressDetails shape", () => {
+  it("rejects the older minimal profile that omitted employment and compliance fields", () => {
     const result = updateNigeriaKycInputSchema.safeParse({
-      personalInfo: {
-        firstName: "Bunch",
-        lastName: "Dillon",
-        phoneNumber: "+2348000000000",
-        dateOfBirth: "1990-01-15"
-      },
-      addressDetails: {
-        street: "15 Admiralty Way",
-        city: "Lagos",
-        state: "Lagos",
-        countryCode: "NGA"
-      }
+      personalInfo: currentNigeriaProfile.personalInfo,
+      address: currentNigeriaProfile.address,
+      identificationNumbers: currentNigeriaProfile.identificationNumbers
     });
-
     expect(result.success).toBe(false);
   });
 
-  it("requires a six-digit Nigerian postal code", () => {
+  it("requires a provider occupation code rather than inventing one", () => {
     const result = updateNigeriaKycInputSchema.safeParse({
-      personalInfo: {
-        firstName: "Bunch",
-        lastName: "Dillon",
-        phoneNumber: "+2348000000000",
-        dateOfBirth: "1990-01-15"
-      },
-      address: {
-        streetLine1: "15 Admiralty Way",
-        city: "Lagos",
-        state: "Lagos",
-        postalCode: "10124",
-        countryCode: "NGA"
-      },
+      ...currentNigeriaProfile,
+      employment: {
+        ...currentNigeriaProfile.employment,
+        occupationCode: ""
+      }
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("requires an 11-digit BVN", () => {
+    const result = updateNigeriaKycInputSchema.safeParse({
+      ...currentNigeriaProfile,
       identificationNumbers: [
         {
           type: "bvn",
-          number: "95888168924",
+          number: "2222222222",
           issuingCountryCode: "NGA"
         }
       ]
     });
-
     expect(result.success).toBe(false);
   });
 });

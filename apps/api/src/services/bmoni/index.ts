@@ -15,13 +15,17 @@ export {
   bmoniUserSchema,
   createBmoniUserInputSchema,
   createBmoniUserResponseSchema,
-  supportedSmartWalletCurrenciesSchema
+  managedSmartWalletResponseSchema,
+  supportedSmartWalletCurrenciesSchema,
+  updateNigeriaKycInputSchema
 } from "./schemas.js";
 export type {
   BmoniErrorEnvelope,
   BmoniUser,
   CreateBmoniUserInput,
-  SupportedSmartWalletCurrencies
+  ManagedSmartWallet,
+  SupportedSmartWalletCurrencies,
+  UpdateNigeriaKycInput
 } from "./schemas.js";
 
 export function createBmoniGateway() {

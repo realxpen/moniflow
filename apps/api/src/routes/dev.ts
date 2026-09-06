@@ -23,8 +23,6 @@ type DevRouteOptions = {
 type JsonRecord = Record<string, unknown>;
 
 export const devRoutes: FastifyPluginAsync<DevRouteOptions> = async (app, options) => {
-  const ownership = options.getWalletOwnershipRepository();
-
   app.get<{ Querystring: unknown }>("/bmoni-status", async (request, reply) => {
     const query = querySchema.safeParse(request.query);
     if (!query.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "localUserId must be a valid UUID when supplied." });
@@ -35,12 +33,14 @@ export const devRoutes: FastifyPluginAsync<DevRouteOptions> = async (app, option
         bmoniApi: "connected",
         environment,
         supportedCurrencies: currencies.currencies,
-        user: mapping ? { status: "created", bmoniUserId: mapping.bmoniUserId, localUserId: mapping.localUserId } : { status: "not_created", bmoniUserId: null }
+        user: mapping
+          ? { status: "created", provisioningState: "CREATED", bmoniUserId: mapping.bmoniUserId, localUserId: mapping.localUserId }
+          : { status: "not_created", provisioningState: "NOT_CREATED", bmoniUserId: null }
       });
     } catch (error) {
       if (isBmoniError(error)) {
         app.log.warn({ errorName: error.name }, "BMONI debug status check failed");
-        return reply.status(503).send({ bmoniApi: "disconnected", environment, user: { status: "unknown", bmoniUserId: null } });
+        return reply.status(503).send({ bmoniApi: "disconnected", environment, user: { status: "unknown", provisioningState: "UNKNOWN", bmoniUserId: null } });
       }
       throw error;
     }
@@ -52,7 +52,9 @@ export const devRoutes: FastifyPluginAsync<DevRouteOptions> = async (app, option
 
     const localUserId = query.data.localUserId;
     const mapping = await options.getBmoniUserService().getMapping(localUserId);
-    const wallet = await ownership.findByLocalUserId(localUserId);
+    // Database-backed wallet state is intentionally resolved only for this
+    // lifecycle route, not when the dev plugin or BMONI-only status route boots.
+    const wallet = await options.getWalletOwnershipRepository().findByLocalUserId(localUserId);
     const stages = {
       api: { passed: false, detail: "Not checked" },
       user: { passed: Boolean(mapping), detail: mapping ? "BMONI user mapping persisted" : "No BMONI user mapping" },
@@ -108,14 +110,27 @@ function findCngnBalance(payload: unknown): string | null {
   return record ? stringValue(record, ["availableBalance", "available", "balance", "amount", "total"]) ?? null : null;
 }
 function findRecord(value: unknown, predicate: (record: JsonRecord) => boolean): JsonRecord | null {
-  if (Array.isArray(value)) { for (const item of value) { const found = findRecord(item, predicate); if (found) return found; } return null; }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findRecord(item, predicate);
+      if (found) return found;
+    }
+    return null;
+  }
   if (value === null || typeof value !== "object") return null;
   const record = value as JsonRecord;
   if (predicate(record)) return record;
-  for (const child of Object.values(record)) { const found = findRecord(child, predicate); if (found) return found; }
+  for (const child of Object.values(record)) {
+    const found = findRecord(child, predicate);
+    if (found) return found;
+  }
   return null;
 }
 function stringValue(record: JsonRecord, keys: string[]): string | undefined {
-  for (const key of keys) { const value = record[key]; if (typeof value === "string" && value.trim()) return value; if (typeof value === "number" && Number.isFinite(value)) return String(value); }
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
   return undefined;
 }

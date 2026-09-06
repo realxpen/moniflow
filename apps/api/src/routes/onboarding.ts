@@ -16,10 +16,7 @@ type OnboardingRouteOptions = {
   getBmoniUserService: () => BmoniUserService;
 };
 
-export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = async (
-  app,
-  options
-) => {
+export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = async (app, options) => {
   const createUser = async (request: FastifyRequest<{ Body: unknown }>, reply: FastifyReply) => {
     const input = createMoniflowUserInputSchema.safeParse(request.body);
     if (!input.success) {
@@ -33,13 +30,18 @@ export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = asyn
 
     try {
       const result = await options.getBmoniUserService().createOrFindMapping(input.data);
-      return reply.status(result.status === "created" ? 201 : 200).send(result);
+      return reply.status(result.status === "created" ? 201 : 200).send({
+        ...result,
+        provisioningState: result.status === "created" ? "CREATED" : "EXISTING_LOCAL_MAPPING"
+      });
     } catch (error) {
       if (error instanceof UserMappingConflictError) {
         return reply.status(409).send({
           statusCode: 409,
           error: "Conflict",
-          message: "The local identity cannot be safely associated with this BMONI user."
+          provisioningState: "RECONCILIATION_REQUIRED",
+          retryable: false,
+          message: "The local identity cannot be safely associated with this BMONI user. Reconciliation is required."
         });
       }
 
@@ -47,28 +49,37 @@ export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = asyn
         return reply.status(503).send({
           statusCode: 503,
           error: "Service Unavailable",
+          provisioningState: "NOT_CONFIGURED",
+          retryable: false,
           message: "BMONI sandbox access is not configured."
         });
       }
 
       if (error instanceof BmoniProviderError) {
         app.log.warn(
-          {
-            errorName: error.name,
-            requestId: error.requestId,
-            statusCode: error.statusCode
-          },
+          { errorName: error.name, requestId: error.requestId, statusCode: error.statusCode },
           "BMONI user creation failed"
         );
 
         const statusCode = error.statusCode === 400 ? 400 : error.statusCode === 409 ? 409 : 502;
+        if (statusCode === 409) {
+          return reply.status(409).send({
+            statusCode: 409,
+            error: "Conflict",
+            provisioningState: "RECONCILIATION_REQUIRED",
+            retryable: false,
+            message: "BMONI already has a matching sandbox identity, but MONIFlow has no persisted mapping for it. Reconciliation is required.",
+            requestId: error.requestId
+          });
+        }
+
         return reply.status(statusCode).send({
           statusCode,
-          error: statusCode === 409 ? "Conflict" : "Upstream Error",
-          message:
-            statusCode === 409
-              ? "A matching BMONI user may already exist. No automatic retry was performed; reconciliation is required."
-              : "BMONI did not accept the user-creation request."
+          error: "Upstream Error",
+          provisioningState: "NOT_CREATED",
+          retryable: statusCode >= 500,
+          message: "BMONI did not accept the user-creation request.",
+          requestId: error.requestId
         });
       }
 
@@ -80,8 +91,9 @@ export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = asyn
         return reply.status(503).send({
           statusCode: 503,
           error: "Service Unavailable",
-          message:
-            "The BMONI request outcome is unknown. No automatic retry will occur because user creation has no idempotency key."
+          provisioningState: "OUTCOME_UNKNOWN",
+          retryable: false,
+          message: "The BMONI request outcome is unknown. MONIFlow will not automatically retry user creation."
         });
       }
 
@@ -93,7 +105,10 @@ export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = asyn
         return reply.status(502).send({
           statusCode: 502,
           error: "Bad Gateway",
-          message: "BMONI returned an undocumented response."
+          provisioningState: "OUTCOME_UNKNOWN",
+          retryable: false,
+          message: "BMONI returned an undocumented response after user creation.",
+          requestId: error.requestId
         });
       }
 

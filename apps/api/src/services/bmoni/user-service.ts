@@ -53,7 +53,17 @@ export class BmoniUserService {
     }
 
     const localUserId = input.localUserId ?? randomUUID();
-    const { localUserId: _ignoredLocalUserId, ...providerInput } = input;
+    const compactLocalId = localUserId.replace(/-/g, "");
+    const { localUserId: _ignoredLocalUserId, ...providerInputFromRequest } = input;
+    const providerInput = {
+      ...providerInputFromRequest,
+      // BMONI's reference client supplies unique partner identifiers on every
+      // sandbox user creation. MONIFlow derives stable equivalents from its own
+      // local identity so retries/reconciliation have a deterministic key.
+      employeeId: providerInputFromRequest.employeeId ?? `MF-${compactLocalId}`,
+      identityId: providerInputFromRequest.identityId ?? `moniflow-${compactLocalId}`
+    };
+
     const user = await this.gateway.createUser(providerInput);
     if (user.email.toLowerCase() !== input.email.toLowerCase()) {
       throw new UserMappingConflictError("The provider response did not preserve the requested identity.");
