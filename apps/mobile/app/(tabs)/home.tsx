@@ -101,6 +101,11 @@ export default function HomeScreen() {
     router.push({ pathname: "/operator/processing", params: { command: normalized, localUserId } });
   };
 
+  const openBanking = () => {
+    if (!localUserId) return;
+    router.push({ pathname: "/banking/nigeria", params: { localUserId, desiredLabel: "GTBank" } });
+  };
+
   return (
     <Screen contentContainerStyle={styles.screen}>
       <View style={styles.header}>
@@ -115,8 +120,8 @@ export default function HomeScreen() {
         <>
           <BalanceCard
             actions={
-              <PrimaryButton onPress={() => router.push("/bank/select")} style={styles.balanceAction}>
-                Manage money
+              <PrimaryButton disabled={!localUserId} onPress={openBanking} style={styles.balanceAction}>
+                Bank destination
               </PrimaryButton>
             }
             amount={availableAmount}
