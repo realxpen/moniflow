@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { GuardCheck } from "@/components/guard";
-import { PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
+import { PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { runMoniGuard, type GuardResult } from "@/services/moniguard";
 import { colors, radius, spacing, typography } from "@/theme";
 
@@ -15,28 +15,24 @@ export default function MoniGuardScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let active = true;
-    const evaluate = async () => {
-      if (!planId || !localUserId) {
-        setError("MONI Guard requires the persisted Money Plan identity.");
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      setError(null);
-      try {
-        const next = await runMoniGuard(planId, localUserId);
-        if (active) setResult(next);
-      } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : "MONI Guard could not evaluate this plan.");
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    void evaluate();
-    return () => { active = false; };
-  }, [localUserId, planId]);
+  const evaluate = async () => {
+    if (!planId || !localUserId) {
+      setError("MONI Guard requires the persisted Money Plan identity.");
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      setResult(await runMoniGuard(planId, localUserId));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "MONI Guard could not evaluate this plan.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void evaluate(); }, [localUserId, planId]);
 
   const humanApproval = result?.checks.find((check) => check.rule === "HUMAN_APPROVAL");
   const destinationBlocked = Boolean(result?.checks.find((check) => check.rule === "DESTINATION" && !check.passed));
@@ -60,14 +56,13 @@ export default function MoniGuardScreen() {
           />
         </View>
 
-        {loading ? <Text style={styles.loadingCopy}>Running eight explicit rules against the stored plan…</Text> : null}
-
+        {loading ? <Text style={styles.loadingCopy}>Running explicit rules against the stored plan…</Text> : null}
         {result?.checks.map((check, index) => (
           <GuardCheck
             key={check.rule}
             delay={index * 75}
             rule={humanLabel(check.rule)}
-            message={check.message}
+            message={providerNeutralMessage(check.message)}
             status={check.passed ? (check.rule === "HUMAN_APPROVAL" && check.severity === "warning" ? "review" : "pass") : "block"}
           />
         ))}
@@ -80,7 +75,7 @@ export default function MoniGuardScreen() {
           <Text style={styles.verdictCopy}>
             {result.verdict === "BLOCK"
               ? destinationBlocked
-                ? "This withdrawal destination has not yet been verified and registered with BMONI. Verify it before approval can begin."
+                ? "This withdrawal destination has not yet been verified and registered with the active financial provider. Verify it before approval can begin."
                 : "MONI Guard found a critical mismatch. The server marked this plan BLOCKED."
               : result.verdict === "REVIEW"
                 ? humanApproval?.message ?? "The server is now waiting for your explicit approval."
@@ -96,6 +91,7 @@ export default function MoniGuardScreen() {
         <SoftCard style={styles.errorCard}>
           <StatusPill label="GUARD ERROR" tone="warning" />
           <Text style={styles.error}>{error}</Text>
+          <SecondaryButton disabled={loading} onPress={() => void evaluate()}>Retry MONI Guard</SecondaryButton>
         </SoftCard>
       ) : null}
 
@@ -108,26 +104,28 @@ export default function MoniGuardScreen() {
           Continue to secure execution
         </PrimaryButton>
       ) : result?.status === "BLOCKED" && destinationBlocked ? (
-        <PrimaryButton
-          onPress={() => router.push({ pathname: "/banking/nigeria", params: { localUserId, planId, desiredLabel: "GTBank" } })}
-        >
-          Verify Nigerian bank destination
+        <PrimaryButton onPress={() => router.push({ pathname: "/banking/nigeria", params: { localUserId, planId, desiredLabel: "GTBank" } })}>
+          Resolve bank destination
         </PrimaryButton>
       ) : result?.status === "BLOCKED" ? (
         <PrimaryButton onPress={() => router.back()}>Return to plan</PrimaryButton>
       ) : null}
 
-      <Text style={styles.disclosure}>The client never supplies the plan to MONI Guard. The API loads the authoritative stored plan by planId and checks any bank withdrawal against a BMONI-verified destination.</Text>
+      <Text style={styles.disclosure}>The client never supplies the authoritative plan to MONI Guard. The API loads it by planId and checks external destinations against persisted provider verification.</Text>
     </Screen>
   );
+}
+
+function providerNeutralMessage(message: string) {
+  return message.replaceAll("BMONI", "provider");
 }
 
 function humanLabel(rule: string) {
   if (rule === "SUPPORTED_INTENT") return "Supported intent";
   if (rule === "POSITIVE_AMOUNT") return "Positive amounts";
   if (rule === "CURRENCY") return "NGN currency preserved";
-  if (rule === "BALANCE") return "Balance sufficient";
-  if (rule === "DESTINATION") return "BMONI bank destination verified";
+  if (rule === "BALANCE") return "Spendable balance sufficient";
+  if (rule === "DESTINATION") return "Bank destination verified";
   if (rule === "AMOUNT_INTEGRITY") return "Requested amount preserved";
   if (rule === "PLAN_INTEGRITY") return "Plan totals verified";
   if (rule === "HUMAN_APPROVAL") return "Human authorization boundary";
