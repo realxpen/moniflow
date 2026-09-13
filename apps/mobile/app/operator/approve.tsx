@@ -94,7 +94,7 @@ export default function ApprovalScreen() {
       {!authorization.destination.maskedAccountNumber || !authorization.destination.accountHolderName ? (
         <SoftCard style={styles.notice}>
           <StatusPill label="DESTINATION METADATA PENDING" tone="neutral" />
-          <Text style={styles.noticeCopy}>MONIFlow will show the verified account mask and account-holder name once the saved bank destination is bound to BMONI. No account details are fabricated.</Text>
+          <Text style={styles.noticeCopy}>MONIFlow will only show destination details returned from the persisted provider verification record. No account details are fabricated.</Text>
         </SoftCard>
       ) : null}
 
@@ -113,12 +113,12 @@ export default function ApprovalScreen() {
             <StatusPill label="APPROVED" tone="success" />
             <Text style={styles.noticeCopy}>The server has recorded approval for this exact plan fingerprint.</Text>
           </SoftCard>
-          <PrimaryButton onPress={() => router.push({ pathname: "/operator/signing", params: { localUserId, planId } })}>Continue to device signing</PrimaryButton>
+          <PrimaryButton onPress={() => router.push({ pathname: "/operator/signing", params: { localUserId, planId } })}>Continue to secure execution</PrimaryButton>
         </>
       )}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Text style={styles.disclosure}>Approval does not move money and does not create a BMONI proposal or signature. If the amount or destination changes, this approval becomes invalid.</Text>
+      <Text style={styles.disclosure}>Approval does not move money and does not create a provider proposal or signature. If the amount or destination changes, this approval becomes invalid.</Text>
     </Screen>
   );
 }
