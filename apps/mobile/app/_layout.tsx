@@ -5,7 +5,10 @@ import { useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { bmoniDevice } from "@/services/bmoni-device";
 import { colors } from "@/theme";
+
+bmoniDevice.initialize({ pinLength: 6, requirePin: true });
 
 export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient());
