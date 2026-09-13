@@ -5,12 +5,14 @@ import { StyleSheet, Text, View } from "react-native";
 import { GuardCheck } from "@/components/guard";
 import { PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { runMoniGuard, type GuardResult } from "@/services/moniguard";
+import { useDemoSession } from "@/store/demo-session";
 import { colors, radius, spacing, typography } from "@/theme";
 
 export default function MoniGuardScreen() {
   const params = useLocalSearchParams<{ command?: string; localUserId?: string; planId?: string }>();
   const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
   const planId = typeof params.planId === "string" ? params.planId : "";
+  const setFlowStage = useDemoSession((state) => state.setFlowStage);
   const [result, setResult] = useState<GuardResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,10 +34,23 @@ export default function MoniGuardScreen() {
     }
   };
 
-  useEffect(() => { void evaluate(); }, [localUserId, planId]);
+  useEffect(() => {
+    if (localUserId && planId) setFlowStage("guard", { planId });
+    void evaluate();
+  }, [localUserId, planId, setFlowStage]);
 
   const humanApproval = result?.checks.find((check) => check.rule === "HUMAN_APPROVAL");
   const destinationBlocked = Boolean(result?.checks.find((check) => check.rule === "DESTINATION" && !check.passed));
+
+  const openApproval = () => {
+    setFlowStage("approve", { planId });
+    router.push({ pathname: "/operator/approve", params: { localUserId, planId } });
+  };
+
+  const openSigning = () => {
+    setFlowStage("signing", { planId });
+    router.push({ pathname: "/operator/signing", params: { localUserId, planId } });
+  };
 
   return (
     <Screen contentContainerStyle={styles.screen}>
@@ -96,13 +111,9 @@ export default function MoniGuardScreen() {
       ) : null}
 
       {result?.status === "AWAITING_USER_APPROVAL" ? (
-        <PrimaryButton onPress={() => router.push({ pathname: "/operator/approve", params: { localUserId, planId } })}>
-          Continue to human authorization
-        </PrimaryButton>
+        <PrimaryButton onPress={openApproval}>Continue to human authorization</PrimaryButton>
       ) : result?.status === "APPROVED" ? (
-        <PrimaryButton onPress={() => router.push({ pathname: "/operator/signing", params: { localUserId, planId } })}>
-          Continue to secure execution
-        </PrimaryButton>
+        <PrimaryButton onPress={openSigning}>Continue to secure execution</PrimaryButton>
       ) : result?.status === "BLOCKED" && destinationBlocked ? (
         <PrimaryButton onPress={() => router.push({ pathname: "/banking/nigeria", params: { localUserId, planId, desiredLabel: "GTBank" } })}>
           Resolve bank destination
