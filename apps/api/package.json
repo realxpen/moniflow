@@ -8,7 +8,8 @@
     "dev": "node --watch --import tsx src/server.ts",
     "start": "node --import tsx src/server.ts",
     "start:prod": "node dist/server.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo:canonical": "node scripts/run-canonical-demo.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "10.1.1",
