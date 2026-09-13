@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { BankAccountRepository } from "../repositories/bank-account.js";
 import type { MoneyPlanRepository } from "../repositories/money-plan.js";
+import type { PocketRepository } from "../repositories/pocket.js";
 import { moniflowIntentSchema } from "../schemas/intent.js";
 import { moneyPlanSchema } from "../schemas/money-plan.js";
 import type { BmoniGateway } from "../services/bmoni/index.js";
@@ -17,6 +18,7 @@ import {
   requireApprovedPlanForExecution
 } from "../services/plans/approval.js";
 import { buildMoneyPlan, UnsupportedPlanIntentError } from "../services/plans/engine.js";
+import { computeAvailableToSpend } from "../services/plans/spendable.js";
 
 const parseIntentBodySchema = z.object({ input: z.string().max(500) }).strict();
 const planBodySchema = z.object({
@@ -26,7 +28,10 @@ const planBodySchema = z.object({
 }).strict();
 const guardBodySchema = z.object({ intent: moniflowIntentSchema, plan: moneyPlanSchema }).strict();
 const secureGuardBodySchema = z.object({ localUserId: z.uuid() }).strict();
-const approvalBodySchema = z.object({ localUserId: z.uuid(), expectedPlanHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+const approvalBodySchema = z.object({
+  localUserId: z.uuid(),
+  expectedPlanHash: z.string().regex(/^[a-f0-9]{64}$/)
+}).strict();
 const planQuerySchema = z.object({ localUserId: z.uuid() }).strict();
 const planParamsSchema = z.object({ planId: z.uuid() }).strict();
 
@@ -35,30 +40,43 @@ type OperatorRouteOptions = {
   getBmoniUserService: () => BmoniUserService;
   getMoneyPlanRepository: () => MoneyPlanRepository;
   getBankAccountRepository: () => BankAccountRepository;
+  getPocketRepository: () => PocketRepository;
 };
 type JsonRecord = Record<string, unknown>;
 
 export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (app, options) => {
   app.post<{ Body: unknown }>("/intent", async (request, reply) => {
     const parsed = parseIntentBodySchema.safeParse(request.body);
-    if (!parsed.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "input must be a string up to 500 characters." });
+    if (!parsed.success) {
+      return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "input must be a string up to 500 characters." });
+    }
     const intent = moniflowIntentSchema.parse(parseIntent(parsed.data.input));
     return reply.send({ intent });
   });
 
   app.post<{ Body: unknown }>("/plan", async (request, reply) => {
     const parsed = planBodySchema.safeParse(request.body);
-    if (!parsed.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "A validated Phase 8 intent and valid localUserId are required." });
+    if (!parsed.success) {
+      return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "A validated Phase 8 intent and valid localUserId are required." });
+    }
     const intent = parsed.data.intent;
-    if (intent.intent === "UNSUPPORTED") return reply.status(422).send({ statusCode: 422, error: "Unprocessable Entity", message: "Unsupported intent cannot become a Money Plan.", intent });
+    if (intent.intent === "UNSUPPORTED") {
+      return reply.status(422).send({ statusCode: 422, error: "Unprocessable Entity", message: "Unsupported intent cannot become a Money Plan.", intent });
+    }
 
     const mapping = await options.getBmoniUserService().getMapping(parsed.data.localUserId);
-    if (!mapping) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Create the BMONI user before preparing a money plan." });
+    if (!mapping) {
+      return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Create the financial-provider user before preparing a Money Plan." });
+    }
 
     try {
       const balances = await options.getBmoniGateway().listAccountBalances(mapping.bmoniUserId);
-      const currentAvailable = findCngnBalance(balances);
-      if (currentAvailable === null) return reply.status(502).send({ statusCode: 502, error: "Bad Gateway", message: "BMONI returned an undocumented CNGN balance response." });
+      const providerBalance = findCngnBalance(balances);
+      if (providerBalance === null) {
+        return reply.status(502).send({ statusCode: 502, error: "Bad Gateway", message: "The financial provider returned an undocumented CNGN balance response." });
+      }
+      const internalAllocated = await options.getPocketRepository().totalAllocated(parsed.data.localUserId);
+      const currentAvailable = computeAvailableToSpend(providerBalance, internalAllocated);
       const plan = moneyPlanSchema.parse(buildMoneyPlan(intent, currentAvailable));
       const planHash = fingerprintMoneyPlan(plan);
       const persisted = await options.getMoneyPlanRepository().create({
@@ -68,24 +86,36 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
         plan,
         planHash
       });
-      return reply.send({ intent, plan, planId: persisted.id, planHash, status: persisted.status });
+      return reply.send({
+        intent,
+        plan,
+        planId: persisted.id,
+        planHash,
+        status: persisted.status,
+        accounting: { providerBalance, internalAllocated, availableToSpend: currentAvailable }
+      });
     } catch (error) {
-      if (error instanceof UnsupportedPlanIntentError) return reply.status(422).send({ statusCode: 422, error: "Unprocessable Entity", message: error.message });
+      if (error instanceof UnsupportedPlanIntentError) {
+        return reply.status(422).send({ statusCode: 422, error: "Unprocessable Entity", message: error.message });
+      }
       throw error;
     }
   });
 
-  // Legacy Phase 10 preview only. It never changes approval state and cannot authorize execution.
   app.post<{ Body: unknown }>("/guard", async (request, reply) => {
     const parsed = guardBodySchema.safeParse(request.body);
-    if (!parsed.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "A validated intent and Money Plan are required for MONI Guard." });
+    if (!parsed.success) {
+      return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "A validated intent and Money Plan are required for MONI Guard." });
+    }
     return reply.send(evaluateMoniGuard({ intent: parsed.data.intent, plan: parsed.data.plan }));
   });
 
   app.post<{ Params: unknown; Body: unknown }>("/plans/:planId/guard", async (request, reply) => {
     const params = planParamsSchema.safeParse(request.params);
     const body = secureGuardBodySchema.safeParse(request.body);
-    if (!params.success || !body.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Valid planId and localUserId are required." });
+    if (!params.success || !body.success) {
+      return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Valid planId and localUserId are required." });
+    }
 
     const repository = options.getMoneyPlanRepository();
     const stored = await repository.findById(params.data.planId, body.data.localUserId);
@@ -110,7 +140,9 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
   app.get<{ Params: unknown; Querystring: unknown }>("/plans/:planId/authorization", async (request, reply) => {
     const params = planParamsSchema.safeParse(request.params);
     const query = planQuerySchema.safeParse(request.query);
-    if (!params.success || !query.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Valid planId and localUserId are required." });
+    if (!params.success || !query.success) {
+      return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Valid planId and localUserId are required." });
+    }
 
     try {
       const stored = await loadAuthorizationPlan(options.getMoneyPlanRepository(), params.data.planId, query.data.localUserId);
@@ -118,9 +150,13 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
         return reply.status(409).send({ statusCode: 409, error: "Conflict", message: `Plan is ${stored.status}; human authorization is not available.` });
       }
       const withdrawal = stored.plan.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
-      if (!withdrawal) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "This plan has no external bank withdrawal to authorize." });
+      if (!withdrawal) {
+        return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "This plan has no external bank withdrawal to authorize." });
+      }
       const destination = await options.getBankAccountRepository().findVerifiedByLabel(query.data.localUserId, withdrawal.label);
-      if (!destination) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "The bank destination is no longer verified. Run MONI Guard again." });
+      if (!destination) {
+        return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "The bank destination is no longer verified. Run MONI Guard again." });
+      }
 
       return reply.send({
         authorization: {
@@ -147,7 +183,9 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
   app.post<{ Params: unknown; Body: unknown }>("/plans/:planId/approve", async (request, reply) => {
     const params = planParamsSchema.safeParse(request.params);
     const body = approvalBodySchema.safeParse(request.body);
-    if (!params.success || !body.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Valid planId, localUserId, and expectedPlanHash are required." });
+    if (!params.success || !body.success) {
+      return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Valid planId, localUserId, and expectedPlanHash are required." });
+    }
 
     try {
       const stored = await loadAuthorizationPlan(options.getMoneyPlanRepository(), params.data.planId, body.data.localUserId);
@@ -156,7 +194,12 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
         const destination = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawal.label);
         if (!destination) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Verified bank destination required before approval." });
       }
-      const approved = await approveMoneyPlan(options.getMoneyPlanRepository(), params.data.planId, body.data.localUserId, body.data.expectedPlanHash);
+      const approved = await approveMoneyPlan(
+        options.getMoneyPlanRepository(),
+        params.data.planId,
+        body.data.localUserId,
+        body.data.expectedPlanHash
+      );
       return reply.send({ approval: { planId: approved.id, status: approved.status, approvedAt: approved.approvedAt, approvedPlanHash: approved.approvedPlanHash } });
     } catch (error) {
       return handleApprovalError(reply, error);
@@ -166,13 +209,17 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
   app.get<{ Params: unknown; Querystring: unknown }>("/plans/:planId/execution-readiness", async (request, reply) => {
     const params = planParamsSchema.safeParse(request.params);
     const query = planQuerySchema.safeParse(request.query);
-    if (!params.success || !query.success) return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Valid planId and localUserId are required." });
+    if (!params.success || !query.success) {
+      return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Valid planId and localUserId are required." });
+    }
     try {
       const approved = await requireApprovedPlanForExecution(options.getMoneyPlanRepository(), params.data.planId, query.data.localUserId);
       const withdrawal = approved.plan.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
       if (withdrawal) {
         const destination = await options.getBankAccountRepository().findVerifiedByLabel(query.data.localUserId, withdrawal.label);
-        if (!destination) return reply.status(409).send({ planId: approved.id, canExecute: false, approvalHashMatches: true, error: "DESTINATION_NOT_VERIFIED", message: "Verified bank destination required before execution." });
+        if (!destination) {
+          return reply.status(409).send({ planId: approved.id, canExecute: false, approvalHashMatches: true, error: "DESTINATION_NOT_VERIFIED", message: "Verified bank destination required before execution." });
+        }
       }
       return reply.send({ planId: approved.id, status: approved.status, canExecute: true, approvalHashMatches: true });
     } catch (error) {
@@ -188,8 +235,8 @@ function withVerifiedDestination(result: GuardResult, verifiedDestination: strin
   const checks = result.checks.map((check): GuardCheck => {
     if (check.rule !== "DESTINATION") return check;
     return verifiedDestination
-      ? { ...check, passed: true, severity: "info", message: `${verifiedDestination} is a verified BMONI withdrawal destination.` }
-      : { ...check, passed: false, severity: "critical", message: "A verified BMONI Nigerian bank destination is required." };
+      ? { ...check, passed: true, severity: "info", message: `${verifiedDestination} is a verified withdrawal destination.` }
+      : { ...check, passed: false, severity: "critical", message: "A verified Nigerian bank destination is required." };
   });
   const blocked = checks.some((check) => !check.passed && check.severity === "critical");
   const needsApproval = checks.some((check) => check.rule === "HUMAN_APPROVAL" && check.passed && check.severity === "warning");
@@ -218,13 +265,19 @@ function findCngnBalance(payload: unknown): number | null {
 
 function findRecord(value: unknown, predicate: (record: JsonRecord) => boolean): JsonRecord | null {
   if (Array.isArray(value)) {
-    for (const item of value) { const found = findRecord(item, predicate); if (found) return found; }
+    for (const item of value) {
+      const found = findRecord(item, predicate);
+      if (found) return found;
+    }
     return null;
   }
   if (value === null || typeof value !== "object") return null;
   const record = value as JsonRecord;
   if (predicate(record)) return record;
-  for (const child of Object.values(record)) { const found = findRecord(child, predicate); if (found) return found; }
+  for (const child of Object.values(record)) {
+    const found = findRecord(child, predicate);
+    if (found) return found;
+  }
   return null;
 }
 
