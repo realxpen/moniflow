@@ -19,8 +19,9 @@ import { pocketRoutes } from "./routes/pockets.js";
 import { walletFundingRoutes } from "./routes/wallet-funding.js";
 import { walletRoutes } from "./routes/wallet.js";
 import { walletOwnershipRoutes } from "./routes/wallet-ownership.js";
-import { createBmoniGateway, type BmoniGateway } from "./services/bmoni/index.js";
+import type { BmoniGateway } from "./services/bmoni/index.js";
 import { BmoniUserService } from "./services/bmoni/user-service.js";
+import { createFinancialProvider } from "./services/financial-provider/index.js";
 
 export type AppDependencies = {
   getBmoniGateway: () => BmoniGateway;
@@ -38,7 +39,7 @@ function createRuntimeDependencies() {
   let userService: BmoniUserService | undefined;
 
   const getRepositories = () => (repositories ??= createRepositories(env.DATABASE_URL));
-  const getBmoniGateway = () => (gateway ??= createBmoniGateway());
+  const getBmoniGateway = () => (gateway ??= createFinancialProvider());
 
   return {
     dependencies: {
@@ -85,9 +86,6 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
     limits: { fields: 12, files: 4, fileSize: 8 * 1024 * 1024, parts: 16 }
   });
 
-  // Do not make Fastify boot depend on database readiness. Repository-backed
-  // routes initialize the repository set lazily when they are actually used,
-  // while /health and /health/bmoni remain independent of database startup.
   if (testRepositories) app.addHook("onClose", async () => testRepositories.close());
 
   const operatorOptions = {

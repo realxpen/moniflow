@@ -9,6 +9,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_HOST: z.string().min(1).default("0.0.0.0"),
   API_PORT: z.coerce.number().int().positive().max(65_535).default(4_000),
+  FINANCIAL_PROVIDER: z.enum(["bmoni", "moniflow-sandbox"]).default("bmoni"),
   BMONI_BASE_URL: z.preprocess(
     emptyStringToUndefined,
     z.url().optional()

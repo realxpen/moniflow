@@ -8,6 +8,7 @@ import {
   BmoniTransportError,
   type BmoniGateway
 } from "../services/bmoni/index.js";
+import { getFinancialProviderDescriptor } from "../services/financial-provider/index.js";
 
 type HealthRouteOptions = {
   getBmoniGateway: () => BmoniGateway;
@@ -23,9 +24,52 @@ export const healthRoutes: FastifyPluginAsync<HealthRouteOptions> = async (
     environment: env.NODE_ENV
   }));
 
-  app.get("/health/bmoni", async (_request, reply) => {
+  app.get("/health/provider", async (_request, reply) => {
+    const gateway = options.getBmoniGateway();
+    const provider = getFinancialProviderDescriptor(gateway);
+
     try {
-      const result = await options.getBmoniGateway().getSupportedSmartWalletCurrencies();
+      const result = await gateway.getSupportedSmartWalletCurrencies();
+      return {
+        status: "ok",
+        service: "financial-provider",
+        provider: provider.id,
+        label: provider.label,
+        environment: provider.environment,
+        simulated: provider.simulated,
+        currencies: result.currencies
+      };
+    } catch (error) {
+      app.log.warn(
+        { provider: provider.id, errorName: error instanceof Error ? error.name : "Unknown" },
+        "Financial provider health check failed"
+      );
+      return reply.status(503).send({
+        status: "unavailable",
+        service: "financial-provider",
+        provider: provider.id,
+        environment: provider.environment,
+        simulated: provider.simulated
+      });
+    }
+  });
+
+  app.get("/health/bmoni", async (_request, reply) => {
+    const gateway = options.getBmoniGateway();
+    const provider = getFinancialProviderDescriptor(gateway);
+
+    if (provider.id !== "bmoni") {
+      return {
+        status: "inactive",
+        service: "bmoni",
+        environment: "sandbox",
+        reason: "not_selected",
+        activeProvider: provider.id
+      };
+    }
+
+    try {
+      const result = await gateway.getSupportedSmartWalletCurrencies();
 
       return {
         status: "ok",
