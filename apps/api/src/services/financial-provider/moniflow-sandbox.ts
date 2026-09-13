@@ -129,8 +129,7 @@ export class MoniflowSandboxProvider implements BmoniGateway, FinancialProviderG
       address: address(`${bmoniUserId}:${smartWalletId}`),
       currency: "CNGN",
       status: "active",
-      createdAt: new Date().toISOString(),
-      simulated: true
+      createdAt: new Date().toISOString()
     };
   }
 
