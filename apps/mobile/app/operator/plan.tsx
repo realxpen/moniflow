@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { MoneyText, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
 import type { MoniflowIntent } from "@/services/intent-engine";
 import { prepareMoneyPlan, type PreparedMoneyPlan } from "@/services/money-plan";
+import { useDemoSession } from "@/store/demo-session";
 import { colors, radius, spacing, typography } from "@/theme";
 
 export default function PlanScreen() {
@@ -12,6 +13,7 @@ export default function PlanScreen() {
   const command = typeof params.command === "string" ? params.command : "";
   const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
   const intent = useMemo(() => parseIntentParam(params.intent), [params.intent]);
+  const setFlowStage = useDemoSession((state) => state.setFlowStage);
   const [prepared, setPrepared] = useState<PreparedMoneyPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,7 +31,10 @@ export default function PlanScreen() {
       setError(null);
       try {
         const result = await prepareMoneyPlan(intent, localUserId, command || undefined);
-        if (active) setPrepared(result);
+        if (active) {
+          setPrepared(result);
+          setFlowStage("plan", { planId: result.planId, command });
+        }
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : "Money Plan could not be prepared.");
       } finally {
@@ -38,7 +43,16 @@ export default function PlanScreen() {
     };
     void load();
     return () => { active = false; };
-  }, [command, intent, localUserId]);
+  }, [command, intent, localUserId, setFlowStage]);
+
+  const openGuard = () => {
+    if (!prepared) return;
+    setFlowStage("guard", { planId: prepared.planId, command });
+    router.push({
+      pathname: "/operator/guard",
+      params: { command, localUserId, planId: prepared.planId }
+    });
+  };
 
   return (
     <Screen contentContainerStyle={styles.screen}>
@@ -107,14 +121,7 @@ export default function PlanScreen() {
             </SoftCard>
           ) : null}
 
-          <PrimaryButton
-            onPress={() => router.push({
-              pathname: "/operator/guard",
-              params: { command, localUserId, planId: prepared.planId }
-            })}
-          >
-            Run MONI Guard
-          </PrimaryButton>
+          <PrimaryButton onPress={openGuard}>Run MONI Guard</PrimaryButton>
         </>
       ) : null}
 
