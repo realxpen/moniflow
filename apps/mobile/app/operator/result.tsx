@@ -1,19 +1,23 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ActivityRow } from "@/components/activity";
 import { FlowHeader, PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
+import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { loadActivity, type FinancialActivity } from "@/services/activity";
 import { finalizeExecution, getExecutionStatus, type ExecutionSnapshot } from "@/services/execution";
 import { loadPockets, type Pocket } from "@/services/pockets";
 import { loadWalletBalance, type WalletBalance } from "@/services/wallet-dashboard";
+import { useDemoSession } from "@/store/demo-session";
 import { colors, spacing, typography } from "@/theme";
 
 export default function ResultScreen() {
   const params = useLocalSearchParams<{ localUserId?: string; planId?: string }>();
   const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
   const planId = typeof params.planId === "string" ? params.planId : "";
+  const setFlowStage = useDemoSession((state) => state.setFlowStage);
+  const finishFlow = useDemoSession((state) => state.finishFlow);
   const [execution, setExecution] = useState<ExecutionSnapshot | null>(null);
   const [balance, setBalance] = useState<WalletBalance | null>(null);
   const [pockets, setPockets] = useState<Pocket[]>([]);
@@ -21,7 +25,11 @@ export default function ResultScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = async () => {
+  useEffect(() => {
+    if (localUserId && planId) setFlowStage("result", { planId });
+  }, [localUserId, planId, setFlowStage]);
+
+  const refresh = useCallback(async () => {
     if (!localUserId || !planId) {
       setError("A persisted execution is required to show the result.");
       setLoading(false);
@@ -49,14 +57,20 @@ export default function ResultScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [localUserId, planId]);
 
-  useEffect(() => { void refresh(); }, [localUserId, planId]);
+  useEffect(() => { void refresh(); }, [refresh]);
+  useAppActiveRefresh(refresh);
 
   const completed = execution?.state === "COMPLETED";
   const failed = execution?.state === "FAILED";
   const processing = execution && !completed && !failed;
   const laptop = pockets.find((pocket) => pocket.name === "Laptop");
+
+  const returnHome = () => {
+    finishFlow();
+    router.replace({ pathname: "/(tabs)/home", params: { localUserId } });
+  };
 
   return (
     <Screen contentContainerStyle={styles.screen}>
@@ -101,7 +115,7 @@ export default function ResultScreen() {
       {completed ? (
         <View style={styles.section}>
           <Text style={styles.technical}>FINANCIAL MEMORY</Text>
-          {activity.map((item) => (
+          {activity.length > 0 ? activity.map((item) => (
             <ActivityRow
               key={item.id}
               amount={item.amount === null ? "—" : formatNaira(item.amount)}
@@ -109,7 +123,7 @@ export default function ResultScreen() {
               meta={item.status}
               source={item.source}
             />
-          ))}
+          )) : <Text style={styles.empty}>Finalization is complete; Financial Memory is still refreshing.</Text>}
         </View>
       ) : null}
 
@@ -122,8 +136,8 @@ export default function ResultScreen() {
 
       <View style={styles.actions}>
         {processing || error ? <PrimaryButton disabled={loading} onPress={() => void refresh()}>{loading ? "Checking…" : "Refresh provider status"}</PrimaryButton> : null}
-        <SecondaryButton onPress={() => router.replace({ pathname: "/(tabs)/home", params: { localUserId } })}>Return home</SecondaryButton>
-        <Text style={styles.disclosure}>EXT = provider movement. INT = MONIFlow internal bookkeeping.</Text>
+        <SecondaryButton onPress={returnHome}>Return home</SecondaryButton>
+        <Text style={styles.disclosure}>EXT = provider movement. INT = MONIFlow internal bookkeeping. Returning Home closes this recovered flow checkpoint.</Text>
       </View>
     </Screen>
   );
@@ -157,6 +171,7 @@ const styles = StyleSheet.create({
   rowValue: { ...typography.section, color: colors.textPrimary, fontVariant: ["tabular-nums"] },
   rowValueStrong: { fontWeight: "700" },
   actions: { gap: spacing.sm },
+  empty: { ...typography.caption, color: colors.textSecondary },
   error: { ...typography.body, color: colors.statusError },
   disclosure: { ...typography.technical, color: colors.textSecondary, textAlign: "center" }
 });
