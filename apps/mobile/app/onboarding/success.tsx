@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
 import { loadFinancialProvider, providerBadge, type FinancialProviderRuntime } from "@/services/runtime";
+import { useDemoSession } from "@/store/demo-session";
 import { colors, spacing, typography } from "@/theme";
 
 export default function OnboardingSuccessScreen() {
@@ -11,12 +12,19 @@ export default function OnboardingSuccessScreen() {
   const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
   const localUserId = routedLocalUserId?.trim() ?? "";
   const [provider, setProvider] = useState<FinancialProviderRuntime | null>(null);
+  const setWorkspace = useDemoSession((state) => state.setWorkspace);
 
   useEffect(() => {
     let active = true;
-    void loadFinancialProvider().then((value) => { if (active) setProvider(value); }).catch(() => undefined);
+    void loadFinancialProvider()
+      .then((value) => {
+        if (!active) return;
+        setProvider(value);
+        if (localUserId) setWorkspace(localUserId, value.provider);
+      })
+      .catch(() => undefined);
     return () => { active = false; };
-  }, []);
+  }, [localUserId, setWorkspace]);
 
   return (
     <Screen contentContainerStyle={styles.screen} scroll={false}>
@@ -35,7 +43,7 @@ export default function OnboardingSuccessScreen() {
         </SoftCard>
       </View>
       <PrimaryButton
-        disabled={!localUserId}
+        disabled={!localUserId || !provider}
         onPress={() => router.replace({ pathname: "/(tabs)/home", params: { localUserId } })}
       >
         Enter MONIFlow
