@@ -9,6 +9,7 @@ import {
   resetSandboxDemo,
   type FinancialProviderRuntime
 } from "@/services/runtime";
+import { useDemoSession } from "@/store/demo-session";
 import { colors, spacing, typography } from "@/theme";
 
 export default function WelcomeScreen() {
@@ -16,6 +17,11 @@ export default function WelcomeScreen() {
   const [checking, setChecking] = useState(true);
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hydrated = useDemoSession((state) => state.hydrated);
+  const savedLocalUserId = useDemoSession((state) => state.localUserId);
+  const savedProvider = useDemoSession((state) => state.provider);
+  const savedStage = useDemoSession((state) => state.stage);
+  const setWorkspace = useDemoSession((state) => state.setWorkspace);
 
   const refreshProvider = async () => {
     setChecking(true);
@@ -37,6 +43,7 @@ export default function WelcomeScreen() {
     setError(null);
     try {
       const state = await resetSandboxDemo();
+      setWorkspace(state.identity.localUserId, state.provider.id);
       router.replace({
         pathname: "/onboarding/success",
         params: { localUserId: state.identity.localUserId, provider: state.provider.id }
@@ -49,6 +56,12 @@ export default function WelcomeScreen() {
   };
 
   const sandboxDemo = provider?.provider === "moniflow-sandbox";
+  const canResume = Boolean(
+    hydrated &&
+    savedLocalUserId &&
+    provider &&
+    savedProvider === provider.provider
+  );
 
   return (
     <Screen contentContainerStyle={styles.screen} scroll={false}>
@@ -80,10 +93,29 @@ export default function WelcomeScreen() {
           </Text>
         </SoftCard>
 
+        {canResume ? (
+          <SoftCard style={styles.resumeCard}>
+            <View style={styles.resumeCopy}>
+              <StatusPill label="WORKSPACE SAVED" tone="success" />
+              <Text style={styles.resumeTitle}>Resume your current workspace.</Text>
+              <Text style={styles.providerCopy}>
+                {savedStage && savedStage !== "home"
+                  ? "An unfinished flow is saved. MONIFlow returns you to Home first so you choose when to continue it."
+                  : "Your last demo identity is still available on this device."}
+              </Text>
+            </View>
+            <PrimaryButton
+              onPress={() => router.replace({ pathname: "/(tabs)/home", params: { localUserId: savedLocalUserId } })}
+            >
+              Resume workspace
+            </PrimaryButton>
+          </SoftCard>
+        ) : null}
+
         {sandboxDemo ? (
-          <PrimaryButton disabled={preparing || checking} onPress={() => void startCleanDemo()}>
-            {preparing ? "Preparing clean demo…" : "Start clean sandbox demo"}
-          </PrimaryButton>
+          <SecondaryButton disabled={preparing || checking} onPress={() => void startCleanDemo()}>
+            {preparing ? "Preparing clean demo…" : canResume ? "Restart with a clean sandbox demo" : "Start clean sandbox demo"}
+          </SecondaryButton>
         ) : (
           <PrimaryButton disabled={checking || !provider} onPress={() => router.push("/onboarding/identity")}>
             Begin secure setup
@@ -101,7 +133,7 @@ export default function WelcomeScreen() {
 
         <Text style={styles.disclosure}>
           {sandboxDemo
-            ? "SANDBOX DEMO USES A FRESH SIMULATED IDENTITY; THE BMONI NATIVE ONBOARDING PATH IS NOT BYPASSED WHEN BMONI IS ACTIVE"
+            ? "ONLY NON-SECRET WORKSPACE CONTEXT IS SAVED ON DEVICE; SANDBOX FINANCIAL INFRASTRUCTURE REMAINS SIMULATED"
             : "REAL PROVIDER SUCCESS IS NEVER INFERRED FROM LOCAL UI STATE"}
         </Text>
       </View>
@@ -123,6 +155,9 @@ const styles = StyleSheet.create({
   principleLabel: { ...typography.technical, color: colors.textSecondary },
   principle: { ...typography.section, color: colors.textPrimary },
   providerCopy: { ...typography.caption, color: colors.textSecondary },
+  resumeCard: { gap: spacing.md },
+  resumeCopy: { gap: spacing.sm },
+  resumeTitle: { ...typography.heading, color: colors.textPrimary },
   errorBlock: { gap: spacing.sm },
   error: { ...typography.caption, color: colors.statusError, textAlign: "center" },
   disclosure: { ...typography.technical, color: colors.textSecondary, fontSize: 9, textAlign: "center" }
