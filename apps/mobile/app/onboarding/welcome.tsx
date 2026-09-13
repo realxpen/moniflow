@@ -81,14 +81,9 @@ export default function WelcomeScreen() {
         </SoftCard>
 
         {sandboxDemo ? (
-          <>
-            <PrimaryButton disabled={preparing || checking} onPress={() => void startCleanDemo()}>
-              {preparing ? "Preparing clean demo…" : "Start clean sandbox demo"}
-            </PrimaryButton>
-            <SecondaryButton disabled={preparing} onPress={() => router.push("/onboarding/identity")}>
-              Walk through onboarding
-            </SecondaryButton>
-          </>
+          <PrimaryButton disabled={preparing || checking} onPress={() => void startCleanDemo()}>
+            {preparing ? "Preparing clean demo…" : "Start clean sandbox demo"}
+          </PrimaryButton>
         ) : (
           <PrimaryButton disabled={checking || !provider} onPress={() => router.push("/onboarding/identity")}>
             Begin secure setup
@@ -106,7 +101,7 @@ export default function WelcomeScreen() {
 
         <Text style={styles.disclosure}>
           {sandboxDemo
-            ? "THE CLEAN DEMO CREATES A FRESH SIMULATED IDENTITY AND PRESERVES EARLIER DEMO HISTORY"
+            ? "SANDBOX DEMO USES A FRESH SIMULATED IDENTITY; THE BMONI NATIVE ONBOARDING PATH IS NOT BYPASSED WHEN BMONI IS ACTIVE"
             : "REAL PROVIDER SUCCESS IS NEVER INFERRED FROM LOCAL UI STATE"}
         </Text>
       </View>
