@@ -25,90 +25,16 @@ import type { BmoniGateway } from "./services/bmoni/index.js";
 import { BmoniUserService } from "./services/bmoni/user-service.js";
 import { createFinancialProvider } from "./services/financial-provider/index.js";
 
-export type AppDependencies = {
-  getBmoniGateway: () => BmoniGateway;
-  getBmoniUserService: () => BmoniUserService;
-  getWalletOwnershipRepository?: () => WalletOwnershipRepository;
-  getMoneyPlanRepository?: () => MoneyPlanRepository;
-  getBankAccountRepository?: () => BankAccountRepository;
-  getExecutionRepository?: () => ExecutionRepository;
-  getPocketRepository?: () => PocketRepository;
-  getActivityRepository?: () => ActivityRepository;
-  ready?: Promise<void>;
-};
-
-function createRuntimeDependencies() {
-  let gateway: BmoniGateway | undefined;
-  let repositories: RepositorySet | undefined;
-  let userService: BmoniUserService | undefined;
-  const getRepositories = () => (repositories ??= createRepositories(env.DATABASE_URL));
-  const getBmoniGateway = () => (gateway ??= createFinancialProvider());
-  return {
-    dependencies: {
-      getBmoniGateway,
-      getBmoniUserService: () => (userService ??= new BmoniUserService(getBmoniGateway(), getRepositories().users)),
-      getWalletOwnershipRepository: () => getRepositories().wallets,
-      getMoneyPlanRepository: () => getRepositories().plans,
-      getBankAccountRepository: () => getRepositories().banks,
-      getExecutionRepository: () => getRepositories().executions,
-      getPocketRepository: () => getRepositories().pockets,
-      getActivityRepository: () => getRepositories().activities,
-      get ready() { return getRepositories().ready; }
-    } satisfies AppDependencies,
-    async close() { await repositories?.close(); }
-  };
-}
+export type AppDependencies = { getBmoniGateway: () => BmoniGateway; getBmoniUserService: () => BmoniUserService; getWalletOwnershipRepository?: () => WalletOwnershipRepository; getMoneyPlanRepository?: () => MoneyPlanRepository; getBankAccountRepository?: () => BankAccountRepository; getExecutionRepository?: () => ExecutionRepository; getPocketRepository?: () => PocketRepository; getActivityRepository?: () => ActivityRepository; ready?: Promise<void> };
+function createRuntimeDependencies() { let gateway: BmoniGateway | undefined; let repositories: RepositorySet | undefined; let userService: BmoniUserService | undefined; const getRepositories = () => (repositories ??= createRepositories(env.DATABASE_URL)); const getBmoniGateway = () => (gateway ??= createFinancialProvider()); return { dependencies: { getBmoniGateway, getBmoniUserService: () => (userService ??= new BmoniUserService(getBmoniGateway(), getRepositories().users)), getWalletOwnershipRepository: () => getRepositories().wallets, getMoneyPlanRepository: () => getRepositories().plans, getBankAccountRepository: () => getRepositories().banks, getExecutionRepository: () => getRepositories().executions, getPocketRepository: () => getRepositories().pockets, getActivityRepository: () => getRepositories().activities, get ready() { return getRepositories().ready; } } satisfies AppDependencies, async close() { await repositories?.close(); } }; }
 
 export const buildApp = (dependencyOverrides?: AppDependencies) => {
-  const runtime = dependencyOverrides ? null : createRuntimeDependencies();
-  const dependencies = dependencyOverrides ?? runtime?.dependencies;
-  if (!dependencies) throw new Error("MONIFlow API dependencies could not be initialized.");
-
-  const testRepositories = dependencyOverrides && (
-    !dependencyOverrides.getWalletOwnershipRepository ||
-    !dependencyOverrides.getMoneyPlanRepository ||
-    !dependencyOverrides.getBankAccountRepository ||
-    !dependencyOverrides.getExecutionRepository ||
-    !dependencyOverrides.getPocketRepository ||
-    !dependencyOverrides.getActivityRepository
-  ) ? createRepositories(":memory:") : null;
-
-  const getWalletOwnershipRepository = dependencies.getWalletOwnershipRepository ?? (() => testRepositories!.wallets);
-  const getMoneyPlanRepository = dependencies.getMoneyPlanRepository ?? (() => testRepositories!.plans);
-  const getBankAccountRepository = dependencies.getBankAccountRepository ?? (() => testRepositories!.banks);
-  const getExecutionRepository = dependencies.getExecutionRepository ?? (() => testRepositories!.executions);
-  const getPocketRepository = dependencies.getPocketRepository ?? (() => testRepositories!.pockets);
-  const getActivityRepository = dependencies.getActivityRepository ?? (() => testRepositories!.activities);
-
-  const app = Fastify({ logger: { redact: ["req.headers.authorization", "req.headers.cookie", "req.headers.x-api-key", "headers.authorization", "headers.x-api-key", "BMONI_API_KEY", "req.body.signature", "req.body.ownerProofSignature", "req.body.bvn", "req.body.accountNumber"] } });
-  app.register(multipart, { limits: { fields: 12, files: 4, fileSize: 8 * 1024 * 1024, parts: 16 } });
-  if (testRepositories) app.addHook("onClose", async () => testRepositories.close());
-
-  const operatorOptions = { getBmoniGateway: dependencies.getBmoniGateway, getBmoniUserService: dependencies.getBmoniUserService, getMoneyPlanRepository, getBankAccountRepository };
-  const walletOptions = { getBmoniGateway: dependencies.getBmoniGateway, getBmoniUserService: dependencies.getBmoniUserService, getWalletOwnershipRepository };
-  const bankingOptions = { getBmoniGateway: dependencies.getBmoniGateway, getBmoniUserService: dependencies.getBmoniUserService, getBankAccountRepository };
-  const executionOptions = { ...operatorOptions, getWalletOwnershipRepository, getExecutionRepository };
-
-  app.register(healthRoutes, { getBmoniGateway: dependencies.getBmoniGateway });
-  app.register(onboardingRoutes, { prefix: "/api/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
-  app.register(nigeriaOnboardingRoutes, { prefix: "/api/onboarding/nigeria", ...walletOptions });
-  app.register(devRoutes, { prefix: "/api/dev", ...walletOptions });
-  app.register(walletOwnershipRoutes, { prefix: "/api/wallet", ...walletOptions });
-  app.register(walletRoutes, { prefix: "/api/wallet", ...walletOptions });
-  app.register(walletFundingRoutes, { prefix: "/api/wallet", ...walletOptions });
-  app.register(bankingRoutes, { prefix: "/api/banks", ...bankingOptions });
-  app.register(operatorRoutes, { prefix: "/api/operator", ...operatorOptions });
-  app.register(executionRoutes, { prefix: "/api/operator", ...executionOptions });
-  app.register(pocketRoutes, { prefix: "/api/pockets", getPocketRepository });
-  app.register(activityRoutes, { prefix: "/api/activity", getActivityRepository });
-
-  app.register(onboardingRoutes, { prefix: "/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
-  app.register(bankingRoutes, { prefix: "/banking", ...bankingOptions });
-  app.register(operatorRoutes, { prefix: "/operator", ...operatorOptions });
-  app.register(executionRoutes, { prefix: "/operator", ...executionOptions });
-  app.register(activityRoutes, { prefix: "/activity", getActivityRepository });
-  app.register(pocketRoutes, { prefix: "/pockets", getPocketRepository });
-
-  if (runtime) app.addHook("onClose", async () => runtime.close());
-  return app;
+  const runtime = dependencyOverrides ? null : createRuntimeDependencies(); const dependencies = dependencyOverrides ?? runtime?.dependencies; if (!dependencies) throw new Error("MONIFlow API dependencies could not be initialized.");
+  const testRepositories = dependencyOverrides && (!dependencyOverrides.getWalletOwnershipRepository || !dependencyOverrides.getMoneyPlanRepository || !dependencyOverrides.getBankAccountRepository || !dependencyOverrides.getExecutionRepository || !dependencyOverrides.getPocketRepository || !dependencyOverrides.getActivityRepository) ? createRepositories(":memory:") : null;
+  const getWalletOwnershipRepository = dependencies.getWalletOwnershipRepository ?? (() => testRepositories!.wallets); const getMoneyPlanRepository = dependencies.getMoneyPlanRepository ?? (() => testRepositories!.plans); const getBankAccountRepository = dependencies.getBankAccountRepository ?? (() => testRepositories!.banks); const getExecutionRepository = dependencies.getExecutionRepository ?? (() => testRepositories!.executions); const getPocketRepository = dependencies.getPocketRepository ?? (() => testRepositories!.pockets); const getActivityRepository = dependencies.getActivityRepository ?? (() => testRepositories!.activities);
+  const app = Fastify({ logger: { redact: ["req.headers.authorization", "req.headers.cookie", "req.headers.x-api-key", "headers.authorization", "headers.x-api-key", "BMONI_API_KEY", "req.body.signature", "req.body.ownerProofSignature", "req.body.bvn", "req.body.accountNumber"] } }); app.register(multipart, { limits: { fields: 12, files: 4, fileSize: 8 * 1024 * 1024, parts: 16 } }); if (testRepositories) app.addHook("onClose", async () => testRepositories.close());
+  const operatorOptions = { getBmoniGateway: dependencies.getBmoniGateway, getBmoniUserService: dependencies.getBmoniUserService, getMoneyPlanRepository, getBankAccountRepository }; const walletOptions = { getBmoniGateway: dependencies.getBmoniGateway, getBmoniUserService: dependencies.getBmoniUserService, getWalletOwnershipRepository }; const bankingOptions = { getBmoniGateway: dependencies.getBmoniGateway, getBmoniUserService: dependencies.getBmoniUserService, getBankAccountRepository }; const executionOptions = { ...operatorOptions, getWalletOwnershipRepository, getExecutionRepository };
+  app.register(healthRoutes, { getBmoniGateway: dependencies.getBmoniGateway }); app.register(onboardingRoutes, { prefix: "/api/onboarding", getBmoniUserService: dependencies.getBmoniUserService }); app.register(nigeriaOnboardingRoutes, { prefix: "/api/onboarding/nigeria", ...walletOptions }); app.register(devRoutes, { prefix: "/api/dev", ...walletOptions }); app.register(walletOwnershipRoutes, { prefix: "/api/wallet", ...walletOptions }); app.register(walletRoutes, { prefix: "/api/wallet", ...walletOptions, getPocketRepository }); app.register(walletFundingRoutes, { prefix: "/api/wallet", ...walletOptions }); app.register(bankingRoutes, { prefix: "/api/banks", ...bankingOptions }); app.register(operatorRoutes, { prefix: "/api/operator", ...operatorOptions }); app.register(executionRoutes, { prefix: "/api/operator", ...executionOptions }); app.register(pocketRoutes, { prefix: "/api/pockets", getPocketRepository }); app.register(activityRoutes, { prefix: "/api/activity", getActivityRepository });
+  app.register(onboardingRoutes, { prefix: "/onboarding", getBmoniUserService: dependencies.getBmoniUserService }); app.register(bankingRoutes, { prefix: "/banking", ...bankingOptions }); app.register(operatorRoutes, { prefix: "/operator", ...operatorOptions }); app.register(executionRoutes, { prefix: "/operator", ...executionOptions }); app.register(activityRoutes, { prefix: "/activity", getActivityRepository }); app.register(pocketRoutes, { prefix: "/pockets", getPocketRepository });
+  if (runtime) app.addHook("onClose", async () => runtime.close()); return app;
 };
