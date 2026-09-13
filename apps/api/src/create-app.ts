@@ -119,6 +119,10 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
     getBmoniUserService: dependencies.getBmoniUserService,
     getBankAccountRepository
   };
+  const devBootstrapOptions = {
+    ...walletOptions,
+    getBankAccountRepository
+  };
   const executionOptions = {
     ...operatorOptions,
     getWalletOwnershipRepository,
@@ -137,7 +141,7 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   app.register(onboardingRoutes, { prefix: "/api/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
   app.register(nigeriaOnboardingRoutes, { prefix: "/api/onboarding/nigeria", ...walletOptions });
   app.register(devRoutes, { prefix: "/api/dev", ...walletOptions });
-  app.register(devBootstrapRoutes, { prefix: "/api/dev", ...walletOptions });
+  app.register(devBootstrapRoutes, { prefix: "/api/dev", ...devBootstrapOptions });
   app.register(walletOwnershipRoutes, { prefix: "/api/wallet", ...walletOptions });
   app.register(walletRoutes, { prefix: "/api/wallet", ...walletOptions, getPocketRepository });
   app.register(walletFundingRoutes, { prefix: "/api/wallet", ...walletOptions });
