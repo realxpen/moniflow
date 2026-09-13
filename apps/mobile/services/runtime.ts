@@ -1,3 +1,5 @@
+import { apiFetch } from "@/services/api-fetch";
+
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL ?? "";
 
 export type FinancialProviderRuntime = {
@@ -53,7 +55,7 @@ export function resolveApiUrl() {
 }
 
 export async function loadFinancialProvider(): Promise<FinancialProviderRuntime> {
-  const response = await fetch(`${resolveApiUrl()}/health/provider`);
+  const response = await apiFetch(`${resolveApiUrl()}/health/provider`);
   const payload = (await response.json()) as Partial<FinancialProviderRuntime> & { message?: string };
   if (!response.ok || !payload.provider) {
     throw new Error(payload.message ?? "Financial provider is unavailable.");
@@ -69,7 +71,7 @@ export async function loadFinancialProvider(): Promise<FinancialProviderRuntime>
 }
 
 export async function resetSandboxDemo(): Promise<DemoBootstrapState> {
-  const response = await fetch(`${resolveApiUrl()}/api/dev/reset`, {
+  const response = await apiFetch(`${resolveApiUrl()}/api/dev/reset`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({})
