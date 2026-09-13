@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
+import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { loadFinancialProvider, providerBadge, type FinancialProviderRuntime } from "@/services/runtime";
 import {
   loadDepositAccount,
@@ -12,6 +13,7 @@ import {
   type WalletBalance,
   type WalletSummary
 } from "@/services/wallet-dashboard";
+import { useDemoSession } from "@/store/demo-session";
 import { colors, spacing, typography } from "@/theme";
 
 const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
@@ -19,7 +21,8 @@ const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
 export default function WalletDetailsScreen() {
   const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
   const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
-  const localUserId = routedLocalUserId?.trim() || configuredLocalUserId;
+  const savedLocalUserId = useDemoSession((state) => state.localUserId);
+  const localUserId = routedLocalUserId?.trim() || savedLocalUserId || configuredLocalUserId;
 
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [balance, setBalance] = useState<WalletBalance | null>(null);
@@ -28,7 +31,7 @@ export default function WalletDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!localUserId) {
       setError("No connected user is available for this wallet view.");
       setLoading(false);
@@ -52,9 +55,10 @@ export default function WalletDetailsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [localUserId]);
 
-  useEffect(() => { void load(); }, [localUserId]);
+  useEffect(() => { void load(); }, [load]);
+  useAppActiveRefresh(load);
 
   return (
     <Screen contentContainerStyle={styles.screen}>
