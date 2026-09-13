@@ -4,23 +4,29 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { ProgressStep } from "@/components/operator";
 import { FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
-import { mockHomeData } from "@/constants/mockData";
 import { parseOperatorIntent, type MoniflowIntent } from "@/services/intent-engine";
 import { colors, spacing, typography } from "@/theme";
 
 export default function ProcessingScreen() {
   const params = useLocalSearchParams<{ command?: string; localUserId?: string }>();
   const command = useMemo(
-    () => (typeof params.command === "string" && params.command.trim() ? params.command : mockHomeData.command),
+    () => (typeof params.command === "string" ? params.command.trim() : ""),
     [params.command]
   );
   const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
   const [intent, setIntent] = useState<MoniflowIntent | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(command));
 
   useEffect(() => {
     let active = true;
+    if (!command) {
+      setIntent(null);
+      setError("Enter a money instruction from Home before opening the Operator flow.");
+      setLoading(false);
+      return () => { active = false; };
+    }
+
     const parse = async () => {
       setLoading(true);
       setError(null);
@@ -34,9 +40,7 @@ export default function ProcessingScreen() {
       }
     };
     void parse();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [command]);
 
   const unsupported = intent?.intent === "UNSUPPORTED";
@@ -45,24 +49,26 @@ export default function ProcessingScreen() {
   return (
     <Screen contentContainerStyle={styles.screen}>
       <FlowHeader
-        description="Deterministic rules only. MONIFlow does not use an LLM or guess when the instruction is unclear."
+        description="Deterministic rules only. MONIFlow does not use an LLM or invent missing financial details."
         eyebrow="INTENT ENGINE"
-        title={unsupported ? "I won’t guess." : "Understanding your instruction."}
+        title={unsupported ? "I won’t guess." : error && !intent ? "Instruction required." : "Understanding your instruction."}
       />
 
-      <SoftCard style={styles.commandCard}>
-        <Text style={styles.label}>YOUR INSTRUCTION</Text>
-        <Text style={styles.command}>{command}</Text>
-      </SoftCard>
+      {command ? (
+        <SoftCard style={styles.commandCard}>
+          <Text style={styles.label}>YOUR INSTRUCTION</Text>
+          <Text style={styles.command}>{command}</Text>
+        </SoftCard>
+      ) : null}
 
       <View style={styles.progressCard}>
         <StatusPill
-          label={loading ? "PARSING" : error ? "ENGINE ERROR" : unsupported ? "UNSUPPORTED" : "VALIDATED"}
+          label={loading ? "PARSING" : error ? "ENGINE BLOCKED" : unsupported ? "UNSUPPORTED" : "VALIDATED"}
           tone={loading ? "processing" : error || unsupported ? "warning" : "success"}
         />
-        <ProgressStep index={1} state={loading ? "active" : "complete"} title="Normalize instruction" detail="Whitespace and exact syntax" />
-        <ProgressStep delay={90} index={2} state={loading ? "pending" : "complete"} title="Match supported intent" detail="Deterministic rule table" />
-        <ProgressStep delay={180} index={3} state={loading ? "pending" : intent && !unsupported ? "complete" : "pending"} title="Validate structure" detail="Strict Zod contract" />
+        <ProgressStep index={1} state={loading ? "active" : command ? "complete" : "pending"} title="Normalize instruction" detail="No hidden fallback command" />
+        <ProgressStep delay={90} index={2} state={loading ? "pending" : intent ? "complete" : "pending"} title="Match supported intent" detail="Deterministic rule table" />
+        <ProgressStep delay={180} index={3} state={intent && !unsupported ? "complete" : "pending"} title="Validate structure" detail="Strict contract" />
         <ProgressStep delay={270} index={4} state={canPlan ? "active" : "pending"} title="Prepare Money Plan" detail="Validated intent crosses the boundary unchanged" />
       </View>
 
@@ -75,7 +81,7 @@ export default function ProcessingScreen() {
       ) : null}
 
       {!localUserId && intent && !unsupported ? (
-        <Text style={styles.error}>Complete wallet onboarding before MONIFlow can calculate a provider-backed plan.</Text>
+        <Text style={styles.error}>A connected wallet identity is required before MONIFlow can calculate a provider-backed plan.</Text>
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -84,8 +90,8 @@ export default function ProcessingScreen() {
           Build my Money Plan
         </PrimaryButton>
       ) : (
-        <PrimaryButton onPress={() => router.back()} disabled={loading}>
-          {loading ? "Parsing…" : "Edit instruction"}
+        <PrimaryButton onPress={() => router.replace({ pathname: "/(tabs)/home", params: localUserId ? { localUserId } : undefined })} disabled={loading}>
+          {loading ? "Parsing…" : "Return to Home"}
         </PrimaryButton>
       )}
 
