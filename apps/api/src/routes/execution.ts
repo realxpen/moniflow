@@ -4,10 +4,12 @@ import { z } from "zod";
 import type { BankAccountRepository } from "../repositories/bank-account.js";
 import type { ExecutionRepository, ProviderExecution } from "../repositories/execution.js";
 import type { MoneyPlanRepository } from "../repositories/money-plan.js";
+import type { PocketRepository } from "../repositories/pocket.js";
 import type { WalletOwnershipRepository } from "../repositories/wallet-ownership.js";
 import { BmoniProviderError, type BmoniGateway } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
 import { fingerprintMoneyPlan, requireApprovedPlanForExecution } from "../services/plans/approval.js";
+import { computeAvailableToSpend } from "../services/plans/spendable.js";
 
 const paramsSchema = z.object({ planId: z.uuid() }).strict();
 const userBodySchema = z.object({ localUserId: z.uuid() }).strict();
@@ -25,8 +27,8 @@ type ExecutionRouteOptions = {
   getWalletOwnershipRepository: () => WalletOwnershipRepository;
   getBankAccountRepository: () => BankAccountRepository;
   getExecutionRepository: () => ExecutionRepository;
+  getPocketRepository: () => PocketRepository;
 };
-
 type JsonRecord = Record<string, unknown>;
 
 export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async (app, options) => {
@@ -59,18 +61,20 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     }
 
     const mapping = await options.getBmoniUserService().getMapping(body.data.localUserId);
-    if (!mapping) return reply.status(409).send({ message: "BMONI user mapping is missing." });
+    if (!mapping) return reply.status(409).send({ message: "Financial-provider user mapping is missing." });
     const wallet = await options.getWalletOwnershipRepository().findByLocalUserId(body.data.localUserId);
     if (!wallet) return reply.status(409).send({ message: "Managed CNGN wallet is missing." });
     const bank = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawal.label);
-    if (!bank) return reply.status(409).send({ message: "Verified BMONI Nigerian withdrawal destination is missing." });
+    if (!bank) return reply.status(409).send({ message: "Verified Nigerian withdrawal destination is missing." });
 
     const balances = await options.getBmoniGateway().listAccountBalances(mapping.bmoniUserId);
-    const freshBalance = findCngnBalance(balances);
-    if (freshBalance === null) {
-      return reply.status(502).send({ message: "BMONI returned an undocumented CNGN balance response." });
+    const providerBalance = findCngnBalance(balances);
+    if (providerBalance === null) {
+      return reply.status(502).send({ message: "The financial provider returned an undocumented CNGN balance response." });
     }
-    if (freshBalance !== approved.plan.currentAvailable) {
+    const internalAllocated = await options.getPocketRepository().totalAllocated(body.data.localUserId);
+    const freshSpendable = computeAvailableToSpend(providerBalance, internalAllocated);
+    if (freshSpendable !== approved.plan.currentAvailable) {
       await options.getMoneyPlanRepository().invalidateApproval(
         params.data.planId,
         body.data.localUserId,
@@ -78,7 +82,7 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
       );
       return reply.status(409).send({
         code: "BALANCE_CHANGED_REPLAN_REQUIRED",
-        message: "Provider balance changed after approval. Approval was invalidated; rebuild and approve the Money Plan again."
+        message: "Spendable balance changed after approval. Approval was invalidated; rebuild and approve the Money Plan again."
       });
     }
 
@@ -88,7 +92,7 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
       { bankAccountId: bank.providerAccountId, fromAmount: withdrawal.amount.toFixed(2) }
     );
     const proposalId = extractProposalId(proposalPayload);
-    if (!proposalId) return reply.status(502).send({ message: "BMONI offramp returned no proposal id." });
+    if (!proposalId) return reply.status(502).send({ message: "Financial-provider offramp returned no proposal id." });
 
     const now = new Date().toISOString();
     const created = await executions.create({
@@ -121,7 +125,7 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     );
     const execution = await options.getExecutionRepository().findByPlanId(params.data.planId, body.data.localUserId);
     if (!execution || execution.providerProposalId !== body.data.proposalId) {
-      return reply.status(409).send({ message: "Prepared BMONI proposal does not match this plan." });
+      return reply.status(409).send({ message: "Prepared provider proposal does not match this plan." });
     }
     if (execution.state !== "AWAITING_DEVICE_SIGNATURE" || !execution.signHash) {
       return reply.status(409).send({ message: "This proposal is not awaiting a device signature." });
@@ -131,16 +135,9 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     }
 
     const mapping = await options.getBmoniUserService().getMapping(body.data.localUserId);
-    if (!mapping) return reply.status(409).send({ message: "BMONI user mapping is missing." });
+    if (!mapping) return reply.status(409).send({ message: "Financial-provider user mapping is missing." });
 
-    await options.getBmoniGateway().signProposal(
-      mapping.bmoniUserId,
-      execution.providerProposalId,
-      body.data.signature
-    );
-
-    // Once BMONI accepts the signature, do not make the response depend on a
-    // second provider read. A follow-up GET drives the authoritative result.
+    await options.getBmoniGateway().signProposal(mapping.bmoniUserId, execution.providerProposalId, body.data.signature);
     const updated = await options.getExecutionRepository().update({
       ...execution,
       signHash: null,
@@ -158,14 +155,14 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     }
 
     const execution = await options.getExecutionRepository().findByPlanId(params.data.planId, query.data.localUserId);
-    if (!execution) return reply.status(404).send({ message: "No BMONI execution exists for this plan." });
+    if (!execution) return reply.status(404).send({ message: "No provider execution exists for this plan." });
     if (execution.state === "PREPARING") return refreshPreparedProposal(execution, options, reply);
     if (execution.state === "AWAITING_DEVICE_SIGNATURE" || execution.state === "COMPLETED" || execution.state === "FAILED") {
       return reply.send({ execution: publicExecution(execution) });
     }
 
     const mapping = await options.getBmoniUserService().getMapping(query.data.localUserId);
-    if (!mapping) return reply.status(409).send({ message: "BMONI user mapping is missing." });
+    if (!mapping) return reply.status(409).send({ message: "Financial-provider user mapping is missing." });
 
     const provider = await options.getBmoniGateway().getProposal(mapping.bmoniUserId, execution.providerProposalId);
     const providerStatus = extractProposalStatus(provider);
@@ -179,13 +176,9 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
   });
 };
 
-async function refreshPreparedProposal(
-  execution: ProviderExecution,
-  options: ExecutionRouteOptions,
-  reply: any
-) {
+async function refreshPreparedProposal(execution: ProviderExecution, options: ExecutionRouteOptions, reply: any) {
   const mapping = await options.getBmoniUserService().getMapping(execution.localUserId);
-  if (!mapping) return reply.status(409).send({ message: "BMONI user mapping is missing." });
+  if (!mapping) return reply.status(409).send({ message: "Financial-provider user mapping is missing." });
 
   const gateway = options.getBmoniGateway();
   let provider: unknown;
@@ -237,7 +230,7 @@ async function refreshPreparedProposal(
 
   const hashToSign = extractSignableHash(signPayload);
   if (!hashToSign) {
-    return reply.status(502).send({ message: "BMONI sign-payload returned no documented 32-byte signing digest." });
+    return reply.status(502).send({ message: "Provider sign-payload returned no documented 32-byte signing digest." });
   }
 
   const updated = await options.getExecutionRepository().update({
@@ -302,23 +295,18 @@ export function extractSignableHash(payload: unknown): string | null {
     }
     return null;
   };
-
   return walk(payload, 0);
 }
 
 function proposalRecord(payload: unknown): JsonRecord | null {
   const initial = asRecord(payload);
   if (!initial) return null;
-
   let record: JsonRecord = initial;
   for (let depth = 0; depth < 3; depth += 1) {
-    const nestedFromData: JsonRecord | null = asRecord(record["data"]);
-    const nestedFromValue: JsonRecord | null = asRecord(record["value"]);
-    const nested: JsonRecord | null = nestedFromData ?? nestedFromValue;
+    const nested = asRecord(record["data"]) ?? asRecord(record["value"]);
     if (!nested) break;
     record = nested;
   }
-
   return asRecord(record["proposal"]) ?? record;
 }
 
