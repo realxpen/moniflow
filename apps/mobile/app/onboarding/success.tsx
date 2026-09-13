@@ -1,37 +1,42 @@
 import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
+import { loadFinancialProvider, providerBadge, type FinancialProviderRuntime } from "@/services/runtime";
 import { colors, spacing, typography } from "@/theme";
 
 export default function OnboardingSuccessScreen() {
   const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
   const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
   const localUserId = routedLocalUserId?.trim() ?? "";
+  const [provider, setProvider] = useState<FinancialProviderRuntime | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void loadFinancialProvider().then((value) => { if (active) setProvider(value); }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   return (
     <Screen contentContainerStyle={styles.screen} scroll={false}>
       <View style={styles.content}>
         <FlowHeader
-          description="Your sandbox identity, wallet, and Nigeria rail can now feed the MONIFlow wallet home."
+          description="Your identity, wallet, Nigeria rail, and demo destination can now feed the MONIFlow workspace."
           eyebrow="READY"
           title="Your financial workspace is connected."
         />
         <SoftCard style={styles.card}>
-          <StatusPill label="SANDBOX READY" tone="success" />
+          <StatusPill label={providerBadge(provider)} tone="success" />
           <Text style={styles.cardTitle}>Provider-backed Home is ready.</Text>
           <Text style={styles.cardCopy}>
-            MONIFlow will read wallet state, CNGN balance, and the NGN deposit account from the BMONI sandbox where available. Technical wallet identifiers stay behind the wallet detail view.
+            MONIFlow reads wallet state, CNGN accounting, Pockets, and Financial Memory from the API. Simulated infrastructure stays visibly labelled and real provider success is never inferred locally.
           </Text>
         </SoftCard>
       </View>
       <PrimaryButton
-        onPress={() =>
-          router.replace({
-            pathname: "/(tabs)/home",
-            params: localUserId ? { localUserId } : undefined
-          })
-        }
+        disabled={!localUserId}
+        onPress={() => router.replace({ pathname: "/(tabs)/home", params: { localUserId } })}
       >
         Enter MONIFlow
       </PrimaryButton>
