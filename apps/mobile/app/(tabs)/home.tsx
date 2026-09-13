@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ActivityRow } from "@/components/activity";
@@ -9,11 +9,13 @@ import {
   OperatorInput,
   PrimaryButton,
   Screen,
+  SecondaryButton,
   SectionTitle,
   SoftCard,
   StatusPill,
   SuggestionChip
 } from "@/components/ui";
+import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { loadActivity, type FinancialActivity } from "@/services/activity";
 import { loadPockets, type Pocket } from "@/services/pockets";
 import {
@@ -22,6 +24,7 @@ import {
   type WalletBalance,
   type WalletSummary
 } from "@/services/wallet-dashboard";
+import { useDemoSession } from "@/store/demo-session";
 import { colors, layout, spacing, typography } from "@/theme";
 
 const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
@@ -36,7 +39,12 @@ const suggestions = [
 export default function HomeScreen() {
   const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
   const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
-  const localUserId = routedLocalUserId?.trim() || configuredLocalUserId;
+  const savedLocalUserId = useDemoSession((state) => state.localUserId);
+  const savedCommand = useDemoSession((state) => state.command);
+  const savedPlanId = useDemoSession((state) => state.planId);
+  const savedStage = useDemoSession((state) => state.stage);
+  const beginFlow = useDemoSession((state) => state.beginFlow);
+  const localUserId = routedLocalUserId?.trim() || savedLocalUserId || configuredLocalUserId;
 
   const [command, setCommand] = useState("");
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
@@ -53,52 +61,73 @@ export default function HomeScreen() {
     return "Good evening";
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      if (!localUserId) {
-        if (active) {
-          setError("Complete onboarding or bootstrap a development identity to load financial state.");
-          setLoading(false);
-        }
-        return;
-      }
+  const load = useCallback(async () => {
+    if (!localUserId) {
+      setError("Complete onboarding or bootstrap a development identity to load financial state.");
+      setLoading(false);
+      return;
+    }
 
-      setLoading(true);
-      setError(null);
-      try {
-        const [nextWallet, nextBalance, pocketState, recentActivity] = await Promise.all([
-          loadWallet(localUserId),
-          loadWalletBalance(localUserId),
-          loadPockets(localUserId),
-          loadActivity(localUserId, 4)
-        ]);
-        if (!active) return;
-        setWallet(nextWallet);
-        setBalance(nextBalance);
-        setPockets(pocketState.pockets);
-        setActivity(recentActivity);
-      } catch (cause) {
-        if (!active) return;
-        setError(cause instanceof Error ? cause.message : "Financial state could not be loaded.");
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    void load();
-    return () => { active = false; };
+    setLoading(true);
+    setError(null);
+    try {
+      const [nextWallet, nextBalance, pocketState, recentActivity] = await Promise.all([
+        loadWallet(localUserId),
+        loadWalletBalance(localUserId),
+        loadPockets(localUserId),
+        loadActivity(localUserId, 4)
+      ]);
+      setWallet(nextWallet);
+      setBalance(nextBalance);
+      setPockets(pocketState.pockets);
+      setActivity(recentActivity);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Financial state could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
   }, [localUserId]);
+
+  useEffect(() => { void load(); }, [load]);
+  useAppActiveRefresh(load);
 
   const availableAmount = balance ? Number.parseFloat(balance.availableToSpend) : null;
   const providerAmount = balance ? Number.parseFloat(balance.providerBalance) : null;
   const internalAllocated = balance ? Number.parseFloat(balance.internalAllocated) : null;
   const providerBadge = balance?.source === "moniflow-sandbox" ? "MONIFLOW SANDBOX" : "BMONI SANDBOX";
+  const hasRecoverableFlow = Boolean(
+    localUserId &&
+    savedLocalUserId === localUserId &&
+    savedStage &&
+    savedStage !== "home" &&
+    (savedCommand || savedPlanId)
+  );
 
   const previewCommand = () => {
     const normalized = command.trim();
     if (!normalized || !localUserId) return;
+    beginFlow(normalized);
     router.push({ pathname: "/operator/processing", params: { command: normalized, localUserId } });
+  };
+
+  const resumeFlow = () => {
+    if (!localUserId || !hasRecoverableFlow) return;
+    if ((savedStage === "processing" || savedStage === "plan") && savedCommand) {
+      router.push({ pathname: "/operator/processing", params: { command: savedCommand, localUserId } });
+      return;
+    }
+    if (savedPlanId) {
+      const pathname = savedStage === "approve"
+        ? "/operator/approve"
+        : savedStage === "signing"
+          ? "/operator/signing"
+          : savedStage === "execution"
+            ? "/operator/execution"
+            : savedStage === "result"
+              ? "/operator/result"
+              : "/operator/guard";
+      router.push({ pathname, params: { localUserId, planId: savedPlanId } });
+    }
   };
 
   const openBanking = () => {
@@ -115,6 +144,17 @@ export default function HomeScreen() {
         </View>
         <StatusPill label={providerBadge} tone="processing" />
       </View>
+
+      {hasRecoverableFlow ? (
+        <SoftCard style={styles.resumeCard}>
+          <View style={styles.resumeCopy}>
+            <StatusPill label="UNFINISHED FLOW" tone="warning" />
+            <Text style={styles.walletStateTitle}>Continue when you are ready.</Text>
+            <Text style={styles.walletStateCopy}>MONIFlow saved the last safe checkpoint. Nothing resumes automatically after an app restart.</Text>
+          </View>
+          <SecondaryButton onPress={resumeFlow}>Resume flow</SecondaryButton>
+        </SoftCard>
+      ) : null}
 
       {wallet && balance && availableAmount !== null && Number.isFinite(availableAmount) ? (
         <>
@@ -159,8 +199,17 @@ export default function HomeScreen() {
           <StatusPill label={loading ? "LOADING WALLET" : "WALLET UNAVAILABLE"} tone={loading ? "processing" : "warning"} />
           <Text style={styles.walletStateTitle}>{loading ? "Reading financial state…" : "Provider wallet data is not ready."}</Text>
           {error ? <Text style={styles.walletStateCopy}>{error}</Text> : null}
+          {!loading ? <SecondaryButton onPress={() => void load()}>Retry workspace refresh</SecondaryButton> : null}
         </SoftCard>
       )}
+
+      {error && wallet && balance ? (
+        <SoftCard style={styles.refreshWarning}>
+          <StatusPill label="REFRESH FAILED" tone="warning" />
+          <Text style={styles.walletStateCopy}>Showing the last successfully loaded workspace state. {error}</Text>
+          <SecondaryButton disabled={loading} onPress={() => void load()}>{loading ? "Refreshing…" : "Retry refresh"}</SecondaryButton>
+        </SoftCard>
+      ) : null}
 
       <View style={styles.section}>
         <SectionTitle eyebrow="MONIFLOW OPERATOR" title="What should your money do?" />
@@ -260,6 +309,8 @@ const styles = StyleSheet.create({
   greetingBlock: { gap: spacing.xxs },
   greeting: { ...typography.caption, color: colors.textSecondary },
   name: { ...typography.heading, color: colors.textPrimary },
+  resumeCard: { gap: spacing.md },
+  resumeCopy: { gap: spacing.sm },
   balanceAction: { width: "100%" },
   accountingCard: { gap: spacing.sm },
   accountingRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
@@ -271,6 +322,7 @@ const styles = StyleSheet.create({
   walletState: { gap: spacing.sm },
   walletStateTitle: { ...typography.heading, color: colors.textPrimary },
   walletStateCopy: { ...typography.caption, color: colors.textSecondary },
+  refreshWarning: { gap: spacing.sm },
   section: { gap: spacing.md },
   technicalLabel: { ...typography.technical, color: colors.textSecondary },
   suggestions: { gap: spacing.sm },
