@@ -1,21 +1,24 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ConfirmationButton, FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
+import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { approvePlan, getAuthorization, type AuthorizationSnapshot } from "@/services/approval";
+import { useDemoSession } from "@/store/demo-session";
 import { colors, radius, spacing, typography } from "@/theme";
 
 export default function ApprovalScreen() {
   const params = useLocalSearchParams<{ localUserId?: string; planId?: string }>();
   const localUserId = typeof params.localUserId === "string" ? params.localUserId : "";
   const planId = typeof params.planId === "string" ? params.planId : "";
+  const setFlowStage = useDemoSession((state) => state.setFlowStage);
   const [authorization, setAuthorization] = useState<AuthorizationSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!localUserId || !planId) {
       setError("Authorization requires the persisted plan identity.");
       setLoading(false);
@@ -30,9 +33,18 @@ export default function ApprovalScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [localUserId, planId]);
 
-  useEffect(() => { void load(); }, [localUserId, planId]);
+  useEffect(() => {
+    if (localUserId && planId) setFlowStage("approve", { planId });
+    void load();
+  }, [load, localUserId, planId, setFlowStage]);
+  useAppActiveRefresh(load);
+
+  const openSigning = () => {
+    setFlowStage("signing", { planId });
+    router.push({ pathname: "/operator/signing", params: { localUserId, planId } });
+  };
 
   const approve = async () => {
     if (!authorization || authorization.status !== "AWAITING_USER_APPROVAL") return;
@@ -41,7 +53,7 @@ export default function ApprovalScreen() {
     try {
       const result = await approvePlan(planId, localUserId, authorization.planHash);
       setAuthorization((current) => current ? { ...current, status: result.status } : current);
-      router.push({ pathname: "/operator/signing", params: { localUserId, planId } });
+      openSigning();
     } catch (cause) {
       const typed = cause as Error & { code?: string };
       if (typed.code === "PLAN_CHANGED") {
@@ -106,14 +118,14 @@ export default function ApprovalScreen() {
       </View>
 
       {authorization.status === "AWAITING_USER_APPROVAL" ? (
-        <ConfirmationButton disabled={approving} label={approving ? "Recording approval…" : `Approve ${formatNaira(authorization.amount)}`} onPress={() => void approve()} />
+        <ConfirmationButton disabled={approving || loading} label={approving ? "Recording approval…" : `Approve ${formatNaira(authorization.amount)}`} onPress={() => void approve()} />
       ) : (
         <>
           <SoftCard style={styles.notice}>
             <StatusPill label="APPROVED" tone="success" />
             <Text style={styles.noticeCopy}>The server has recorded approval for this exact plan fingerprint.</Text>
           </SoftCard>
-          <PrimaryButton onPress={() => router.push({ pathname: "/operator/signing", params: { localUserId, planId } })}>Continue to secure execution</PrimaryButton>
+          <PrimaryButton onPress={openSigning}>Continue to secure execution</PrimaryButton>
         </>
       )}
 
