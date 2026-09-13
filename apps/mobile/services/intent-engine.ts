@@ -1,4 +1,5 @@
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
+import { apiFetch } from "@/services/api-fetch";
+import { resolveApiUrl } from "@/services/runtime";
 
 export type AtomicIntent =
   | { intent: "CHECK_BALANCE"; currency: "NGN"; requiresApproval: false }
@@ -29,7 +30,7 @@ export type MoniflowIntent =
     };
 
 export async function parseOperatorIntent(input: string): Promise<MoniflowIntent> {
-  const response = await fetch(`${apiUrl}/api/operator/intent`, {
+  const response = await apiFetch(`${resolveApiUrl()}/api/operator/intent`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ input })
