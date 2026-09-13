@@ -1,11 +1,13 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Screen, SectionTitle, SoftCard, StatusPill } from "@/components/ui";
+import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { getSavedDestination, type VerifiedDestination } from "@/services/banking";
 import { loadFinancialProvider, providerBadge, type FinancialProviderRuntime } from "@/services/runtime";
 import { loadWallet, loadWalletBalance, type WalletBalance, type WalletSummary } from "@/services/wallet-dashboard";
+import { useDemoSession } from "@/store/demo-session";
 import { colors, layout, radius, spacing, typography } from "@/theme";
 
 const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
@@ -13,7 +15,8 @@ const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
 export default function ProfileScreen() {
   const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
   const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
-  const localUserId = routedLocalUserId?.trim() || configuredLocalUserId;
+  const savedLocalUserId = useDemoSession((state) => state.localUserId);
+  const localUserId = routedLocalUserId?.trim() || savedLocalUserId || configuredLocalUserId;
 
   const [provider, setProvider] = useState<FinancialProviderRuntime | null>(null);
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
@@ -22,7 +25,7 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -47,9 +50,10 @@ export default function ProfileScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [localUserId]);
 
-  useEffect(() => { void load(); }, [localUserId]);
+  useEffect(() => { void load(); }, [load]);
+  useAppActiveRefresh(load);
 
   return (
     <Screen contentContainerStyle={styles.screen}>
@@ -96,7 +100,7 @@ export default function ProfileScreen() {
         onPress={() => router.push("/onboarding/welcome")}
         style={({ pressed }) => [styles.onboardingLink, pressed && styles.pressed]}
       >
-        <Text style={styles.onboardingLabel}>{provider?.provider === "moniflow-sandbox" ? "Start a fresh sandbox workspace" : "Review secure onboarding"}</Text>
+        <Text style={styles.onboardingLabel}>{provider?.provider === "moniflow-sandbox" ? "Manage sandbox workspace" : "Review secure onboarding"}</Text>
       </Pressable>
 
       {error ? (
