@@ -6,28 +6,32 @@ import { ActivityRow } from "@/components/activity";
 import { BalanceCard } from "@/components/balance";
 import { PocketCard } from "@/components/pockets";
 import {
-  BottomSheet,
   OperatorInput,
   PrimaryButton,
   Screen,
   SectionTitle,
-  SecondaryButton,
   SoftCard,
   StatusPill,
   SuggestionChip
 } from "@/components/ui";
-import { mockDisclosure, mockHomeData } from "@/constants/mockData";
+import { loadActivity, type FinancialActivity } from "@/services/activity";
+import { loadPockets, type Pocket } from "@/services/pockets";
 import {
-  loadDepositAccount,
   loadWallet,
   loadWalletBalance,
-  type DepositAccount,
   type WalletBalance,
   type WalletSummary
 } from "@/services/wallet-dashboard";
 import { colors, layout, spacing, typography } from "@/theme";
 
 const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
+const canonicalCommand = "Withdraw ₦40,000 to my GTBank account and save ₦20,000 for my laptop.";
+const suggestions = [
+  "Check my balance",
+  "Withdraw ₦40,000 to my GTBank account",
+  "Save ₦20,000 for my laptop",
+  "Show my recent activity"
+];
 
 export default function HomeScreen() {
   const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
@@ -35,12 +39,12 @@ export default function HomeScreen() {
   const localUserId = routedLocalUserId?.trim() || configuredLocalUserId;
 
   const [command, setCommand] = useState("");
-  const [showAddMoney, setShowAddMoney] = useState(false);
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [balance, setBalance] = useState<WalletBalance | null>(null);
-  const [depositAccount, setDepositAccount] = useState<DepositAccount | null>(null);
-  const [walletLoading, setWalletLoading] = useState(true);
-  const [walletError, setWalletError] = useState<string | null>(null);
+  const [pockets, setPockets] = useState<Pocket[]>([]);
+  const [activity, setActivity] = useState<FinancialActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -51,46 +55,49 @@ export default function HomeScreen() {
 
   useEffect(() => {
     let active = true;
-
     const load = async () => {
       if (!localUserId) {
         if (active) {
-          setWalletError("Complete the sandbox onboarding flow to load provider-backed wallet data.");
-          setWalletLoading(false);
+          setError("Complete onboarding or bootstrap a development identity to load financial state.");
+          setLoading(false);
         }
         return;
       }
 
-      setWalletLoading(true);
-      setWalletError(null);
+      setLoading(true);
+      setError(null);
       try {
-        const [nextWallet, nextBalance, nextDepositAccount] = await Promise.all([
+        const [nextWallet, nextBalance, pocketState, recentActivity] = await Promise.all([
           loadWallet(localUserId),
           loadWalletBalance(localUserId),
-          loadDepositAccount(localUserId).catch(() => null)
+          loadPockets(localUserId),
+          loadActivity(localUserId, 4)
         ]);
         if (!active) return;
         setWallet(nextWallet);
         setBalance(nextBalance);
-        setDepositAccount(nextDepositAccount);
+        setPockets(pocketState.pockets);
+        setActivity(recentActivity);
       } catch (cause) {
         if (!active) return;
-        setWalletError(cause instanceof Error ? cause.message : "Wallet data could not be loaded.");
+        setError(cause instanceof Error ? cause.message : "Financial state could not be loaded.");
       } finally {
-        if (active) setWalletLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     void load();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [localUserId]);
 
-  const availableAmount = balance ? Number.parseFloat(balance.amount) : null;
+  const availableAmount = balance ? Number.parseFloat(balance.availableToSpend) : null;
+  const providerAmount = balance ? Number.parseFloat(balance.providerBalance) : null;
+  const internalAllocated = balance ? Number.parseFloat(balance.internalAllocated) : null;
+  const providerBadge = balance?.source === "moniflow-sandbox" ? "MONIFLOW SANDBOX" : "BMONI SANDBOX";
+
   const previewCommand = () => {
     const normalized = command.trim();
-    if (!normalized) return;
+    if (!normalized || !localUserId) return;
     router.push({ pathname: "/operator/processing", params: { command: normalized, localUserId } });
   };
 
@@ -99,31 +106,35 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View style={styles.greetingBlock}>
           <Text style={styles.greeting}>{greeting}</Text>
-          <Text style={styles.name}>{mockHomeData.firstName}</Text>
+          <Text style={styles.name}>MONIFlow</Text>
         </View>
-        <StatusPill label="BMONI SANDBOX" tone="processing" />
+        <StatusPill label={providerBadge} tone="processing" />
       </View>
 
       {wallet && balance && availableAmount !== null && Number.isFinite(availableAmount) ? (
         <>
           <BalanceCard
             actions={
-              <>
-                <SecondaryButton onPress={() => setShowAddMoney(true)} style={styles.balanceAction}>
-                  Add money
-                </SecondaryButton>
-                <PrimaryButton
-                  onPress={() => router.push("/bank/select")}
-                  style={styles.balanceAction}
-                >
-                  Withdraw
-                </PrimaryButton>
-              </>
+              <PrimaryButton onPress={() => router.push("/bank/select")} style={styles.balanceAction}>
+                Manage money
+              </PrimaryButton>
             }
             amount={availableAmount}
-            label="AVAILABLE"
+            label="AVAILABLE TO SPEND"
             status={wallet.status}
           />
+
+          <SoftCard style={styles.accountingCard}>
+            <View style={styles.accountingRow}>
+              <Text style={styles.technicalLabel}>PROVIDER BALANCE</Text>
+              <Text style={styles.accountingValue}>{formatNaira(providerAmount ?? 0)}</Text>
+            </View>
+            <View style={styles.accountingRow}>
+              <Text style={styles.technicalLabel}>IN MONEY SPACES</Text>
+              <Text style={styles.accountingValue}>{formatNaira(internalAllocated ?? 0)}</Text>
+            </View>
+            <Text style={styles.accountingNote}>Money spaces are MONIFlow bookkeeping, not separate provider-held balances.</Text>
+          </SoftCard>
 
           <Pressable
             accessibilityRole="button"
@@ -140,14 +151,9 @@ export default function HomeScreen() {
         </>
       ) : (
         <SoftCard style={styles.walletState}>
-          <StatusPill
-            label={walletLoading ? "LOADING WALLET" : "WALLET UNAVAILABLE"}
-            tone={walletLoading ? "processing" : "warning"}
-          />
-          <Text style={styles.walletStateTitle}>
-            {walletLoading ? "Reading your BMONI wallet…" : "Provider wallet data is not ready."}
-          </Text>
-          {walletError ? <Text style={styles.walletStateCopy}>{walletError}</Text> : null}
+          <StatusPill label={loading ? "LOADING WALLET" : "WALLET UNAVAILABLE"} tone={loading ? "processing" : "warning"} />
+          <Text style={styles.walletStateTitle}>{loading ? "Reading financial state…" : "Provider wallet data is not ready."}</Text>
+          {error ? <Text style={styles.walletStateCopy}>{error}</Text> : null}
         </SoftCard>
       )}
 
@@ -163,20 +169,11 @@ export default function HomeScreen() {
         <View style={styles.suggestions}>
           <Text style={styles.technicalLabel}>DETERMINISTIC INTENTS</Text>
           <View style={styles.chipRow}>
-            {mockHomeData.suggestions.map((suggestion) => (
-              <SuggestionChip
-                key={suggestion}
-                label={suggestion}
-                onPress={() => setCommand(suggestion)}
-                selected={command === suggestion}
-              />
+            {suggestions.map((suggestion) => (
+              <SuggestionChip key={suggestion} label={suggestion} onPress={() => setCommand(suggestion)} selected={command === suggestion} />
             ))}
           </View>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setCommand(mockHomeData.command)}
-            style={({ pressed }) => pressed && styles.pressed}
-          >
+          <Pressable accessibilityRole="button" onPress={() => setCommand(canonicalCommand)} style={({ pressed }) => pressed && styles.pressed}>
             <Text style={styles.demoCommand}>Use the full multi-action demo instruction</Text>
           </Pressable>
         </View>
@@ -185,55 +182,66 @@ export default function HomeScreen() {
       <View style={styles.section}>
         <View style={styles.sectionRow}>
           <SectionTitle eyebrow="INTERNAL BOOKKEEPING" title="Money spaces" />
-          <Pressable accessibilityRole="button" onPress={() => router.push("/(tabs)/pockets")}>
+          <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(tabs)/pockets", params: { localUserId } })}>
             <Text style={styles.textAction}>See all</Text>
           </Pressable>
         </View>
-        <View style={styles.pocketRow}>
-          {mockHomeData.pockets.map((pocket) => (
-            <PocketCard key={pocket.name} {...pocket} />
-          ))}
-        </View>
+        {pockets.length > 0 ? (
+          <View style={styles.pocketRow}>
+            {pockets.slice(0, 2).map((pocket) => (
+              <PocketCard
+                key={pocket.id}
+                allocatedAmount={pocket.allocatedAmount}
+                name={pocket.name}
+                targetAmount={pocket.targetAmount ?? Math.max(pocket.allocatedAmount, 1)}
+              />
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyState}>No money spaces yet. Internal allocations from completed plans appear here.</Text>
+        )}
       </View>
 
       <View style={styles.section}>
         <View style={styles.sectionRow}>
-          <SectionTitle eyebrow="MOCK ACTIVITY" title="Recent" />
-          <Pressable accessibilityRole="button" onPress={() => router.push("/(tabs)/activity")}>
+          <SectionTitle eyebrow="FINANCIAL MEMORY" title="Recent" />
+          <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(tabs)/activity", params: { localUserId } })}>
             <Text style={styles.textAction}>See all</Text>
           </Pressable>
         </View>
-        <View>
-          {mockHomeData.activity.map((item) => (
-            <ActivityRow key={item.label} {...item} />
-          ))}
-        </View>
-      </View>
-
-      <Text style={styles.disclosure}>{mockDisclosure}</Text>
-
-      <BottomSheet
-        onClose={() => setShowAddMoney(false)}
-        title="Add money"
-        visible={showAddMoney}
-      >
-        {depositAccount ? (
-          <View style={styles.depositDetails}>
-            <Text style={styles.technicalLabel}>NGN VIRTUAL ACCOUNT</Text>
-            <Text style={styles.accountNumber}>{depositAccount.accountNumber}</Text>
-            <Text style={styles.sheetCopy}>{depositAccount.bankName ?? "BMONI banking partner"}</Text>
-            {depositAccount.accountName ? <Text style={styles.sheetCopy}>{depositAccount.accountName}</Text> : null}
-            <Text style={styles.sheetCopy}>Transfer NGN to this account. BMONI credits the connected smart wallet as CNGN.</Text>
+        {activity.length > 0 ? (
+          <View>
+            {activity.map((item) => (
+              <ActivityRow
+                key={item.id}
+                amount={item.amount === null ? "—" : formatNaira(item.amount)}
+                label={activityLabel(item)}
+                meta={`${item.status} · ${new Date(item.createdAt).toLocaleString()}`}
+                source={item.source}
+              />
+            ))}
           </View>
         ) : (
-          <Text style={styles.sheetCopy}>
-            An NGN virtual account is not available from BMONI yet. It appears after the Nigeria rail is active and the provider has issued the deposit account.
-          </Text>
+          <Text style={styles.emptyState}>No completed financial actions yet.</Text>
         )}
-        <PrimaryButton onPress={() => setShowAddMoney(false)}>Done</PrimaryButton>
-      </BottomSheet>
+      </View>
+
+      <Text style={styles.disclosure}>EXT marks provider movement. INT marks MONIFlow internal bookkeeping.</Text>
     </Screen>
   );
+}
+
+function activityLabel(item: FinancialActivity) {
+  if (item.kind === "BANK_WITHDRAWAL") return "Bank withdrawal";
+  if (item.kind === "POCKET_ALLOCATION") {
+    const name = typeof item.metadata.pocketName === "string" ? item.metadata.pocketName : "Money space";
+    return `${name} allocation`;
+  }
+  return item.kind.replaceAll("_", " ").toLowerCase();
+}
+
+function formatNaira(amount: number) {
+  return `₦${new Intl.NumberFormat("en-NG", { maximumFractionDigits: 0 }).format(amount)}`;
 }
 
 function shortAddress(address: string) {
@@ -247,7 +255,11 @@ const styles = StyleSheet.create({
   greetingBlock: { gap: spacing.xxs },
   greeting: { ...typography.caption, color: colors.textSecondary },
   name: { ...typography.heading, color: colors.textPrimary },
-  balanceAction: { flex: 1, minWidth: 0 },
+  balanceAction: { width: "100%" },
+  accountingCard: { gap: spacing.sm },
+  accountingRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
+  accountingValue: { ...typography.section, color: colors.textPrimary, fontVariant: ["tabular-nums"] },
+  accountingNote: { ...typography.caption, color: colors.textSecondary },
   walletStrip: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", gap: spacing.md },
   walletStripText: { gap: spacing.xxs },
   walletAddress: { ...typography.body, color: colors.textPrimary },
@@ -262,9 +274,7 @@ const styles = StyleSheet.create({
   sectionRow: { alignItems: "flex-end", flexDirection: "row", justifyContent: "space-between" },
   textAction: { ...typography.caption, color: colors.statusProcessing, fontWeight: "600" },
   pocketRow: { flexDirection: "row", gap: spacing.sm },
+  emptyState: { ...typography.body, color: colors.textSecondary },
   disclosure: { ...typography.technical, color: colors.textSecondary, textAlign: "center" },
-  sheetCopy: { ...typography.body, color: colors.textSecondary },
-  depositDetails: { gap: spacing.xs },
-  accountNumber: { ...typography.display, color: colors.textPrimary },
   pressed: { opacity: 0.65 }
 });
