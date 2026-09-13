@@ -1,4 +1,4 @@
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
+import { resolveApiUrl } from "@/services/runtime";
 
 export type NigerianBank = { name: string; code: string };
 export type VerifiedDestination = {
@@ -13,14 +13,24 @@ export type VerifiedDestination = {
 };
 
 export async function getNigerianBanks(localUserId: string): Promise<NigerianBank[]> {
-  const response = await fetch(`${apiUrl}/api/banks?localUserId=${encodeURIComponent(localUserId)}`);
+  const response = await fetch(`${resolveApiUrl()}/api/banks?localUserId=${encodeURIComponent(localUserId)}`);
   const payload = (await response.json()) as { banks?: NigerianBank[]; message?: string };
   if (!response.ok || !payload.banks) throw new Error(payload.message ?? "Could not load Nigerian banks.");
   return payload.banks;
 }
 
+export async function getSavedDestination(localUserId: string, label: string): Promise<VerifiedDestination | null> {
+  const response = await fetch(
+    `${resolveApiUrl()}/api/banks/saved?localUserId=${encodeURIComponent(localUserId)}&label=${encodeURIComponent(label)}`
+  );
+  if (response.status === 404) return null;
+  const payload = (await response.json()) as { destination?: VerifiedDestination; message?: string };
+  if (!response.ok || !payload.destination) throw new Error(payload.message ?? "Could not read the saved bank destination.");
+  return payload.destination;
+}
+
 export async function verifyNigerianBankAccount(localUserId: string, bankCode: string, accountNumber: string) {
-  const response = await fetch(`${apiUrl}/api/banks/verify`, {
+  const response = await fetch(`${resolveApiUrl()}/api/banks/verify`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ localUserId, bankCode, accountNumber })
@@ -38,7 +48,7 @@ export async function registerNigerianBankAccount(input: {
   accountNumber: string;
   accountHolderName: string;
 }): Promise<VerifiedDestination> {
-  const response = await fetch(`${apiUrl}/api/banks/register`, {
+  const response = await fetch(`${resolveApiUrl()}/api/banks/register`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input)
