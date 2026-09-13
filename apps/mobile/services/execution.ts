@@ -36,9 +36,9 @@ export async function getExecutionStatus(planId: string, localUserId: string): P
 
 export async function finalizeExecution(planId: string, localUserId: string): Promise<ExecutionSnapshot> {
   const response = await fetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/execution/finalize`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ localUserId }) });
-  const payload = (await response.json()) as { execution?: ExecutionSnapshot; message?: string; code?: string };
-  if (!response.ok || !payload.execution) throw makeError(payload.message ?? "Completed execution could not be finalized.", payload.code);
-  return payload.execution;
+  const payload = (await response.json()) as { message?: string; code?: string };
+  if (!response.ok) throw makeError(payload.message ?? "Completed execution could not be finalized.", payload.code);
+  return getExecutionStatus(planId, localUserId);
 }
 
 function makeError(message: string, code?: string) { const error = new Error(message) as Error & { code?: string }; error.code = code; return error; }
