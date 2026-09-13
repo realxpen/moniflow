@@ -67,8 +67,12 @@ describe("canonical MONIFlow sandbox planning", () => {
   });
 });
 
-async function injectJson(method: "GET" | "POST", url: string, payload?: unknown) {
-  const response = await app!.inject({ method, url, ...(payload === undefined ? {} : { payload }) });
+type JsonPayload = Record<string, unknown>;
+
+async function injectJson(method: "GET" | "POST", url: string, payload?: JsonPayload) {
+  const response = payload === undefined
+    ? await app!.inject({ method, url })
+    : await app!.inject({ method, url, payload });
   const body = response.json();
   if (response.statusCode >= 400) {
     throw new Error(`${method} ${url} failed (${response.statusCode}): ${JSON.stringify(body)}`);
