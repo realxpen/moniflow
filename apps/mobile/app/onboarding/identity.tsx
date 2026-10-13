@@ -3,6 +3,9 @@ import { useState } from "react";
 import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
+import { useAuthSession } from "@/services/auth-session";
+import { apiFetch } from "@/services/api-fetch";
+import { useDemoSession } from "@/store/demo-session";
 import { colors, radius, spacing, typography } from "@/theme";
 
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL ?? "";
@@ -33,15 +36,21 @@ function resolveApiUrl() {
 }
 
 export default function IdentityScreen() {
-  const [firstName, setFirstName] = useState("Chiamaka");
-  const [lastName, setLastName] = useState("Okafor");
-  const [email, setEmail] = useState(() => `embedded.demo+${Date.now()}@example.com`);
-  const [phoneNumber, setPhoneNumber] = useState("+2348012345678");
+  const auth = useAuthSession();
+  const setWorkspace = useDemoSession(state => state.setWorkspace);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState(auth?.email ?? "");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<string | null>(null);
 
   const continueOnboarding = async () => {
+    if (!__DEV__ && !auth) {
+      router.replace("/auth/sign-in");
+      return;
+    }
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !phoneNumber.trim()) {
       setError("First name, last name, email, and phone are required.");
       return;
@@ -52,10 +61,11 @@ export default function IdentityScreen() {
     setState(null);
     try {
       const apiUrl = resolveApiUrl();
-      const response = await fetch(`${apiUrl}/api/onboarding/user`, {
+      const response = await apiFetch(`${apiUrl}/api/onboarding/user`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          ...(auth ? { localUserId: auth.userId } : {}),
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           email: email.trim().toLowerCase(),
@@ -73,6 +83,7 @@ export default function IdentityScreen() {
         throw new Error(payload.message ?? "MONIFlow could not create your sandbox identity.");
       }
 
+      setWorkspace(payload.localUserId, "bmoni");
       router.push({
         pathname: Platform.OS === "web" ? "/onboarding/wallet" : "/onboarding/wallet-native",
         params: { localUserId: payload.localUserId }
@@ -104,7 +115,7 @@ export default function IdentityScreen() {
             </View>
           </View>
           <View style={styles.field}>
-            <Text style={styles.label}>EMAIL · UNIQUE SANDBOX TEST</Text>
+            <Text style={styles.label}>EMAIL · APPROVED SANDBOX ACCOUNT</Text>
             <TextInput accessibilityLabel="Email address" autoCapitalize="none" keyboardType="email-address" onChangeText={setEmail} style={styles.input} value={email} />
           </View>
           <View style={styles.field}>
@@ -113,7 +124,7 @@ export default function IdentityScreen() {
           </View>
           <View style={styles.sandboxRow}>
             <StatusPill label="BMONI SANDBOX" tone="processing" />
-            <Text style={styles.persona}>CURRENT REFERENCE PERSONA</Text>
+            <Text style={styles.persona}>VERIFIED MONIFLOW SESSION REQUIRED</Text>
           </View>
         </SoftCard>
         <Text style={styles.note}>Do not replace these sandbox values with your real BVN/NIN identity. Nigeria KYC later uses BMONI's documented sandbox BVN.</Text>

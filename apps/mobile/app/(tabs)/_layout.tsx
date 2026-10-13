@@ -1,4 +1,5 @@
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
+import { useAuthSession } from "@/services/auth-session";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors, layout, radius, shadows, spacing, typography } from "@/theme";
@@ -11,6 +12,8 @@ const tabLabels: Record<string, string> = {
 };
 
 export default function TabLayout() {
+  const auth = useAuthSession();
+  if (!__DEV__ && !auth) return <Redirect href="/auth/sign-in" />;
   return (
     <Tabs
       tabBar={({ navigation, state }) => (

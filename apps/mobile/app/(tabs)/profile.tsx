@@ -6,6 +6,7 @@ import { Screen, SectionTitle, SoftCard, StatusPill } from "@/components/ui";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { getSavedDestination, type VerifiedDestination } from "@/services/banking";
 import { loadFinancialProvider, providerBadge, type FinancialProviderRuntime } from "@/services/runtime";
+import { signOut, useAuthSession } from "@/services/auth-session";
 import { loadWallet, loadWalletBalance, type WalletBalance, type WalletSummary } from "@/services/wallet-dashboard";
 import { useDemoSession } from "@/store/demo-session";
 import { colors, layout, radius, spacing, typography } from "@/theme";
@@ -16,6 +17,8 @@ export default function ProfileScreen() {
   const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
   const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
   const savedLocalUserId = useDemoSession((state) => state.localUserId);
+  const clearSession = useDemoSession((state) => state.clearSession);
+  const signedIn = useAuthSession();
   const localUserId = routedLocalUserId?.trim() || savedLocalUserId || configuredLocalUserId;
 
   const [provider, setProvider] = useState<FinancialProviderRuntime | null>(null);
@@ -113,6 +116,11 @@ export default function ProfileScreen() {
         </SoftCard>
       ) : null}
 
+      {signedIn ? (
+        <Pressable accessibilityRole="button" style={styles.onboardingLink} onPress={() => { signOut(); clearSession(); router.replace("/auth/sign-in"); }}>
+          <Text style={styles.onboardingLabel}>Sign out</Text>
+        </Pressable>
+      ) : null}
       <Text style={styles.disclosure}>{provider?.simulated ? "SIMULATED FINANCIAL INFRASTRUCTURE IS LABELLED THROUGHOUT THE WORKSPACE" : "PROVIDER STATUS IS READ FROM THE MONIFLOW API"}</Text>
     </Screen>
   );

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
+import { useAuthSession } from "@/services/auth-session";
 import {
   loadFinancialProvider,
   providerBadge,
@@ -13,6 +14,7 @@ import { useDemoSession } from "@/store/demo-session";
 import { colors, spacing, typography } from "@/theme";
 
 export default function WelcomeScreen() {
+  const auth = useAuthSession();
   const [provider, setProvider] = useState<FinancialProviderRuntime | null>(null);
   const [checking, setChecking] = useState(true);
   const [preparing, setPreparing] = useState(false);
@@ -60,7 +62,8 @@ export default function WelcomeScreen() {
     hydrated &&
     savedLocalUserId &&
     provider &&
-    savedProvider === provider.provider
+    savedProvider === provider.provider &&
+    (__DEV__ || (auth !== null && savedLocalUserId === auth.userId))
   );
 
   return (
@@ -112,7 +115,9 @@ export default function WelcomeScreen() {
           </SoftCard>
         ) : null}
 
-        {sandboxDemo ? (
+        {!__DEV__ && !auth ? (
+          <PrimaryButton onPress={() => router.push("/auth/sign-in")}>Sign in to continue</PrimaryButton>
+        ) : sandboxDemo ? (
           <SecondaryButton disabled={preparing || checking} onPress={() => void startCleanDemo()}>
             {preparing ? "Preparing clean demo…" : canResume ? "Restart with a clean sandbox demo" : "Start clean sandbox demo"}
           </SecondaryButton>
