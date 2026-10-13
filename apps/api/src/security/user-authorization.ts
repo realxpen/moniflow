@@ -143,7 +143,7 @@ export function attachUserAuthorization(app: FastifyInstance, settings: AuthSett
       return reply.code(503).send({ code: "AUTH_NOT_CONFIGURED", message: "Secure user authentication is not configured." });
     }
     const authorization = request.headers.authorization;
-    const match = typeof authorization === "string" && /^Bearer ([^\s]+)$/i.exec(authorization);
+    const match = typeof authorization === "string" ? /^Bearer ([^\s]+)$/i.exec(authorization) : null;
     if (!match?.[1]) return reply.code(401).send({ code: "AUTH_REQUIRED" });
     let identity: VerifiedUser;
     try {
