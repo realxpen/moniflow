@@ -7,6 +7,10 @@ const emptyStringToUndefined = (value: unknown) =>
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  // Required for public production financial routes: Supabase Auth issuer + asymmetric JWKS.
+  AUTH_ISSUER: z.preprocess(emptyStringToUndefined, z.url().optional()),
+  AUTH_JWKS_URL: z.preprocess(emptyStringToUndefined, z.url().optional()),
+  AUTH_AUDIENCE: z.string().default("authenticated"),
   API_HOST: z.string().min(1).default("0.0.0.0"),
   API_PORT: z.coerce.number().int().positive().max(65_535).default(4_000),
   // Public website origins only. Comma-separated, exact browser Origin matches; never "*" in production.
