@@ -3,6 +3,7 @@ export type { SupportedIntent } from "./intents.js";
 export { moneyPlanStatusSchema } from "./money-plan.js";
 export type { MoneyPlanStatus } from "./money-plan.js";
 export {
+  partnerIdentifierSchema,
   partnerOperationEnvelopeSchema,
   partnerCollectionCommandSchema,
   partnerPayoutCommandSchema,
