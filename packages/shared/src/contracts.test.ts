@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { moneyPlanStatusSchema, supportedIntentSchema } from "./index";
+import { moneyPlanStatusSchema, supportedIntentSchema } from "./index.js";
 
 describe("shared financial contracts", () => {
   it("accepts only a supported intent", () => {

@@ -1,8 +1,9 @@
-export { supportedIntentSchema } from "./intents";
-export type { SupportedIntent } from "./intents";
-export { moneyPlanStatusSchema } from "./money-plan";
-export type { MoneyPlanStatus } from "./money-plan";
+export { supportedIntentSchema } from "./intents.js";
+export type { SupportedIntent } from "./intents.js";
+export { moneyPlanStatusSchema } from "./money-plan.js";
+export type { MoneyPlanStatus } from "./money-plan.js";
 export {
+  partnerIdentifierSchema,
   partnerOperationEnvelopeSchema,
   partnerCollectionCommandSchema,
   partnerPayoutCommandSchema,
@@ -10,9 +11,9 @@ export {
   partnerFinancialCommandSchema,
   partnerExecutionStateSchema,
   partnerFinancialEventSchema
-} from "./partner-contracts";
+} from "./partner-contracts.js";
 export type {
   PartnerFinancialCommand,
   PartnerFinancialEvent,
   PartnerFinancialExecutionState
-} from "./partner-contracts";
+} from "./partner-contracts.js";

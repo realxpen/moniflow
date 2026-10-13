@@ -7,7 +7,11 @@ import { z } from "zod";
  * Hustle owns merchant amounts, entitlement, ledger and escrow.
  * MONIFlow owns the provider operation coordination, not custody claims.
  */
-const uuid = z.uuid();
+/** Platform-origin IDs: Hustle stores Prisma CUIDs; UUIDs remain accepted for test and future partners. */
+export const partnerIdentifierSchema = z.union([
+  z.uuid(),
+  z.string().regex(/^c[a-z0-9]{20,34}$/)
+]);
 const amountMinor = z.number().int().positive().safe();
 const currency = z.literal("NGN");
 const reference = z.string().trim().min(1).max(160);
@@ -19,7 +23,7 @@ export const partnerOperationEnvelopeSchema = z.object({
   version,
   partner,
   environment: sandboxEnvironment,
-  operationId: uuid,
+  operationId: partnerIdentifierSchema,
   idempotencyKey: reference,
   // Authenticated service principal must be resolved separately from this untrusted body.
 }).strict();
@@ -27,17 +31,17 @@ export const partnerOperationEnvelopeSchema = z.object({
 export const partnerCollectionCommandSchema = partnerOperationEnvelopeSchema.extend({
   kind: z.literal("COLLECTION"),
   subjectType: z.enum(["BOOKING", "ORDER"]),
-  subjectId: uuid,
-  payerReference: uuid,
-  beneficiaryReference: uuid,
+  subjectId: partnerIdentifierSchema,
+  payerReference: partnerIdentifierSchema,
+  beneficiaryReference: partnerIdentifierSchema,
   amountMinor,
   currency
 }).strict();
 
 export const partnerPayoutCommandSchema = partnerOperationEnvelopeSchema.extend({
   kind: z.literal("PAYOUT"),
-  payoutId: uuid,
-  beneficiaryReference: uuid,
+  payoutId: partnerIdentifierSchema,
+  beneficiaryReference: partnerIdentifierSchema,
   // Opaque identifier for a verified, partner-bound payout destination.
   destinationReference: reference,
   amountMinor,
@@ -49,10 +53,10 @@ export const partnerPayoutCommandSchema = partnerOperationEnvelopeSchema.extend(
 
 export const partnerRefundCommandSchema = partnerOperationEnvelopeSchema.extend({
   kind: z.literal("REFUND"),
-  refundId: uuid,
+  refundId: partnerIdentifierSchema,
   originalPaymentReference: reference,
   subjectType: z.enum(["BOOKING", "ORDER"]),
-  subjectId: uuid,
+  subjectId: partnerIdentifierSchema,
   amountMinor,
   currency,
   // Hustle must persist refund eligibility/restriction before dispatch.
@@ -85,8 +89,8 @@ export const partnerFinancialEventSchema = z.object({
   version,
   partner,
   environment: sandboxEnvironment,
-  eventId: uuid,
-  operationId: uuid,
+  eventId: z.uuid(),
+  operationId: partnerIdentifierSchema,
   kind: z.enum(["COLLECTION", "PAYOUT", "REFUND"]),
   status: partnerExecutionStateSchema,
   provider: reference,

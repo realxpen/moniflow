@@ -20,6 +20,9 @@ import { nigeriaOnboardingRoutes } from "./routes/nigeria-onboarding.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
 import { operatorRoutes } from "./routes/operator.js";
 import { pocketRoutes } from "./routes/pockets.js";
+import { partnerRoutes } from "./routes/partner.js";
+import { SqlitePartnerOperationStore } from "./services/partner/sqlite-store.js";
+import { PostgresPartnerOperationStore } from "./services/partner/postgres-store.js";
 import { walletFundingRoutes } from "./routes/wallet-funding.js";
 import { walletRoutes } from "./routes/wallet.js";
 import { walletOwnershipRoutes } from "./routes/wallet-ownership.js";
@@ -83,6 +86,21 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   const getPocketRepository = dependencies.getPocketRepository ?? (() => testRepositories!.pockets);
   const getActivityRepository = dependencies.getActivityRepository ?? (() => testRepositories!.activities);
 
+  // Partner sandbox is opt-in, unavailable in production and deliberately
+  // cannot run when the configured financial provider is BMONI.
+  const partnerEnabled =
+    env.NODE_ENV !== "production" &&
+    env.FINANCIAL_PROVIDER === "moniflow-sandbox" &&
+    env.PARTNER_HUSTLE_SANDBOX_ENABLED === "true";
+  if (partnerEnabled && !env.PARTNER_HUSTLE_HMAC_SECRET) {
+    throw new Error("PARTNER_HUSTLE_HMAC_SECRET required for sandbox partner API");
+  }
+  const partnerStore = partnerEnabled
+    ? env.DATABASE_URL.startsWith("postgres")
+      ? new PostgresPartnerOperationStore(env.DATABASE_URL)
+      : new SqlitePartnerOperationStore(env.DATABASE_URL)
+    : null;
+
   const app = Fastify({
     logger: {
       redact: [
@@ -90,6 +108,10 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
         "req.headers.cookie",
         "req.headers.x-api-key",
         "headers.authorization",
+        "req.headers.x-moniflow-signature",
+        "headers.x-moniflow-signature",
+        "req.headers.x-moniflow-nonce",
+        "headers.x-moniflow-nonce",
         "headers.x-api-key",
         "BMONI_API_KEY",
         "req.body.signature",
@@ -101,6 +123,10 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   });
   app.register(multipart, { limits: { fields: 12, files: 4, fileSize: 8 * 1024 * 1024, parts: 16 } });
   if (testRepositories) app.addHook("onClose", async () => testRepositories.close());
+  if (partnerStore) {
+    app.register(partnerRoutes, { prefix: "/internal/v1", store: partnerStore, secret: env.PARTNER_HUSTLE_HMAC_SECRET! });
+    app.addHook("onClose", async () => partnerStore.close());
+  }
 
   const operatorOptions = {
     getBmoniGateway: dependencies.getBmoniGateway,
