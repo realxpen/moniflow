@@ -9,6 +9,15 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_HOST: z.string().min(1).default("0.0.0.0"),
   API_PORT: z.coerce.number().int().positive().max(65_535).default(4_000),
+  // Public website origins only. Comma-separated, exact browser Origin matches; never "*" in production.
+  CORS_ALLOWED_ORIGINS: z.string().default([
+    "https://moniflow-indol.vercel.app",
+    "https://moniflow-swifnatechnologyltd.vercel.app",
+    "http://localhost:8081",
+    "http://127.0.0.1:8081",
+    "http://localhost:19006",
+    "http://localhost:3000"
+  ].join(",")),
   FINANCIAL_PROVIDER: z.enum(["bmoni", "moniflow-sandbox"]).default("bmoni"),
   BMONI_BASE_URL: z.preprocess(
     emptyStringToUndefined,

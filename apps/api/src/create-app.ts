@@ -1,6 +1,8 @@
 import multipart from "@fastify/multipart";
 import Fastify from "fastify";
 
+import { attachBrowserCors } from "./config/browser-cors.js";
+
 import { env } from "./config/env.js";
 import type { ActivityRepository } from "./repositories/activity.js";
 import type { BankAccountRepository } from "./repositories/bank-account.js";
@@ -121,6 +123,9 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
       ]
     }
   });
+  // Allow requests only from our published website and explicitly configured development origins.
+  // Native apps and server-to-server requests do not need browser CORS headers.
+  attachBrowserCors(app, env.CORS_ALLOWED_ORIGINS);
   app.register(multipart, { limits: { fields: 12, files: 4, fileSize: 8 * 1024 * 1024, parts: 16 } });
   if (testRepositories) app.addHook("onClose", async () => testRepositories.close());
   if (partnerStore) {
