@@ -1,5 +1,9 @@
 # MONIFlow Project State
 
+## Hustle receipt outbox delivery — Test-only Phase 03 (2026-10-13)
+
+Owner approved merged MONIFlow #6 (298f87c) and Hustle #111 (14a8dbe). Branch feat/hustle-receipt-delivery-outbox adds a SQLite/PostgreSQL durable recovery queue for authenticated `operation.received` notifications, atomic 30s lease, at-least-once retries with finite attempt cap and an explicitly invoked test-only sender restricted to 127.0.0.1 Hustle sandbox inbox. The sender never executes BMONI/PSP, changes money or starts automatically. The existing command store remains RECEIVED-only; new test demonstrates crash replay protection and queue recovery. CI/PR pending; docs/HUSTLE_RECEIPT_PUSH_OUTBOX_SANDBOX.md.
+
 ## Hustle signed command-receipt evidence — Phase 02 (2026-10-13)
 
 Following Hustle PR #110 merged at 3ca7ef2 with 3/3 CI passed, this MONIFlow branch adds a sandbox-only, opt-in signed readback endpoint for persisted `RECEIVED` commands. HMAC covers exact return payload bytes (domain-separated from signed request authentication); readback includes amount, command digest, operation/event ID and `simulated=true`, `executionStarted=false`, `realFundsMoved=false`. No payment success, provider evidence, outbox push, bank API call or financial movement exists. MONIFlow and Hustle remain independent financial domains. CI and review pending; see `docs/HUSTLE_SIGNED_RECEIPT_V1.md`.
