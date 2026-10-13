@@ -186,7 +186,7 @@ describe("MONIFlow Hustle sandbox-only partner control plane", () => {
     expect(again.statusCode).toBe(200);
     expect(again.body).toBe(first.body);
     expect(again.headers["x-moniflow-receipt-signature"]).toBe(signature);
-    const replay=signed("GET",url,{});
+    const replay=signed("GET",url);
     const replayFirst=await app.inject(replay);
     const replaySecond=await app.inject(replay);
     expect(replayFirst.statusCode).toBe(200);
