@@ -71,7 +71,7 @@ export function createSupabaseJwtVerifier(settings: AuthSettings): VerifyToken {
     if (token.length > 16_384) throw new Error("INVALID_TOKEN");
     const segments = token.split(".");
     if (segments.length !== 3) throw new Error("INVALID_TOKEN");
-    const [head, body, signature] = segments;
+    const [head, body, signature] = segments as [string, string, string];
     const header = decodeSegment<JwtHeader>(head);
     const claims = decodeSegment<JwtClaims>(body);
     if (!header || !claims || !header.kid || !["ES256", "RS256"].includes(header.alg ?? "")) {
@@ -95,7 +95,7 @@ export function createSupabaseJwtVerifier(settings: AuthSettings): VerifyToken {
     const verifier = createVerify("sha256");
     verifier.update(head + "." + body);
     verifier.end();
-    const key = createPublicKey({ key: matching as JsonWebKey, format: "jwk" });
+    const key = createPublicKey({ key: matching as import("node:crypto").JsonWebKey, format: "jwk" });
     const valid = verifier.verify(header.alg === "ES256" ? { key, dsaEncoding: "ieee-p1363" } : key,
       Buffer.from(signature, "base64url"));
     if (!valid) throw new Error("INVALID_TOKEN");
@@ -109,7 +109,7 @@ function findUserId(record: unknown): string | undefined {
 
 function requiresUserSession(url: string, method: string) {
   if (method.toUpperCase() === "OPTIONS") return false;
-  const pathname = url.split("?")[0];
+  const pathname = url.split("?")[0] ?? "";
   if (publicPaths.has(pathname)) return false;
   // The partner control plane has its own HMAC + nonce/replay verifier.
   if (pathname === "/internal/v1" || pathname.startsWith("/internal/v1/")) return false;
@@ -158,7 +158,7 @@ export function attachUserAuthorization(app: FastifyInstance, settings: AuthSett
       return reply.code(403).send({ code: "WORKSPACE_ACCESS_DENIED" });
     }
     // Onboarding identity must be bound to the authenticated subject.
-    const pathname = request.url.split("?")[0];
+    const pathname = request.url.split("?")[0] ?? "";
     if ((pathname === "/api/onboarding/user" || pathname === "/api/onboarding/users" ||
       pathname === "/onboarding/user" || pathname === "/onboarding/users") &&
       isRecord(request.body)) {
