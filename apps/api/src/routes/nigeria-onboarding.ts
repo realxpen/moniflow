@@ -12,6 +12,8 @@ import {
   type BmoniUploadFile
 } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
+import { env } from "../config/env.js";
+import { getAuthenticatedUserId } from "../security/user-authorization.js";
 
 const localUserIdSchema = z.uuid();
 const nigeriaBodySchema = updateNigeriaKycInputSchema.extend({ localUserId: localUserIdSchema }).strict();
@@ -142,6 +144,13 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
       return reply.status(400).send({
         message: "Valid localUserId, supported ID type, document number, NGA issuing country, expiration date, and proof-of-address type are required."
       });
+    }
+
+    // Multipart fields are streamed inside this handler, not parsed at preValidation.
+    // Bind them to the signed subject before looking up a wallet or uploading KYC files.
+    if (env.NODE_ENV === "production" &&
+      getAuthenticatedUserId(request) !== localUserId!.toLowerCase()) {
+      return reply.status(403).send({ code: "WORKSPACE_ACCESS_DENIED" });
     }
 
     const idFront = files.get("idFront");

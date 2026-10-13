@@ -14,6 +14,13 @@ export type VerifyToken = (token: string) => Promise<VerifiedUser>;
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const publicPaths = new Set(["/health", "/health/provider", "/health/bmoni"]);
+// The verified identity is request-scoped and can never be supplied by a client.
+// Multipart form fields are parsed in their handlers, after the general auth hook.
+const authenticatedUsers = new WeakMap<FastifyRequest, string>();
+
+export function getAuthenticatedUserId(request: FastifyRequest): string | null {
+  return authenticatedUsers.get(request) ?? null;
+}
 type JwtHeader = { alg?: string; kid?: string; typ?: string };
 type JwtClaims = { sub?: string; iss?: string; aud?: string | string[]; exp?: number; nbf?: number; iat?: number; role?: string };
 type Jwk = { kty: string; kid: string; alg?: string; use?: string; [key: string]: unknown };
@@ -154,6 +161,7 @@ export function attachUserAuthorization(app: FastifyInstance, settings: AuthSett
       }
       return reply.code(401).send({ code: "INVALID_SESSION" });
     }
+    authenticatedUsers.set(request, identity.userId);
     if (!matchesWorkspace(request, identity.userId)) {
       return reply.code(403).send({ code: "WORKSPACE_ACCESS_DENIED" });
     }

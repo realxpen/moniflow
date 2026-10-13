@@ -1,9 +1,10 @@
 import { generateKeyPairSync, sign } from "node:crypto";
 
 import Fastify from "fastify";
+import multipart from "@fastify/multipart";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { attachUserAuthorization, createSupabaseJwtVerifier } from "./user-authorization.js";
+import { attachUserAuthorization, createSupabaseJwtVerifier, getAuthenticatedUserId } from "./user-authorization.js";
 
 const apps: ReturnType<typeof Fastify>[] = [];
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -94,4 +95,39 @@ describe("signed user authorization", () => {
     app.get("/api/private", async () => ({ ok: true }));
     expect((await app.inject({ method: "GET", url: "/api/private" })).statusCode).toBe(503);
   });
+  it("binds streamed multipart KYC fields to the authenticated session", async () => {
+    const { token } = fixture();
+    const app = Fastify();
+    apps.push(app);
+    attachUserAuthorization(app, settings);
+    await app.register(multipart);
+    app.post("/api/onboarding/nigeria/documents", async (request, reply) => {
+      const parts = request.parts();
+      let fieldUserId: string | undefined;
+      for await (const part of parts) {
+        if (part.type === "field" && part.fieldname === "localUserId") {
+          fieldUserId = String(part.value);
+        }
+      }
+      if (!fieldUserId || getAuthenticatedUserId(request) !== fieldUserId.toLowerCase()) {
+        return reply.code(403).send({ code: "WORKSPACE_ACCESS_DENIED" });
+      }
+      return { accepted: true };
+    });
+    const boundary = "moniflow-test-boundary";
+    const asMultipart = (localUserId: string) =>
+      `--${boundary}\\r\\nContent-Disposition: form-data; name="localUserId"\\r\\n\\r\\n${localUserId}\\r\\n--${boundary}--\\r\\n`;
+    const send = (localUserId: string) => app.inject({
+      method: "POST",
+      url: "/api/onboarding/nigeria/documents",
+      headers: {
+        authorization: "Bearer " + token(),
+        "content-type": "multipart/form-data; boundary=" + boundary
+      },
+      payload: asMultipart(localUserId)
+    });
+    expect((await send(otherId)).statusCode).toBe(403);
+    expect((await send(userId)).statusCode).toBe(200);
+  });
+
 });
