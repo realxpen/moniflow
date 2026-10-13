@@ -4,16 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter @moniflow/moniguard build && tsc -p tsconfig.build.json",
+    "build": "pnpm --filter @moniflow/shared build && pnpm --filter @moniflow/moniguard build && tsc -p tsconfig.build.json",
     "dev": "node --watch --import tsx src/server.ts",
     "start": "node --import tsx src/server.ts",
     "start:prod": "node dist/server.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "pnpm --filter @moniflow/shared build && tsc --noEmit",
     "demo:canonical": "node scripts/run-canonical-demo.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "10.1.1",
     "@moniflow/moniguard": "workspace:*",
+    "@moniflow/shared": "workspace:*",
     "dotenv": "^17.2.2",
     "fastify": "^5.6.0",
     "postgres": "^3.4.7",
