@@ -144,7 +144,7 @@ export function attachUserAuthorization(app: FastifyInstance, settings: AuthSett
     }
     const authorization = request.headers.authorization;
     const match = typeof authorization === "string" && /^Bearer ([^\s]+)$/i.exec(authorization);
-    if (!match) return reply.code(401).send({ code: "AUTH_REQUIRED" });
+    if (!match?.[1]) return reply.code(401).send({ code: "AUTH_REQUIRED" });
     let identity: VerifiedUser;
     try {
       identity = await verify(match[1]);
