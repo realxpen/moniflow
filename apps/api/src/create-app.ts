@@ -86,6 +86,21 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   const getPocketRepository = dependencies.getPocketRepository ?? (() => testRepositories!.pockets);
   const getActivityRepository = dependencies.getActivityRepository ?? (() => testRepositories!.activities);
 
+  // Partner sandbox is opt-in, unavailable in production and deliberately
+  // cannot run when the configured financial provider is BMONI.
+  const partnerEnabled =
+    env.NODE_ENV !== "production" &&
+    env.FINANCIAL_PROVIDER === "moniflow-sandbox" &&
+    env.PARTNER_HUSTLE_SANDBOX_ENABLED === "true";
+  if (partnerEnabled && !env.PARTNER_HUSTLE_HMAC_SECRET) {
+    throw new Error("PARTNER_HUSTLE_HMAC_SECRET required for sandbox partner API");
+  }
+  const partnerStore = partnerEnabled
+    ? env.DATABASE_URL.startsWith("postgres")
+      ? new PostgresPartnerOperationStore(env.DATABASE_URL)
+      : new SqlitePartnerOperationStore(env.DATABASE_URL)
+    : null;
+
   const app = Fastify({
     logger: {
       redact: [
