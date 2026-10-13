@@ -1,6 +1,6 @@
 # Hustle × MONIFlow — Partner Financial Integration v1
 Date: 2026-10-13
-Status: PHASE 00 PROPOSAL — sandbox contract only; NO live integration or money movement.
+Status: PHASE 00 v1 contract proposed on PR #3; stacked Phase 01 branch implements authenticated SANDBOX receipt only, NO live integration or money movement.
 Counterpart: Hustle `Knowledge/Decisions/ADR-0069-moniflow-financial-integration-boundary.md`.
 
 ## Goal and non-goals
@@ -20,8 +20,8 @@ Build a partner financial execution API for Hustle without changing MONIFlow's i
 - Only server-side authenticated Hustle adapter may call proposed partner commands. Existing `/api/operator` routes using caller-controlled `localUserId` are NOT a safe partner boundary.
 
 ## Versioned contracts
-`packages/shared/src/partner-contracts.ts` exports strict Zod schemas for command and normalized event messages. First version supports sandbox NGN minor-unit amounts only; it defines no BMONI REST endpoint and does not create a MONIFlow HTTP route.
-Proposed (NOT implemented): `POST /internal/v1/collections`, `GET /internal/v1/collections/:id`, `POST /internal/v1/payouts`, `GET /internal/v1/payouts/:id`, `POST /internal/v1/refunds`, `GET /internal/v1/refunds/:id`, `GET /internal/v1/reconciliation`, `GET /internal/v1/provider-capabilities`.
+`packages/shared/src/partner-contracts.ts` exports strict Zod schemas for command and normalized event messages. First version supports sandbox NGN minor-unit amounts only; it defines no BMONI REST endpoint. The stacked Phase 01 branch adds an opt-in, non-production-only control-plane route, which never executes providers.
+Implemented on stacked Phase 01 branch as command storage only: `POST /internal/v1/collections`, `POST /internal/v1/payouts`, `POST /internal/v1/refunds`, `GET /internal/v1/operations/:operationId`, `GET /internal/v1/provider-capabilities`. All remain disabled by default; other proposed status/reconciliation/provider execution endpoints are NOT implemented. See `docs/HUSTLE_PARTNER_SANDBOX_API_ACCEPTANCE.md`.
 
 Command must include version, partner, environment, operationId, idempotencyKey, subject/operation reference, integer amountMinor, NGN currency. A payout additionally carries a verified destination *reference* and Hustle reservation reference; a refund carries the persisted Hustle authorization reference. **These fields are evidence pointers, not authorization:** partner service must verify them against a trusted issuer, current Hustle transaction state, and bound partner identity before starting provider execution.
 
