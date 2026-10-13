@@ -116,7 +116,7 @@ describe("signed user authorization", () => {
     });
     const boundary = "moniflow-test-boundary";
     const asMultipart = (localUserId: string) =>
-      `--${boundary}\\r\\nContent-Disposition: form-data; name="localUserId"\\r\\n\\r\\n${localUserId}\\r\\n--${boundary}--\\r\\n`;
+      `--${boundary}\r\nContent-Disposition: form-data; name="localUserId"\r\n\r\n${localUserId}\r\n--${boundary}--\r\n`;
     const send = (localUserId: string) => app.inject({
       method: "POST",
       url: "/api/onboarding/nigeria/documents",
