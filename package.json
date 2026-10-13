@@ -11,9 +11,9 @@
     "dev:api": "pnpm --filter @moniflow/api dev",
     "dev:mobile": "pnpm --filter @moniflow/mobile start",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm --filter @moniflow/shared build && pnpm -r typecheck",
     "lint": "eslint . --max-warnings=0",
-    "test": "pnpm --filter @moniflow/moniguard build && vitest run"
+    "test": "pnpm --filter @moniflow/shared build && pnpm --filter @moniflow/moniguard build && vitest run"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",

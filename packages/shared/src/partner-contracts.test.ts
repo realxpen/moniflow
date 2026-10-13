@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   partnerFinancialCommandSchema,
   partnerFinancialEventSchema
-} from "./partner-contracts";
+} from "./partner-contracts.js";
 
 const id = "e124bfd4-4fa0-4718-872e-93aa3dff1a13";
 const other = "547763f8-d8c5-4762-b9a3-ed7a3228d563";

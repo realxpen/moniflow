@@ -1,5 +1,9 @@
 # MONIFlow Project State
 
+## Hustle Partner Sandbox API — Stacked Phase 01 (2026-10-13)
+
+Following owner acceptance/merge of Hustle P0 #107 and read-only reconciliation #108, a MONIFlow feature branch `feat/hustle-partner-sandbox-auth-api` (stacked on still-open partner-contract PR #3) implements a **disabled-by-default, non-production-only, sandbox-provider-only** HMAC-authenticated partner command intake. Raw-body method/path/timestamp/nonce signatures and persistent replay prevention, operation idempotency and opaque tenant-limited operation reads are added using SQLite/PostgreSQL. POST collection/payout/refund are **only recorded as RECEIVED**, never executed: NO BMONI calls, bank movement, custody, wallet ledger writes, customer fund claims, live deployment or enabled production routes. See `docs/HUSTLE_PARTNER_SANDBOX_API_ACCEPTANCE.md`; CI/PR review pending. Sandbox partner API is an independent track and does not change the MONIFlow hackathon/mobile demo priority.
+
 ## Cross-Project Hustle Integration — Phase 00 (2026-10-13)
 
 Owner authorized starting the separate Hustle × MONIFlow payment architecture track without switching on real money movement. Branch `feat/hustle-phase00-partner-contracts` defines strict shared v1 sandbox-only financial operation/event Zod schemas, tests and `docs/HUSTLE_PARTNER_INTEGRATION_V1.md`. No partner HTTP endpoints, money movement, provider changes, KYC changes, or production credentials. Existing MONIFlow demo priority stays intact. Partner authentication, durable operation store and owner-scoped identity authorization remain P0 next-phase work. Hustle owns transaction truth and ledger; MONIFlow coordinates execution only. **PR/CI/merge pending; BMONI user 409 provider blocker unchanged.**
