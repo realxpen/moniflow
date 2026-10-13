@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../create-app.js";
 import { SqlitePartnerOperationStore } from "../services/partner/sqlite-store.js";
 import { PARTNER_MEDIA_TYPE, signPartnerRequest } from "../services/partner/request-auth.js";
+import { partnerReceiptEventSchema, verifyReceiptEvidence } from "../services/partner/receipt-evidence.js";
 import { partnerRoutes } from "./partner.js";
 
 const SECRET = "moniflow-hustle-sandbox-test-secret-never-use-in-production";
@@ -157,6 +158,41 @@ describe("MONIFlow Hustle sandbox-only partner control plane", () => {
       expect((await app.inject(signed("POST",url,data))).statusCode).toBe(400);
     }
     expect((await app.inject(signed("GET","/internal/v1/operations/"+command.operationId))).statusCode).toBe(404);
+  });
+
+  it("authenticates readback and signs immutable RECEIVED-only evidence, not financial success", async () => {
+    const app = sandbox();
+    const command = collection();
+    const post = await app.inject(signed("POST","/internal/v1/collections",command));
+    expect(post.statusCode).toBe(202);
+    const url="/internal/v1/operations/"+command.operationId+"/receipt-evidence";
+    expect((await app.inject({method:"GET",url})).statusCode).toBe(401);
+    const first=await app.inject(signed("GET",url));
+    expect(first.statusCode).toBe(200);
+    const signature=String(first.headers["x-moniflow-receipt-signature"]);
+    expect(verifyReceiptEvidence(SECRET,Buffer.from(first.rawPayload),signature)).toBe(true);
+    const receipt=partnerReceiptEventSchema.parse(first.json());
+    expect(receipt).toMatchObject({
+      source:"MONIFLOW",partner:"HUSTLE",eventType:"operation.received",
+      operationId:command.operationId,kind:"COLLECTION",amountMinor:command.amountMinor,
+      status:"RECEIVED",simulated:true,executionStarted:false,
+      realFundsMoved:false,providerEvidenceReference:null
+    });
+    expect(first.body).not.toContain("payerReference");
+    expect(first.body).not.toContain("beneficiaryReference");
+    expect(verifyReceiptEvidence(SECRET,Buffer.from(first.body+" "),signature)).toBe(false);
+    expect(verifyReceiptEvidence(SECRET,Buffer.from(first.body),"sha256="+"f".repeat(64))).toBe(false);
+    const again=await app.inject(signed("GET",url));
+    expect(again.statusCode).toBe(200);
+    expect(again.body).toBe(first.body);
+    expect(again.headers["x-moniflow-receipt-signature"]).toBe(signature);
+    const replay=signed("GET",url,{});
+    const replayFirst=await app.inject(replay);
+    const replaySecond=await app.inject(replay);
+    expect(replayFirst.statusCode).toBe(200);
+    expect(replaySecond.statusCode).toBe(409);
+    expect((await app.inject(signed("GET","/internal/v1/operations/"+randomUUID()+"/receipt-evidence"))).statusCode).toBe(404);
+    expect((await app.inject(signed("GET","/internal/v1/operations/"+command.operationId))).json().status).toBe("RECEIVED");
   });
 
   it("records payout/refund proposals only, without provider activation", async () => {
