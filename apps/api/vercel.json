@@ -9,8 +9,8 @@
   "outputDirectory": "public",
   "rewrites": [
     {
-      "source": "/:path*",
-      "destination": "/api/index?__moniflow_path=:path*"
+      "source": "/(.*)",
+      "destination": "/api/index?__moniflow_path=$1"
     }
   ]
 }
