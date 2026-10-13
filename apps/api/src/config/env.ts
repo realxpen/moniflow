@@ -19,7 +19,12 @@ const envSchema = z.object({
     z.string().min(1).optional()
   ),
   BMONI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().max(30_000).default(10_000),
-  DATABASE_URL: z.string().default("file:./moniflow.db")
+  DATABASE_URL: z.string().default("file:./moniflow.db"),
+  // Explicit, non-production, simulated partner control plane only.
+  PARTNER_HUSTLE_SANDBOX_ENABLED: z.enum(["true","false"]).default("false"),
+  PARTNER_HUSTLE_HMAC_SECRET: z.preprocess(
+    emptyStringToUndefined, z.string().min(32).optional()
+  )
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
