@@ -1,3 +1,4 @@
+import { apiFetch } from "@/services/api-fetch";
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
 export type ExecutionSnapshot = {
@@ -12,7 +13,7 @@ export type ExecutionSnapshot = {
 };
 
 export async function prepareExecution(planId: string, localUserId: string): Promise<ExecutionSnapshot> {
-  const response = await fetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/execution/prepare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ localUserId }) });
+  const response = await apiFetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/execution/prepare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ localUserId }) });
   const payload = (await response.json()) as { execution?: ExecutionSnapshot; message?: string; code?: string } & Partial<ExecutionSnapshot>;
   if (!response.ok) throw makeError(payload.message ?? "Provider execution could not be prepared.", payload.code);
   const execution = payload.execution ?? (payload.planId ? payload as ExecutionSnapshot : undefined);
@@ -21,21 +22,21 @@ export async function prepareExecution(planId: string, localUserId: string): Pro
 }
 
 export async function submitExecutionSignature(planId: string, localUserId: string, proposalId: string, signature: string): Promise<ExecutionSnapshot> {
-  const response = await fetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/execution/sign`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ localUserId, proposalId, signature }) });
+  const response = await apiFetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/execution/sign`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ localUserId, proposalId, signature }) });
   const payload = (await response.json()) as { execution?: ExecutionSnapshot; message?: string; code?: string };
   if (!response.ok || !payload.execution) throw makeError(payload.message ?? "Provider rejected the proposal signature.", payload.code);
   return payload.execution;
 }
 
 export async function getExecutionStatus(planId: string, localUserId: string): Promise<ExecutionSnapshot> {
-  const response = await fetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/execution/status?localUserId=${encodeURIComponent(localUserId)}`);
+  const response = await apiFetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/execution/status?localUserId=${encodeURIComponent(localUserId)}`);
   const payload = (await response.json()) as { execution?: ExecutionSnapshot; message?: string };
   if (!response.ok || !payload.execution) throw new Error(payload.message ?? "Could not read provider proposal status.");
   return payload.execution;
 }
 
 export async function finalizeExecution(planId: string, localUserId: string): Promise<ExecutionSnapshot> {
-  const response = await fetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/execution/finalize`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ localUserId }) });
+  const response = await apiFetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/execution/finalize`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ localUserId }) });
   const payload = (await response.json()) as { message?: string; code?: string };
   if (!response.ok) throw makeError(payload.message ?? "Completed execution could not be finalized.", payload.code);
   return getExecutionStatus(planId, localUserId);

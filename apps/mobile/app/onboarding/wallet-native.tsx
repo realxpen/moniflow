@@ -1,3 +1,4 @@
+import { apiFetch } from "@/services/api-fetch";
 import { BlurView } from "expo-blur";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -69,13 +70,13 @@ export default function NativeWalletSetupScreen() {
     if (!localUserId) return;
     update("readback", "working");
     try {
-      const walletResponse = await fetch(`${apiUrl}/api/wallet?localUserId=${encodeURIComponent(localUserId)}`);
+      const walletResponse = await apiFetch(`${apiUrl}/api/wallet?localUserId=${encodeURIComponent(localUserId)}`);
       const walletPayload = (await walletResponse.json()) as { wallet?: { status?: string; address?: string }; message?: string };
       if (!walletResponse.ok || !walletPayload.wallet) throw new Error(walletPayload.message ?? "BMONI wallet readback failed.");
       setProviderWalletStatus(walletPayload.wallet.status ?? "unknown");
       if (walletPayload.wallet.address) setSmartWalletAddress(walletPayload.wallet.address);
 
-      const balanceResponse = await fetch(`${apiUrl}/api/wallet/balance?localUserId=${encodeURIComponent(localUserId)}`);
+      const balanceResponse = await apiFetch(`${apiUrl}/api/wallet/balance?localUserId=${encodeURIComponent(localUserId)}`);
       const balancePayload = (await balanceResponse.json()) as { balance?: { amount?: string }; message?: string };
       if (!balanceResponse.ok || !balancePayload.balance?.amount) {
         throw new Error(balancePayload.message ?? "BMONI balance readback failed.");
@@ -90,7 +91,7 @@ export default function NativeWalletSetupScreen() {
 
   const restorePersistedWallet = async (apiUrl: string) => {
     if (!localUserId) return false;
-    const response = await fetch(`${apiUrl}/api/wallet/status?localUserId=${encodeURIComponent(localUserId)}`);
+    const response = await apiFetch(`${apiUrl}/api/wallet/status?localUserId=${encodeURIComponent(localUserId)}`);
     const payload = (await response.json()) as { status?: string; wallet?: PersistedWallet; message?: string };
     if (!response.ok) throw new Error(payload.message ?? "Wallet status could not be loaded.");
     if (payload.status !== "created" || !payload.wallet) return false;
@@ -169,7 +170,7 @@ export default function NativeWalletSetupScreen() {
       update("device", "done");
 
       update("ownership", "working");
-      const challengeResponse = await fetch(`${apiUrl}/api/wallet/owner-proof-challenge`, {
+      const challengeResponse = await apiFetch(`${apiUrl}/api/wallet/owner-proof-challenge`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ localUserId, ownerAddress: address })
@@ -186,7 +187,7 @@ export default function NativeWalletSetupScreen() {
       update("ownership", "done");
 
       update("cngn", "working");
-      const walletResponse = await fetch(`${apiUrl}/api/wallet/create-managed`, {
+      const walletResponse = await apiFetch(`${apiUrl}/api/wallet/create-managed`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ localUserId, ownerAddress: address, challengeId: challenge.challengeId, signature })

@@ -1,3 +1,4 @@
+import { apiFetch } from "@/services/api-fetch";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -47,7 +48,7 @@ export default function BmoniStatusScreen() {
     setLifecycle(null);
     try {
       const query = localUserId.trim() ? `?localUserId=${encodeURIComponent(localUserId.trim())}` : "";
-      const response = await fetch(`${apiUrl}/api/dev/bmoni-status${query}`);
+      const response = await apiFetch(`${apiUrl}/api/dev/bmoni-status${query}`);
       const payload = (await response.json()) as BmoniStatus;
       setStatus(payload);
       if (!response.ok) {
@@ -56,7 +57,7 @@ export default function BmoniStatusScreen() {
       }
 
       if (localUserId.trim()) {
-        const lifecycleResponse = await fetch(`${apiUrl}/api/dev/bmoni-lifecycle?localUserId=${encodeURIComponent(localUserId.trim())}`);
+        const lifecycleResponse = await apiFetch(`${apiUrl}/api/dev/bmoni-lifecycle?localUserId=${encodeURIComponent(localUserId.trim())}`);
         const lifecyclePayload = (await lifecycleResponse.json()) as LifecycleStatus;
         setLifecycle(lifecyclePayload);
         if (!lifecycleResponse.ok) setError(lifecyclePayload.error ?? "Lifecycle verification could not complete.");

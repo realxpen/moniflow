@@ -1,3 +1,4 @@
+import { apiFetch } from "@/services/api-fetch";
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
 export type AuthorizationSnapshot = {
@@ -23,7 +24,7 @@ export type ApprovalResult = {
 };
 
 export async function getAuthorization(planId: string, localUserId: string): Promise<AuthorizationSnapshot> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/authorization?localUserId=${encodeURIComponent(localUserId)}`
   );
   const payload = (await response.json()) as { authorization?: AuthorizationSnapshot; message?: string; code?: string };
@@ -40,7 +41,7 @@ export async function approvePlan(
   localUserId: string,
   expectedPlanHash: string
 ): Promise<ApprovalResult> {
-  const response = await fetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/approve`, {
+  const response = await apiFetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/approve`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ localUserId, expectedPlanHash })
@@ -55,7 +56,7 @@ export async function approvePlan(
 }
 
 export async function getExecutionReadiness(planId: string, localUserId: string) {
-  const response = await fetch(
+  const response = await apiFetch(
     `${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/execution-readiness?localUserId=${encodeURIComponent(localUserId)}`
   );
   return (await response.json()) as {

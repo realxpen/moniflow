@@ -1,3 +1,4 @@
+import { apiFetch } from "@/services/api-fetch";
 import type { DocumentPickerAsset } from "expo-document-picker";
 
 const apiUrl = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
@@ -28,14 +29,14 @@ export type NigeriaOccupation = {
 };
 
 export async function getNigeriaKycOptions(localUserId: string): Promise<NigeriaKycOptions> {
-  const response = await fetch(`${apiUrl}/api/onboarding/nigeria/options?localUserId=${encodeURIComponent(localUserId)}`);
+  const response = await apiFetch(`${apiUrl}/api/onboarding/nigeria/options?localUserId=${encodeURIComponent(localUserId)}`);
   const payload = (await response.json()) as { options?: unknown; message?: string };
   if (!response.ok) throw new Error(payload.message ?? "BMONI KYC options could not be loaded.");
   return normalizeOptions(payload.options);
 }
 
 export async function searchNigeriaOccupations(localUserId: string, search: string): Promise<NigeriaOccupation[]> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${apiUrl}/api/onboarding/nigeria/occupations?localUserId=${encodeURIComponent(localUserId)}&search=${encodeURIComponent(search.trim())}`
   );
   const payload = (await response.json()) as { occupations?: unknown; message?: string };
@@ -65,7 +66,7 @@ export async function prepareNigeriaKyc(input: {
   actingAsIntermediary: boolean;
   bvn: string;
 }): Promise<NigeriaOnboardingStatus> {
-  const response = await fetch(`${apiUrl}/api/onboarding/nigeria/start`, {
+  const response = await apiFetch(`${apiUrl}/api/onboarding/nigeria/start`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -129,14 +130,14 @@ export async function uploadNigeriaKycDocuments(input: {
   appendAsset(form, "poaFront", input.poaFront);
   if (input.poaBack) appendAsset(form, "poaBack", input.poaBack);
 
-  const response = await fetch(`${apiUrl}/api/onboarding/nigeria/documents`, { method: "POST", body: form });
+  const response = await apiFetch(`${apiUrl}/api/onboarding/nigeria/documents`, { method: "POST", body: form });
   const payload = (await response.json()) as { status?: NigeriaOnboardingStatus; message?: string };
   if (!response.ok) throw new Error(payload.message ?? "Nigeria KYC documents could not be uploaded.");
   return payload.status ?? "documents_uploaded";
 }
 
 export async function activateNigeriaRail(localUserId: string, bvn: string): Promise<NigeriaOnboardingStatus> {
-  const response = await fetch(`${apiUrl}/api/onboarding/nigeria/activate`, {
+  const response = await apiFetch(`${apiUrl}/api/onboarding/nigeria/activate`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ localUserId, bvn })
@@ -147,14 +148,14 @@ export async function activateNigeriaRail(localUserId: string, bvn: string): Pro
 }
 
 export async function getNigeriaRailStatus(localUserId: string): Promise<NigeriaOnboardingStatus> {
-  const response = await fetch(`${apiUrl}/api/onboarding/nigeria/status?localUserId=${encodeURIComponent(localUserId)}`);
+  const response = await apiFetch(`${apiUrl}/api/onboarding/nigeria/status?localUserId=${encodeURIComponent(localUserId)}`);
   const payload = (await response.json()) as { status?: NigeriaOnboardingStatus; message?: string };
   if (!response.ok) throw new Error(payload.message ?? "Nigeria rail status could not be checked.");
   return payload.status ?? "processing";
 }
 
 export async function ensureNgnDepositAccount(localUserId: string) {
-  const response = await fetch(`${apiUrl}/api/wallet/deposit-account`, {
+  const response = await apiFetch(`${apiUrl}/api/wallet/deposit-account`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ localUserId })

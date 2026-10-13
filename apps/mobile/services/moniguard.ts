@@ -1,3 +1,4 @@
+import { apiFetch } from "@/services/api-fetch";
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
 export type GuardRuleName =
@@ -26,7 +27,7 @@ export type GuardResult = {
 };
 
 export async function runMoniGuard(planId: string, localUserId: string): Promise<GuardResult> {
-  const response = await fetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/guard`, {
+  const response = await apiFetch(`${apiUrl}/api/operator/plans/${encodeURIComponent(planId)}/guard`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ localUserId })

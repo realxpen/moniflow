@@ -1,3 +1,4 @@
+import { apiFetch } from "@/services/api-fetch";
 import type { MoniflowIntent } from "@/services/intent-engine";
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -38,7 +39,7 @@ export async function prepareMoneyPlan(
   localUserId: string,
   originalInstruction?: string
 ): Promise<PreparedMoneyPlan> {
-  const response = await fetch(`${apiUrl}/api/operator/plan`, {
+  const response = await apiFetch(`${apiUrl}/api/operator/plan`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ intent, localUserId, originalInstruction })
