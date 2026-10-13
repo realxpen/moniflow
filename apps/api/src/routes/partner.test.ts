@@ -224,12 +224,21 @@ describe("MONIFlow Hustle sandbox-only partner control plane", () => {
     const req=signed("POST","/internal/v1/collections",cmd);
     const initial=sandbox(new SqlitePartnerOperationStore(path));
     expect((await initial.inject(req)).statusCode).toBe(202);
+    const url="/internal/v1/operations/"+cmd.operationId+"/receipt-evidence";
+    const before=await initial.inject(signed("GET",url));
+    expect(before.statusCode).toBe(200);
+    expect(verifyReceiptEvidence(SECRET,Buffer.from(before.rawPayload),
+      String(before.headers["x-moniflow-receipt-signature"]))).toBe(true);
     await initial.close();apps.splice(apps.indexOf(initial),1);
     const restarted=sandbox(new SqlitePartnerOperationStore(path));
     expect((await restarted.inject(req)).statusCode).toBe(409);
     const detail=await restarted.inject(signed("GET","/internal/v1/operations/"+cmd.operationId));
     expect(detail.statusCode).toBe(200);
     expect(detail.json().status).toBe("RECEIVED");
+    const after=await restarted.inject(signed("GET",url));
+    expect(after.statusCode).toBe(200);
+    expect(after.body).toBe(before.body);
+    expect(after.headers["x-moniflow-receipt-signature"]).toBe(before.headers["x-moniflow-receipt-signature"]);
     expect((await restarted.inject(signed("POST","/internal/v1/collections",cmd))).statusCode).toBe(200);
   });
 });
