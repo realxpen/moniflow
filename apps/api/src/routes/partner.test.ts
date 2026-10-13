@@ -79,6 +79,15 @@ function signed(
 }
 
 describe("MONIFlow Hustle sandbox-only partner control plane", () => {
+  it("accepts source-authentic Hustle CUIDs without treating receipt as payment", async () => {
+    const app = sandbox();
+    const cuid = "cmq8h5rjk0000n91t32g77v4p";
+    const command = { ...collection(), operationId:cuid, subjectId:cuid, payerReference:cuid, beneficiaryReference:cuid };
+    const result = await app.inject(signed("POST", "/internal/v1/collections", command));
+    expect(result.statusCode).toBe(202);
+    expect(result.json()).toMatchObject({ operationId:cuid, status:"RECEIVED", executionStarted:false, realFundsMoved:false });
+    expect((await app.inject(signed("GET", "/internal/v1/operations/"+cuid))).statusCode).toBe(200);
+  });
   it("is not registered in the normal MONIFlow app when opt-in is absent", async () => {
     const app = buildApp();
     apps.push(app);
