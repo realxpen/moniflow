@@ -23,6 +23,16 @@ Vercel may need to process the commit that introduces `git.deploymentEnabled` on
 
 The known **team ID** and two **existing project IDs** are non-secret and already configured in the workflow. No extra GitHub secrets are required. The Actions token must be authorized for both existing Vercel projects.
 
+## Verified production domains and API connection
+
+- Website: `https://moniflow-indol.vercel.app` (verified production project domain)
+- API: `https://moniflow-api-silk.vercel.app` (verified production project domain)
+- The website's production `EXPO_PUBLIC_API_URL` must point to the **verified API domain**, not a deployment-specific or unassigned `-swifnatechnologyltd.vercel.app` hostname.
+- `EXPO_PUBLIC_API_URL` is compiled into the Expo web export. Changing it in Vercel requires a new **web-only** production release via GitHub Actions (`component: web`).
+- `/health/provider` is public for provider readiness; finance endpoints require the signed Supabase session token. Do not disable API authorization to fix connectivity.
+- A `503` from `/health/provider` means the selected financial provider itself needs diagnosis. It is not proof of a browser CORS or DNS failure.
+- Vercel Deployment Protection and MONIFlow Supabase Auth are separate systems. Preview deployments may be protected, but production must only be publicly accessible after the API ownership/401 tests pass.
+
 ## Publish only at a release checkpoint
 
 1. Open **Actions > Deploy MONIFlow to Vercel**.
