@@ -31,7 +31,7 @@ export class PostgresPartnerOperationStore implements PartnerOperationStore {
     await this.sql`
       CREATE TABLE IF NOT EXISTS moniflow_private.hustle_partner_operations_v1 (
         partner text NOT NULL CHECK(partner='HUSTLE'),
-        operation_id uuid NOT NULL,
+        operation_id text NOT NULL,
         idempotency_key text NOT NULL,
         kind text NOT NULL CHECK(kind IN ('COLLECTION','PAYOUT','REFUND')),
         request_digest text NOT NULL,
@@ -59,7 +59,7 @@ export class PostgresPartnerOperationStore implements PartnerOperationStore {
     const rows = await this.sql`
       INSERT INTO moniflow_private.hustle_partner_operations_v1
         (partner,operation_id,idempotency_key,kind,request_digest,command_json,state)
-      VALUES (${command.partner},${command.operationId}::uuid,${command.idempotencyKey},
+      VALUES (${command.partner},${command.operationId},${command.idempotencyKey},
         ${command.kind},${digest},${JSON.stringify(command)}::jsonb,'RECEIVED')
       ON CONFLICT DO NOTHING RETURNING operation_id
     `;
@@ -73,7 +73,7 @@ export class PostgresPartnerOperationStore implements PartnerOperationStore {
     await this.ready;
     const rows=await this.sql`
       SELECT * FROM moniflow_private.hustle_partner_operations_v1
-      WHERE partner=${partner} AND operation_id=${operationId}::uuid LIMIT 1
+      WHERE partner=${partner} AND operation_id=${operationId} LIMIT 1
     `;
     return rows[0] ? this.mapRow(rows[0] as Record<string, unknown>) : null;
   }
