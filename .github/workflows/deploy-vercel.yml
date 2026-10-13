@@ -70,10 +70,12 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
+      # Run from the monorepo root: Vercel applies each project's configured Root Directory.
+      # Running inside apps/api or apps/mobile would resolve paths twice.
       # Deploy API before web when 'both' is selected.
       - name: Deploy API to production
         if: inputs.component == 'both' || inputs.component == 'api'
-        working-directory: apps/api
+        working-directory: .
         env:
           VERCEL_PROJECT_ID: prj_M61k4BVOZDFxXsMzLwKporUHlxZl
         shell: bash
@@ -88,7 +90,7 @@ jobs:
 
       - name: Deploy web to production
         if: inputs.component == 'both' || inputs.component == 'web'
-        working-directory: apps/mobile
+        working-directory: .
         env:
           VERCEL_PROJECT_ID: prj_BlNidFkMOSWwMQrPlw6F2gmpszb4
         shell: bash
