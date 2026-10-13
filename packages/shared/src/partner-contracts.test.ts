@@ -24,6 +24,12 @@ const collection = {
 };
 
 describe("Hustle partner financial contract v1 (no external operations)", () => {
+  it("accepts actual Hustle CUID record references while rejecting malformed identifiers", () => {
+    const cuid = "cmq8h5rjk0000n91t32g77v4p";
+    expect(partnerIdentifierSchema.safeParse(cuid).success).toBe(true);
+    expect(partnerFinancialCommandSchema.safeParse({ ...collection, operationId:cuid, subjectId:cuid, payerReference:cuid, beneficiaryReference:cuid }).success).toBe(true);
+    expect(partnerIdentifierSchema.safeParse("../danger").success).toBe(false);
+  });
   it("accepts a strictly specified sandbox collection", () => {
     expect(partnerFinancialCommandSchema.parse(collection).amountMinor).toBe(1_000_000);
   });
