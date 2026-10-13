@@ -1,5 +1,10 @@
 # MONIFlow Project State
 
+## Cross-Project Hustle Integration — Phase 00 (2026-10-13)
+
+Owner authorized starting the separate Hustle × MONIFlow payment architecture track without switching on real money movement. Branch `feat/hustle-phase00-partner-contracts` defines strict shared v1 sandbox-only financial operation/event Zod schemas, tests and `docs/HUSTLE_PARTNER_INTEGRATION_V1.md`. No partner HTTP endpoints, money movement, provider changes, KYC changes, or production credentials. Existing MONIFlow demo priority stays intact. Partner authentication, durable operation store and owner-scoped identity authorization remain P0 next-phase work. Hustle owns transaction truth and ledger; MONIFlow coordinates execution only. **PR/CI/merge pending; BMONI user 409 provider blocker unchanged.**
+
+
 ## Current Gate
 
 **Phase 18 — mobile demo hardening is built and green.**
