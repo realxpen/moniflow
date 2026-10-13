@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": false
+  },
   "framework": null,
   "installCommand": "cd ../.. && pnpm install --no-frozen-lockfile",
   "buildCommand": "pnpm run build && mkdir -p public && printf '<!doctype html><html><head><meta charset=\"utf-8\"><title>MONIFlow API</title></head><body>MONIFlow API</body></html>' > public/index.html",

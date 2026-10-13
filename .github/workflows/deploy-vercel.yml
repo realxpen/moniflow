@@ -1,0 +1,102 @@
+name: Deploy MONIFlow to Vercel
+
+# Deliberate releases only. Normal pushes run ci.yml but never deploy to Vercel.
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: "Production release target"
+        required: true
+        type: choice
+        default: both
+        options:
+          - both
+          - api
+          - web
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moniflow-production-vercel
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable Corepack
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Export mobile web bundle
+        run: pnpm --filter @moniflow/mobile build:web
+      - name: Test
+        run: pnpm test
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: team_k1LDAhhLOexW8Fxa1IBysc8O
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require Vercel credential
+        shell: bash
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::Add VERCEL_TOKEN in GitHub repository Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+      - name: Enable Corepack
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      # Deploy API before web when 'both' is selected.
+      - name: Deploy API to production
+        if: inputs.component == 'both' || inputs.component == 'api'
+        working-directory: apps/api
+        env:
+          VERCEL_PROJECT_ID: prj_M61k4BVOZDFxXsMzLwKporUHlxZl
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+          vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+          vercel build --prod --token "$VERCEL_TOKEN"
+          deployment_url=$(vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN")
+          printf 'API production: %s\n' "$deployment_url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy web to production
+        if: inputs.component == 'both' || inputs.component == 'web'
+        working-directory: apps/mobile
+        env:
+          VERCEL_PROJECT_ID: prj_BlNidFkMOSWwMQrPlw6F2gmpszb4
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+          vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+          vercel build --prod --token "$VERCEL_TOKEN"
+          deployment_url=$(vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN")
+          printf 'Web production: %s\n' "$deployment_url" >> "$GITHUB_STEP_SUMMARY"
