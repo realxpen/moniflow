@@ -1,5 +1,9 @@
 # MONIFlow Project State
 
+## Hustle signed command-receipt evidence — Phase 02 (2026-10-13)
+
+Following Hustle PR #110 merged at 3ca7ef2 with 3/3 CI passed, this MONIFlow branch adds a sandbox-only, opt-in signed readback endpoint for persisted `RECEIVED` commands. HMAC covers exact return payload bytes (domain-separated from signed request authentication); readback includes amount, command digest, operation/event ID and `simulated=true`, `executionStarted=false`, `realFundsMoved=false`. No payment success, provider evidence, outbox push, bank API call or financial movement exists. MONIFlow and Hustle remain independent financial domains. CI and review pending; see `docs/HUSTLE_SIGNED_RECEIPT_V1.md`.
+
 ## Hustle Partner Sandbox API — Stacked Phase 01 (2026-10-13)
 
 Following owner acceptance/merge of Hustle P0 #107 and read-only reconciliation #108, a MONIFlow feature branch `feat/hustle-partner-sandbox-auth-api` (stacked on still-open partner-contract PR #3) implements a **disabled-by-default, non-production-only, sandbox-provider-only** HMAC-authenticated partner command intake. Raw-body method/path/timestamp/nonce signatures and persistent replay prevention, operation idempotency and opaque tenant-limited operation reads are added using SQLite/PostgreSQL. POST collection/payout/refund are **only recorded as RECEIVED**, never executed: NO BMONI calls, bank movement, custody, wallet ledger writes, customer fund claims, live deployment or enabled production routes. See `docs/HUSTLE_PARTNER_SANDBOX_API_ACCEPTANCE.md`; CI/PR review pending. Sandbox partner API is an independent track and does not change the MONIFlow hackathon/mobile demo priority.
