@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { PartnerCommandConflictError, type PartnerOperationStore } from "../services/partner/operation-store.js";
 import { authenticatePartner, PARTNER_MEDIA_TYPE } from "../services/partner/request-auth.js";
+import { makeReceiptEvent, signReceiptEvidence } from "../services/partner/receipt-evidence.js";
 
 type PartnerRouteOptions = { store: PartnerOperationStore; secret: string };
 const operationIdSchema = z.object({ operationId: partnerIdentifierSchema }).strict();
@@ -94,6 +95,24 @@ export const partnerRoutes: FastifyPluginAsync<PartnerRouteOptions> = async (app
       realFundsMoved: false, providerEvidenceReference: null,
       createdAt: operation.createdAt
     };
+  });
+
+  /**
+   * Read-only, signed proof of durable command intake. Never financial success.
+   * The exact Buffer bytes signed here are the bytes served to the caller.
+   */
+  app.get("/operations/:operationId/receipt-evidence", async (request, reply) => {
+    if (!await requireIdentity(request, reply)) return reply;
+    const parsed = operationIdSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send({ code: "INVALID_OPERATION_ID" });
+    const operation = await options.store.find("HUSTLE", parsed.data.operationId);
+    if (!operation) return reply.code(404).send({ code: "OPERATION_NOT_FOUND" });
+    const payload = Buffer.from(JSON.stringify(makeReceiptEvent(operation)), "utf8");
+    const signature = signReceiptEvidence(options.secret, payload);
+    return reply
+      .header("x-moniflow-receipt-signature", signature)
+      .type("application/json; charset=utf-8")
+      .send(payload);
   });
 
   app.get("/provider-capabilities", async (request, reply) => {
