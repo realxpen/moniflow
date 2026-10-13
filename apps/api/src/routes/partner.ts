@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { partnerFinancialCommandSchema } from "@moniflow/shared";
+import { partnerFinancialCommandSchema, partnerIdentifierSchema } from "@moniflow/shared";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 
@@ -8,7 +8,7 @@ import { PartnerCommandConflictError, type PartnerOperationStore } from "../serv
 import { authenticatePartner, PARTNER_MEDIA_TYPE } from "../services/partner/request-auth.js";
 
 type PartnerRouteOptions = { store: PartnerOperationStore; secret: string };
-const operationIdSchema = z.object({ operationId: z.uuid() }).strict();
+const operationIdSchema = z.object({ operationId: partnerIdentifierSchema }).strict();
 const nameToKind = {
   collections: "COLLECTION",
   payouts: "PAYOUT",
