@@ -6,7 +6,7 @@ import type { GuardCheck } from "@moniflow/moniguard";
 import { moniflowIntentSchema } from "../schemas/intent.js";
 import { moneyPlanSchema } from "../schemas/money-plan.js";
 import type { CreatePersistedMoneyPlanInput, MoneyPlanRepository, PersistedMoneyPlan } from "./money-plan.js";
-import type { UserMapping, UserMappingRepository } from "./user-mapping.js";
+import type { UserMapping, UserMappingRepository, UserProvisioningHold } from "./user-mapping.js";
 import type { WalletOwnership, WalletOwnershipRepository } from "./wallet-ownership.js";
 
 const userRowSchema = z.object({
@@ -40,6 +40,13 @@ export async function ensureMoniflowSchema(sql: Sql) {
     )
   `;
   await sql`create unique index if not exists bmoni_user_mappings_email_lower_idx on moniflow_private.bmoni_user_mappings (lower(email))`;
+  await sql`CREATE TABLE IF NOT EXISTS moniflow_private.bmoni_user_provisioning_holds_v1 (
+    email text NOT NULL PRIMARY KEY,
+    local_user_id uuid,
+    state text NOT NULL CHECK (state IN ('PROVIDER_USER_EXISTS','PROVIDER_OUTCOME_UNKNOWN')),
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`;
+
 
   await sql`
     create table if not exists moniflow_private.wallet_ownership (
@@ -182,6 +189,33 @@ export class PostgresUserMappingRepository implements UserMappingRepository {
   async save(mapping: UserMapping): Promise<UserMapping> {
     await this.sql`insert into moniflow_private.bmoni_user_mappings (local_user_id, email, bmoni_user_id, created_at, updated_at) values (${mapping.localUserId}::uuid, ${mapping.email}, ${mapping.bmoniUserId}, ${mapping.createdAt}::timestamptz, ${mapping.updatedAt}::timestamptz)`;
     return mapping;
+  }
+
+  async findHoldByEmail(email:string):Promise<UserProvisioningHold|null> {
+    const rows=await this.sql`
+      SELECT email,local_user_id,state,created_at
+      FROM moniflow_private.bmoni_user_provisioning_holds_v1
+      WHERE email=lower(${email.trim()}) LIMIT 1
+    `;
+    const row=rows[0];
+    return row ? {
+      email:String(row.email),localUserId:row.local_user_id===null?null:String(row.local_user_id),
+      state:String(row.state) as UserProvisioningHold["state"],
+      createdAt:new Date(String(row.created_at)).toISOString()
+    } : null;
+  }
+
+  async createHold(hold:UserProvisioningHold):Promise<UserProvisioningHold> {
+    await this.sql`
+      INSERT INTO moniflow_private.bmoni_user_provisioning_holds_v1(email,local_user_id,state,created_at)
+      VALUES(lower(${hold.email.trim()}),${hold.localUserId}::uuid,${hold.state},${hold.createdAt}::timestamptz)
+      ON CONFLICT DO NOTHING
+    `;
+    const existing=await this.findHoldByEmail(hold.email);
+    if (!existing || (existing.localUserId && hold.localUserId && existing.localUserId!==hold.localUserId)) {
+      throw new Error("BMONI_PROVISIONING_HOLD_IDENTITY_CONFLICT");
+    }
+    return existing;
   }
 
   async close() {}

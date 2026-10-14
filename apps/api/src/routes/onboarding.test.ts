@@ -129,6 +129,35 @@ describe("POST /api/onboarding/user", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({ provisioningState: "RECONCILIATION_REQUIRED", retryable: false });
+    const second=await app.inject({
+      method:"POST",
+      payload:{ email:"unique@example.com",firstName:"Ada",phoneNumber:"+2348012345678" },
+      url:"/api/onboarding/user"
+    });
+    expect(second.statusCode).toBe(409);
+    expect(second.json()).toMatchObject({
+      provisioningState:"RECONCILIATION_REQUIRED",retryable:false
+    });
+    expect(createUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("persistently reports ambiguous BMONI creation as non-retryable without a second POST",async()=>{
+    const {BmoniTransportError}=await import("../services/bmoni/errors.js");
+    const createUser=vi.fn().mockRejectedValue(new BmoniTransportError("timeout",true));
+    const gateway: BmoniGateway = {
+      createUser,getSupportedSmartWalletCurrencies:vi.fn(),...additionalGatewayMethods()
+    };
+    const app=createAppWithGateway(gateway);
+    const req={
+      method:"POST" as const,
+      payload:{ email:"unknown@example.com",firstName:"Ada",phoneNumber:"+2348012345678" },
+      url:"/api/onboarding/user"
+    };
+    const one=await app.inject(req),two=await app.inject(req);
+    expect(one.statusCode).toBe(503);
+    expect(two.statusCode).toBe(503);
+    expect(one.json().provisioningState).toBe("OUTCOME_UNKNOWN");
+    expect(two.json()).toMatchObject({provisioningState:"OUTCOME_UNKNOWN",retryable:false});
     expect(createUser).toHaveBeenCalledTimes(1);
   });
 

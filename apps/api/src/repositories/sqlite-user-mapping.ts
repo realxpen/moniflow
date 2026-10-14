@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { z } from "zod";
 
-import type { UserMapping, UserMappingRepository } from "./user-mapping.js";
+import type { UserMapping, UserMappingRepository, UserProvisioningHold } from "./user-mapping.js";
 
 const userMappingRowSchema = z.object({
   local_user_id: z.string(),
@@ -42,6 +42,12 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
         bmoni_user_id TEXT NOT NULL UNIQUE,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS bmoni_user_provisioning_holds_v1 (
+        email TEXT PRIMARY KEY COLLATE NOCASE,
+        local_user_id TEXT,
+        state TEXT NOT NULL CHECK (state IN ('PROVIDER_USER_EXISTS','PROVIDER_OUTCOME_UNKNOWN')),
+        created_at TEXT NOT NULL
       ) STRICT
     `);
   }
@@ -59,6 +65,30 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
   async save(mapping: UserMapping): Promise<UserMapping> {
     this.database.prepare(`INSERT INTO bmoni_user_mappings (local_user_id, email, bmoni_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run(mapping.localUserId, mapping.email, mapping.bmoniUserId, mapping.createdAt, mapping.updatedAt);
     return mapping;
+  }
+
+  async findHoldByEmail(email: string): Promise<UserProvisioningHold | null> {
+    const row=this.database.prepare(
+      "SELECT email,local_user_id,state,created_at FROM bmoni_user_provisioning_holds_v1 WHERE email=? COLLATE NOCASE LIMIT 1"
+    ).get(email.trim().toLowerCase()) as Record<string,unknown>|undefined;
+    return row ? {
+      email:String(row.email),
+      localUserId:row.local_user_id===null?null:String(row.local_user_id),
+      state:String(row.state) as UserProvisioningHold["state"],
+      createdAt:String(row.created_at)
+    } : null;
+  }
+
+  async createHold(hold:UserProvisioningHold):Promise<UserProvisioningHold> {
+    // The first uncertain outcome is authoritative until human reconciliation.
+    this.database.prepare(
+      "INSERT OR IGNORE INTO bmoni_user_provisioning_holds_v1(email,local_user_id,state,created_at) VALUES (?,?,?,?)"
+    ).run(hold.email.trim().toLowerCase(),hold.localUserId,hold.state,hold.createdAt);
+    const existing=await this.findHoldByEmail(hold.email);
+    if (!existing || (existing.localUserId && hold.localUserId && existing.localUserId!==hold.localUserId)) {
+      throw new Error("BMONI_PROVISIONING_HOLD_IDENTITY_CONFLICT");
+    }
+    return existing;
   }
 
   async close() { this.database.close(); }
