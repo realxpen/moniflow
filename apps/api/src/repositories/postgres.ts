@@ -46,6 +46,9 @@ export async function ensureMoniflowSchema(sql: Sql) {
     state text NOT NULL CHECK (state IN ('PROVIDER_USER_EXISTS','PROVIDER_OUTCOME_UNKNOWN')),
     created_at timestamptz NOT NULL DEFAULT now()
   )`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS bmoni_provisioning_hold_local_id_unique_v1
+    ON moniflow_private.bmoni_user_provisioning_holds_v1(local_user_id)
+    WHERE local_user_id IS NOT NULL`;
 
 
   await sql`
@@ -189,6 +192,34 @@ export class PostgresUserMappingRepository implements UserMappingRepository {
   async save(mapping: UserMapping): Promise<UserMapping> {
     await this.sql`insert into moniflow_private.bmoni_user_mappings (local_user_id, email, bmoni_user_id, created_at, updated_at) values (${mapping.localUserId}::uuid, ${mapping.email}, ${mapping.bmoniUserId}, ${mapping.createdAt}::timestamptz, ${mapping.updatedAt}::timestamptz)`;
     return mapping;
+  }
+
+  async reserveBeforeCreate(hold:UserProvisioningHold):Promise<boolean> {
+    if(!hold.localUserId || hold.state!=="PROVIDER_OUTCOME_UNKNOWN") {
+      throw new Error("BMONI_INVALID_CREATE_RESERVATION");
+    }
+    // Unique email + unique non-null local UUID, atomically committed before
+    // any external BMONI request. ON CONFLICT covers either unique key.
+    const rows=await this.sql`
+      INSERT INTO moniflow_private.bmoni_user_provisioning_holds_v1
+        (email,local_user_id,state,created_at)
+      VALUES(lower(${hold.email.trim()}),${hold.localUserId}::uuid,${hold.state},${hold.createdAt}::timestamptz)
+      ON CONFLICT DO NOTHING RETURNING email
+    `;
+    return rows.length===1;
+  }
+
+  async markProviderUserExists(email:string):Promise<void>{
+    const rows=await this.sql`
+      UPDATE moniflow_private.bmoni_user_provisioning_holds_v1
+      SET state='PROVIDER_USER_EXISTS'
+      WHERE email=lower(${email.trim()}) AND state='PROVIDER_OUTCOME_UNKNOWN'
+      RETURNING email
+    `;
+    if(rows.length===0){
+      const existing=await this.findHoldByEmail(email);
+      if(existing?.state!=="PROVIDER_USER_EXISTS") throw new Error("BMONI_IDENTITY_HOLD_NOT_FOUND");
+    }
   }
 
   async findHoldByEmail(email:string):Promise<UserProvisioningHold|null> {
