@@ -1,4 +1,5 @@
 import { apiFetch } from "@/services/api-fetch";
+import { providerHealthBadge, providerHealthProblem, type ProviderHealthBody } from "@/services/provider-health";
 
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL ?? "";
 
@@ -9,6 +10,8 @@ export type FinancialProviderRuntime = {
   environment: string;
   simulated: boolean;
   currencies: string[];
+  reason?: string;
+  issue?: string;
 };
 
 export type DemoBootstrapState = {
@@ -55,18 +58,24 @@ export function resolveApiUrl() {
 }
 
 export async function loadFinancialProvider(): Promise<FinancialProviderRuntime> {
-  const response = await apiFetch(`${resolveApiUrl()}/health/provider`);
-  const payload = (await response.json()) as Partial<FinancialProviderRuntime> & { message?: string };
-  if (!response.ok || !payload.provider) {
-    throw new Error(payload.message ?? "Financial provider is unavailable.");
+  const response = await apiFetch(resolveApiUrl() + "/health/provider");
+  if (!(response.headers.get("content-type") ?? "").includes("application/json")) {
+    throw new Error("MONIFlow API returned a non-JSON response. Check the API domain and Vercel Deployment Protection.");
   }
+  const payload = (await response.json()) as ProviderHealthBody;
+  if (payload.provider !== "bmoni" && payload.provider !== "moniflow-sandbox") {
+    throw new Error("MONIFlow API did not identify a supported financial provider.");
+  }
+  const ready = response.ok && payload.status === "ok";
+  const problem = ready ? null : providerHealthProblem(response.status, payload);
   return {
-    status: payload.status === "ok" ? "ok" : "unavailable",
+    status: ready ? "ok" : "unavailable",
     provider: payload.provider,
-    label: payload.label ?? (payload.provider === "bmoni" ? "BMONI" : "MONIFlow Sandbox"),
-    environment: payload.environment ?? "unknown",
-    simulated: Boolean(payload.simulated),
-    currencies: Array.isArray(payload.currencies) ? payload.currencies : []
+    label: typeof payload.label === "string" ? payload.label : payload.provider === "bmoni" ? "BMONI" : "MONIFlow Sandbox",
+    environment: typeof payload.environment === "string" ? payload.environment : "unknown",
+    simulated: payload.simulated === true,
+    currencies: Array.isArray(payload.currencies) ? payload.currencies.filter((v): v is string => typeof v === "string") : [],
+    ...(problem ? { reason: problem.reason, issue: problem.message } : {})
   };
 }
 
@@ -85,7 +94,7 @@ export async function resetSandboxDemo(): Promise<DemoBootstrapState> {
 
 export function providerBadge(provider: FinancialProviderRuntime | null) {
   if (!provider) return "PROVIDER CHECK";
-  return provider.provider === "bmoni" ? "BMONI SANDBOX" : "MONIFLOW SANDBOX";
+  return providerHealthBadge(provider.provider, provider.status);
 }
 
 export function providerName(provider: FinancialProviderRuntime | null) {

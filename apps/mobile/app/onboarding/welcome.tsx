@@ -29,7 +29,9 @@ export default function WelcomeScreen() {
     setChecking(true);
     setError(null);
     try {
-      setProvider(await loadFinancialProvider());
+      const next = await loadFinancialProvider();
+      setProvider(next);
+      if (next.status !== "ok") setError(next.issue ?? "The financial provider is not ready.");
     } catch (cause) {
       setProvider(null);
       setError(cause instanceof Error ? cause.message : "Financial provider could not be reached.");
@@ -58,10 +60,12 @@ export default function WelcomeScreen() {
   };
 
   const sandboxDemo = provider?.provider === "moniflow-sandbox";
+  const ready = provider?.status === "ok";
   const canResume = Boolean(
     hydrated &&
     savedLocalUserId &&
     provider &&
+    provider.status === "ok" &&
     savedProvider === provider.provider &&
     (__DEV__ || (auth !== null && savedLocalUserId === auth.userId))
   );
@@ -72,8 +76,8 @@ export default function WelcomeScreen() {
         <View style={styles.brandRow}>
           <Text style={styles.brand}>MONIFlow</Text>
           <StatusPill
-            label={checking ? "CHECKING PROVIDER" : error && !provider ? "PROVIDER OFFLINE" : providerBadge(provider)}
-            tone={checking ? "processing" : error && !provider ? "warning" : provider?.simulated ? "processing" : "success"}
+            label={checking ? "CHECKING API" : !provider ? "API UNREACHABLE" : providerBadge(provider)}
+            tone={checking ? "processing" : !ready ? "warning" : provider?.simulated ? "processing" : "success"}
           />
         </View>
         <View style={styles.hero}>
@@ -92,7 +96,7 @@ export default function WelcomeScreen() {
           <Text style={styles.providerCopy}>
             {provider
               ? `${provider.label} · ${provider.environment}${provider.simulated ? " · simulated financial infrastructure" : ""}`
-              : "MONIFlow will not guess provider state when the API is unavailable."}
+              : "MONIFlow has not confirmed API connectivity. No money movement was attempted."}
           </Text>
         </SoftCard>
 
@@ -118,11 +122,11 @@ export default function WelcomeScreen() {
         {!__DEV__ && !auth ? (
           <PrimaryButton onPress={() => router.push("/auth/sign-in")}>Sign in to continue</PrimaryButton>
         ) : sandboxDemo ? (
-          <SecondaryButton disabled={preparing || checking} onPress={() => void startCleanDemo()}>
+          <SecondaryButton disabled={preparing || checking || !ready || !__DEV__} onPress={() => void startCleanDemo()}>
             {preparing ? "Preparing clean demo…" : canResume ? "Restart with a clean sandbox demo" : "Start clean sandbox demo"}
           </SecondaryButton>
         ) : (
-          <PrimaryButton disabled={checking || !provider} onPress={() => router.push("/onboarding/identity")}>
+          <PrimaryButton disabled={checking || !ready} onPress={() => router.push("/onboarding/identity")}>
             Begin secure setup
           </PrimaryButton>
         )}
