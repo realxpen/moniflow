@@ -111,7 +111,7 @@ describe("BMONI documented webhook evidence — strictly simulated, never financ
     expect((await app.inject(signed(e,{eventId:randomUUID()}))).statusCode).toBe(401);
     expect((await app.inject(signed(e,{body:JSON.stringify({...e,payload:{amount:"999999.00"}}),
       signature:createHmac("sha256",SECRET).update(JSON.stringify(e)).digest("hex")
-    })).statusCode).toBe(401);
+    }))).statusCode).toBe(401);
     const legacy=event("wallet.deposit.completed");
     expect((await app.inject(signed(legacy))).statusCode).toBe(401);
     expect(await db.count()).toBe(0);
