@@ -196,6 +196,7 @@ describe("BmoniUserService", () => {
     const first=new SqliteUserMappingRepository(url);
     expect(await first.reserveBeforeCreate({
       email:input.email,localUserId:input.localUserId,
+      phoneFingerprint:phoneIdentityFingerprint(input.phoneNumber,PHONE_KEY),
       state:"PROVIDER_OUTCOME_UNKNOWN",createdAt:new Date().toISOString()
     })).toBe(true);
     await first.close();
@@ -216,6 +217,72 @@ describe("BmoniUserService", () => {
     await expect(service.createOrFindMapping(input))
       .rejects.toBeInstanceOf(UserMappingReconciliationHoldError);
     expect(createUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks different emails with the same E164 phone, even across independent SQLite connections",async()=>{
+    const dir=mkdtempSync(join(tmpdir(),"bmoni-phone-collision-"));
+    directories.push(dir);
+    const dbUrl="file:"+join(dir,"identity.sqlite");
+    const a=new SqliteUserMappingRepository(dbUrl);
+    const b=new SqliteUserMappingRepository(dbUrl);
+    repositories.push(a,b);
+    const fixture=createFixture();
+    let release!:()=>void;
+    const pending=new Promise<void>(resolve=>{release=resolve;});
+    fixture.createUser.mockImplementation(async()=>{
+      await pending;
+      return {bmoniUserId:"bmoni-user-1",email:input.email,firstName:"Ada"};
+    });
+    const first=new BmoniUserService(fixture.gateway,a,PHONE_KEY).createOrFindMapping(input);
+    await vi.waitFor(()=>expect(fixture.createUser).toHaveBeenCalledTimes(1));
+    await expect(new BmoniUserService(fixture.gateway,b,PHONE_KEY).createOrFindMapping({
+      ...input,
+      email:"another@example.com",
+      localUserId:"22222222-2222-4222-8222-222222222222"
+    })).rejects.toBeInstanceOf(UserMappingConflictError);
+    expect(fixture.createUser).toHaveBeenCalledTimes(1);
+    release();
+    await expect(first).resolves.toMatchObject({status:"created"});
+    const held=await b.findHoldByEmail(input.email);
+    expect(held?.phoneFingerprint).toBe(phoneIdentityFingerprint(input.phoneNumber,PHONE_KEY));
+    expect(JSON.stringify(held)).not.toContain(input.phoneNumber);
+  });
+
+  it("rejects a changed phone for a previously mapped email instead of handing out wallet identity",async()=>{
+    const {service,createUser}=createFixture();
+    await service.createOrFindMapping(input);
+    await expect(service.createOrFindMapping({...input,phoneNumber:"+2348012345679"}))
+      .rejects.toBeInstanceOf(UserMappingConflictError);
+    expect(createUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks other emails with the same phone after a process restart",async()=>{
+    const dir=mkdtempSync(join(tmpdir(),"bmoni-phone-restart-"));
+    directories.push(dir);
+    const url="file:"+join(dir,"mapping.sqlite");
+    const repoA=new SqliteUserMappingRepository(url);
+    const fixture=createFixture();
+    const first=new BmoniUserService(fixture.gateway,repoA,PHONE_KEY);
+    await first.createOrFindMapping(input);
+    await repoA.close();
+    const repoB=new SqliteUserMappingRepository(url);
+    repositories.push(repoB);
+    const second=new BmoniUserService(fixture.gateway,repoB,PHONE_KEY);
+    await expect(second.createOrFindMapping({
+      ...input,email:"other@example.com",
+      localUserId:"33333333-3333-4333-8333-333333333333"
+    })).rejects.toBeInstanceOf(UserMappingConflictError);
+    expect(fixture.createUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires a stable explicitly configured phone fingerprint secret before any new provider request",async()=>{
+    const {gateway,repository,createUser}=createFixture();
+    const service=new BmoniUserService(gateway,repository);
+    await expect(service.createOrFindMapping(input)).rejects.toThrow(
+      "BMONI_IDENTITY_PHONE_HMAC_SECRET"
+    );
+    expect(createUser).not.toHaveBeenCalled();
+    expect(await repository.findHoldByEmail(input.email)).toBe(null);
   });
 
   it("blocks an email from being attached to a second local identity", async () => {
