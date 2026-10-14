@@ -4,6 +4,7 @@ import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 import type { UserMapping, UserMappingRepository, UserProvisioningHold } from "./user-mapping.js";
+import { classifyBmoniIdentityReadiness } from "./bmoni-identity-readiness.js";
 
 const userMappingRowSchema = z.object({
   local_user_id: z.string(),
@@ -106,6 +107,34 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
       this.database.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  async inspectIdentityReadiness(expectedGuardDigest?: string) {
+    // Intentionally SELECT-only. No key enrollment, auto-unlock or provider
+    // operation; only aggregate counts are returned.
+    const mapping=this.database.prepare(
+      "SELECT COUNT(*) AS n FROM bmoni_user_mappings"
+    ).get() as {n:number};
+    const held=this.database.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN state='PROVIDER_USER_EXISTS' THEN 1 ELSE 0 END),0) AS known,
+        COALESCE(SUM(CASE WHEN state='PROVIDER_OUTCOME_UNKNOWN' THEN 1 ELSE 0 END),0) AS unknown,
+        COALESCE(SUM(CASE WHEN phone_fingerprint IS NOT NULL THEN 1 ELSE 0 END),0) AS fingerprinted,
+        COALESCE(SUM(CASE WHEN phone_fingerprint IS NULL THEN 1 ELSE 0 END),0) AS legacy
+      FROM bmoni_user_provisioning_holds_v1
+    `).get() as {known:number;unknown:number;fingerprinted:number;legacy:number};
+    const guard=this.database.prepare(
+      "SELECT guard_digest FROM bmoni_phone_key_guard_v1 WHERE id=1"
+    ).get() as {guard_digest:string}|undefined;
+    return classifyBmoniIdentityReadiness({
+      mappingCount:mapping.n,
+      providerExistsHoldCount:held.known,
+      unknownOutcomeHoldCount:held.unknown,
+      fingerprintedHoldCount:held.fingerprinted,
+      legacyUnfingerprintedHoldCount:held.legacy,
+      storedGuardDigest:guard?.guard_digest??null,
+      expectedGuardDigest
+    });
   }
 
   async findByEmail(email: string): Promise<UserMapping | null> {
