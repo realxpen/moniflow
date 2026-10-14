@@ -81,7 +81,7 @@ describe("BMONI documented webhook evidence — strictly simulated, never financ
     expect(records[0]).toMatchObject({
       event_id:e.id,event_type:"employee.deposit.completed",evidence_kind:"TEST_OBSERVATION"
     });
-    expect(records[0].body_digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(records[0]?.body_digest).toMatch(/^[a-f0-9]{64}$/);
     const schema=inspect.prepare(
       "SELECT sql FROM sqlite_master WHERE name='bmoni_sandbox_webhook_observations_v1'"
     ).get() as {sql:string};
