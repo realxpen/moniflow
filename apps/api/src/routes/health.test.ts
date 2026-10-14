@@ -90,6 +90,30 @@ describe("GET /health", () => {
     expect(response.json()).toEqual({ currencies: ["CNGN", "USDB"], environment: "sandbox", service: "bmoni", status: "ok" });
     expect(response.body).not.toContain("x-api-key");
   });
+  it("reports the optional authenticated sandbox as disabled without weakening provider readiness", async () => {
+    const gateway: BmoniGateway = {
+      createUser: vi.fn(),
+      getSupportedSmartWalletCurrencies: vi.fn().mockResolvedValue({ currencies: ["CNGN"] }),
+      ...gatewayMethods()
+    };
+    const repository = new SqliteUserMappingRepository(":memory:");
+    const app = buildApp({
+      getBmoniGateway: () => gateway,
+      getBmoniUserService: () => new BmoniUserService(gateway, repository)
+    });
+    app.addHook("onClose", async () => repository.close());
+    apps.push(app);
+    const response = await app.inject({ method: "GET", url: "/health/provider" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      status: "ok", provider: "bmoni",
+      partnerRegistrationEnabled: false,
+      authenticatedSandboxDemoEnabled: false
+    });
+    expect(response.body).not.toContain("AUTH_JWKS_URL");
+    expect(response.body).not.toContain("DATABASE_URL");
+  });
+
   it("identifies a failing BMONI provider without leaking secrets", async () => {
     const gateway: BmoniGateway = {
       createUser: vi.fn(),
@@ -110,7 +134,8 @@ describe("GET /health", () => {
       provider: "bmoni",
       environment: "sandbox",
       reason: "unexpected_error",
-      simulated: false
+      simulated: false,
+      authenticatedSandboxDemoEnabled: false
     });
     expect(response.body).not.toContain("BMONI_API_KEY");
   });
