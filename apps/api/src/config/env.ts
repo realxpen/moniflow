@@ -33,6 +33,10 @@ const envSchema = z.object({
   ),
   // Never enable with only BMONI's shared sandbox key. Requires partner approval.
   BMONI_PARTNER_ONBOARDING_ENABLED: z.enum(["true", "false"]).default("false"),
+  // Stable private key for HMAC-based phone identity reservation; no fallback in runtime.
+  BMONI_IDENTITY_PHONE_HMAC_SECRET: z.preprocess(
+    emptyStringToUndefined, z.string().min(32).optional()
+  ),
   // Test fixture webhook only: never subscribe real provider callbacks.
   BMONI_WEBHOOK_EVIDENCE_TEST_ENABLED: z.enum(["true", "false"]).default("false"),
   BMONI_WEBHOOK_EVIDENCE_TEST_SECRET: z.preprocess(
