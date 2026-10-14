@@ -100,7 +100,9 @@ export class PostgresBmoniEvidenceStore implements BmoniEvidenceStore {
     if (!found || found.event_type!==value.eventType ||
         found.source_event_id!==value.sourceEventId ||
         found.body_digest!==value.bodyDigest ||
-        new Date(String(found.occurred_at)).getTime() !== new Date(value.occurredAt).getTime()) {
+        (found.occurred_at instanceof Date
+          ? found.occurred_at.getTime()
+          : Date.parse(String(found.occurred_at))) !== Date.parse(value.occurredAt)) {
       throw new Error("BMONI_EVENT_CONFLICT");
     }
     return { duplicate:inserted.length===0,eventId:value.eventId };
