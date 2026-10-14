@@ -26,6 +26,7 @@ export default function ApiBackedSandboxScreen() {
   activeAccount.current = accountId;
   const requestSequence = useRef(0);
   const actionPending = useRef(false);
+  const actionSequence = useRef(0);
 
   const load = useCallback(async () => {
     const requestId = ++requestSequence.current;
@@ -62,6 +63,7 @@ export default function ApiBackedSandboxScreen() {
 
   useEffect(() => {
     requestSequence.current++;
+    actionSequence.current++;
     actionPending.current = false;
     setWorkspace(null);
     setError(null);
@@ -76,6 +78,7 @@ export default function ApiBackedSandboxScreen() {
     if (!accountId || actionPending.current) return;
     // An immediate ref lock avoids double taps before React updates disabled state.
     actionPending.current = true;
+    const actionId = ++actionSequence.current;
     const requestId = ++requestSequence.current;
     setBusy(true);
     setError(null);
@@ -94,7 +97,7 @@ export default function ApiBackedSandboxScreen() {
       // A timed-out mutation could still have committed. Never retry it automatically.
       // The explicit read-only status button reconciles uncertain outcomes.
     } finally {
-      actionPending.current = false;
+      if (actionId === actionSequence.current) actionPending.current = false;
       if (requestId === requestSequence.current && activeAccount.current === accountId) {
         setBusy(false);
       }
@@ -120,6 +123,12 @@ export default function ApiBackedSandboxScreen() {
         </SoftCard>
       ) : loading ? (
         <SoftCard style={styles.card}><StatusPill label="READING SERVER CHECKPOINT" tone="processing" /><Text style={styles.copy}>Checking your saved sandbox state…</Text></SoftCard>
+      ) : error ? (
+        <SoftCard style={styles.card}>
+          <StatusPill label="SANDBOX STATUS UNKNOWN" tone="warning" />
+          <Text style={styles.copy}>The server did not confirm whether your simulated workspace already exists. Please check status before attempting to create anything.</Text>
+          <SecondaryButton disabled={busy || loading} onPress={() => void load()}>Read existing state only</SecondaryButton>
+        </SoftCard>
       ) : !showsAuthoritativeWorkspace ? (
         <SoftCard style={styles.card}>
           <Text style={styles.heading}>Start a dedicated simulated workspace.</Text>
