@@ -144,8 +144,16 @@ describe("BMONI documented webhook evidence — strictly simulated, never financ
   });
 
   it("returns retryable 503 when the durable observation store is unavailable",async()=>{
-    const {app,db}=appWithStore();
-    await db.close();
+    const app=Fastify();
+    testApps.push(app);
+    app.register(bmoniWebhookEvidenceRoutes,{
+      prefix:"/internal/test-only/bmoni-webhook-evidence",secretKey:SECRET,
+      store:{
+        async record(){throw new Error("SQLITE_BUSY");},
+        async count(){return 0;},
+        async close(){}
+      }
+    });
     const r=await app.inject(signed(event()));
     expect(r.statusCode).toBe(503);
     expect(r.json().code).toBe("WEBHOOK_EVIDENCE_STORE_UNAVAILABLE");
