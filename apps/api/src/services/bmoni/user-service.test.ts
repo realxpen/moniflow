@@ -133,7 +133,7 @@ describe("BmoniUserService", () => {
     const fixture=createFixture();
     const createUser=fixture.createUser;
     createUser.mockRejectedValueOnce(new BmoniProviderError(409,null,"r"));
-    const service=new BmoniUserService(fixture.gateway,first);
+    const service=new BmoniUserService(fixture.gateway,first,PHONE_KEY);
     await expect(service.createOrFindMapping(input)).rejects.toBeInstanceOf(BmoniProviderError);
     await first.close();
     const reopened=new SqliteUserMappingRepository(databaseUrl);
