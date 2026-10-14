@@ -50,3 +50,20 @@ If the production sandbox fails, set AUTHENTICATED_SANDBOX_DEMO_ENABLED=false in
 - No live BMONI transfer or partner enrollment; provider onboarding is pending dedicated access.
 - No arbitrary financial instruction execution: the authenticated sandbox accepts **only** the canonical example.
 - The sandbox persists its own JSONB simulated ledger, not the production money plan / Pockets / Activity records. A truthful demo must not call those simulated entries actual settled transfers.
+
+
+## Approved production release attempt — 2026-10-14
+
+**Approval:** Owner authorized enabling the isolated authenticated financial sandbox and deploying both applications.
+
+**Release verification:** The temporary approval-scoped GitHub Action verified TypeScript, Expo web export and automated tests. The API Vercel local build completed successfully.
+
+**Publishing result:** FAILED due exclusively to the Vercel Hobby deployment quota:
+`Resource is limited - try again in 24 hours (more than 100, code: "api-deployments-free-per-day")`.
+The API publish step was rejected; the web deploy step was skipped. No new production API or website version was published.
+
+**Verified rollback/cleanup:** API production `AUTHENTICATED_SANDBOX_DEMO_ENABLED` was changed back to `false` and read back as disabled. `BMONI_PARTNER_ONBOARDING_ENABLED` remains unset/default false. The one-time approval workflow and its signal file were deleted; only the existing manual `.github/workflows/deploy-vercel.yml` remains for release. The last READY API deploy still reports previous SHA `c8c264f72a3afd8161a35dd45bfae697147e7f47`.
+
+**Retry, only after quota resets:** Recheck all Phase 20 release gates and re-enable the API-only production feature flag, then run the existing **manual** GitHub Actions Deploy MONIFlow to Vercel workflow with `main` and `both`. Deploy API before web. If the API build or publication fails, reset the server-side flag to false and do not claim the authenticated sandbox is live. Wait for Vercel's quota window; do not retry while the same rate limit is active. Real BMONI user registration must remain locked.
+
+**Outstanding:** No successful authenticated sandbox production smoke test has occurred. No user credentials or real funds were used during this attempt.
