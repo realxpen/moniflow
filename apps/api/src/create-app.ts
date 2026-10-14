@@ -155,6 +155,14 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   }
   app.register(multipart, { limits: { fields: 12, files: 4, fileSize: 8 * 1024 * 1024, parts: 16 } });
   if (testRepositories) app.addHook("onClose", async () => testRepositories.close());
+  if (bmoniEvidenceStore) {
+    app.register(bmoniWebhookEvidenceRoutes, {
+      prefix:"/internal/test-only/bmoni-webhook-evidence",
+      store:bmoniEvidenceStore,
+      secretKey:env.BMONI_WEBHOOK_EVIDENCE_TEST_SECRET!
+    });
+    app.addHook("onClose", async()=>bmoniEvidenceStore.close());
+  }
   if (partnerStore) {
     app.register(partnerRoutes, { prefix: "/internal/v1", store: partnerStore, secret: env.PARTNER_HUSTLE_HMAC_SECRET! });
     app.addHook("onClose", async () => partnerStore.close());
