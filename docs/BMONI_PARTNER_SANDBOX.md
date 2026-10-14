@@ -37,3 +37,7 @@ This flag is an operator control, not proof of ownership of the key.
 
 The standalone `/demo/walkthrough` route is an educational simulation. It calls
 no financial API or BMONI SDK, does not persist financial memory, and cannot authorize funds.
+
+**Gate hardening:** The global NODE_ENV=test bypass was removed. Only a deliberately
+injected test fixture under NODE_ENV=test may bypass partner registration; an API
+built with its normal runtime dependencies is gated in all environments.

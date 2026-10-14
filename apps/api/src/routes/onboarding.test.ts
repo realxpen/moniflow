@@ -49,6 +49,24 @@ function createAppWithGateway(gateway: BmoniGateway) {
 }
 
 describe("POST /api/onboarding/user", () => {
+  it("locks real runtime onboarding in test mode unless an isolated fixture was injected", async () => {
+    // The default runtime app must not be allowed to create users simply
+    // because process.env.NODE_ENV is 'test'.
+    const app = buildApp();
+    apps.push(app);
+    for (const path of ["/api/onboarding/user", "/api/onboarding/users", "/onboarding/user"]) {
+      const response = await app.inject({
+        method: "POST", url: path,
+        payload: { email: "demo@example.test", firstName: "Demo", phoneNumber: "+2348012345678" }
+      });
+      expect(response.statusCode).toBe(423);
+      expect(response.json()).toMatchObject({
+        provisioningState: "PARTNER_ACCESS_PENDING",
+        retryable: false
+      });
+    }
+  });
+
   it("returns the persisted identity mapping with an explicit created state", async () => {
     const gateway: BmoniGateway = {
       createUser: vi.fn().mockResolvedValue({

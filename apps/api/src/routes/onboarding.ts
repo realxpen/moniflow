@@ -17,13 +17,20 @@ import {
 
 type OnboardingRouteOptions = {
   getBmoniUserService: () => BmoniUserService;
+  /**
+   * Isolated test fixture only; NEVER enabled for the production provider.
+   * Unlike a global NODE_ENV=test bypass, a real API built without injected
+   * dependencies cannot accidentally create test users.
+   */
+  allowFixtureRegistration?: boolean;
 };
 
 export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = async (app, options) => {
   const createUser = async (request: FastifyRequest<{ Body: unknown }>, reply: FastifyReply) => {
-    // Block at the server boundary: UI flags do not authorize use of a shared key.
-    // The only bypass is for isolated automated tests (NODE_ENV=test).
-    if (env.NODE_ENV !== "test" &&
+    // UI flags and successful health checks never authorize user creation.
+    // A test environment ALONE is not an authorization bypass.
+    const fixtureAllowed = env.NODE_ENV === "test" && options.allowFixtureRegistration === true;
+    if (!fixtureAllowed &&
       !partnerRegistrationEnabled(env.FINANCIAL_PROVIDER, env.BMONI_PARTNER_ONBOARDING_ENABLED)) {
       return reply.status(423).send({
         statusCode: 423,

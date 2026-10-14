@@ -204,7 +204,13 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   };
 
   app.register(healthRoutes, { getBmoniGateway: dependencies.getBmoniGateway });
-  app.register(onboardingRoutes, { prefix: "/api/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
+  // Test fixtures are explicitly injected, and may only bypass the pending
+  // partner gate inside Vitest. Runtime API construction gets no bypass.
+  const onboardingOptions = {
+    getBmoniUserService: dependencies.getBmoniUserService,
+    allowFixtureRegistration: env.NODE_ENV === "test" && Boolean(dependencyOverrides)
+  };
+  app.register(onboardingRoutes, { prefix: "/api/onboarding", ...onboardingOptions });
   app.register(nigeriaOnboardingRoutes, { prefix: "/api/onboarding/nigeria", ...walletOptions });
   app.register(devRoutes, { prefix: "/api/dev", ...walletOptions });
   app.register(devBootstrapRoutes, { prefix: "/api/dev", ...devBootstrapOptions });
@@ -218,7 +224,7 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   app.register(pocketRoutes, { prefix: "/api/pockets", getPocketRepository });
   app.register(activityRoutes, { prefix: "/api/activity", getActivityRepository });
 
-  app.register(onboardingRoutes, { prefix: "/onboarding", getBmoniUserService: dependencies.getBmoniUserService });
+  app.register(onboardingRoutes, { prefix: "/onboarding", ...onboardingOptions });
   app.register(bankingRoutes, { prefix: "/banking", ...bankingOptions });
   app.register(operatorRoutes, { prefix: "/operator", ...operatorOptions });
   app.register(executionRoutes, { prefix: "/operator", ...executionOptions });
