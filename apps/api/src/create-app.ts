@@ -9,6 +9,9 @@ import type { ActivityRepository } from "./repositories/activity.js";
 import type { BankAccountRepository } from "./repositories/bank-account.js";
 import type { ExecutionRepository } from "./repositories/execution.js";
 import { createRepositories, type RepositorySet } from "./repositories/index.js";
+import { getAuthenticatedUserId } from "./security/user-authorization.js";
+import { authenticatedSandboxDemoRoutes } from "./routes/sandbox-demo.js";
+import { createSandboxDemoStore } from "./services/sandbox-demo/workspace-store.js";
 import type { MoneyPlanRepository } from "./repositories/money-plan.js";
 import type { PocketRepository } from "./repositories/pocket.js";
 import type { WalletOwnershipRepository } from "./repositories/wallet-ownership.js";
@@ -232,6 +235,15 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   app.register(activityRoutes, { prefix: "/activity", getActivityRepository });
   app.register(pocketRoutes, { prefix: "/pockets", getPocketRepository });
 
+  // Separate authenticated simulated ledger. NEVER maps demo identities into BMONI.
+  if (env.AUTHENTICATED_SANDBOX_DEMO_ENABLED === "true") {
+    const demoStore = createSandboxDemoStore(env.DATABASE_URL);
+    app.register(authenticatedSandboxDemoRoutes, {
+      prefix: "/api/sandbox-demo", store: demoStore,
+      getVerifiedUserId: (request) => getAuthenticatedUserId(request)
+    });
+    app.addHook("onClose", async () => demoStore.close());
+  }
   if (runtime) app.addHook("onClose", async () => runtime.close());
   return app;
 };

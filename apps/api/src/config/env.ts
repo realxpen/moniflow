@@ -22,6 +22,8 @@ const envSchema = z.object({
     "http://localhost:19006",
     "http://localhost:3000"
   ].join(",")),
+  // Opt-in, dedicated authenticated demonstration ledger. No BMONI operations.
+  AUTHENTICATED_SANDBOX_DEMO_ENABLED: z.enum(["true", "false"]).default("false"),
   FINANCIAL_PROVIDER: z.enum(["bmoni", "moniflow-sandbox"]).default("bmoni"),
   BMONI_BASE_URL: z.preprocess(
     emptyStringToUndefined,
