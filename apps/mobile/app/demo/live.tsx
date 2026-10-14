@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { FlowHeader, PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
@@ -21,46 +21,88 @@ export default function ApiBackedSandboxScreen() {
   const [approvedAcknowledgment, setApprovedAcknowledgment] = useState(false);
   const [resetAcknowledgment, setResetAcknowledgment] = useState(false);
 
+  const accountId = auth?.userId ?? null;
+  const activeAccount = useRef(accountId);
+  activeAccount.current = accountId;
+  const requestSequence = useRef(0);
+  const actionPending = useRef(false);
+
   const load = useCallback(async () => {
-    if (!auth) { setWorkspace(null); setLoading(false); return; }
+    const requestId = ++requestSequence.current;
+    if (!accountId) {
+      setWorkspace(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     setLoading(true);
+    setWorkspace(null);
     setError(null);
     try {
       const result = await loadApiSandbox();
-      if (result.localUserId.toLowerCase() !== auth.userId.toLowerCase()) {
+      if (requestId !== requestSequence.current || activeAccount.current !== accountId) return;
+      if (result.localUserId.toLowerCase() !== accountId.toLowerCase()) {
         throw new Error("The returned sandbox belongs to another account.");
       }
       setWorkspace(result);
     } catch (cause) {
+      if (requestId !== requestSequence.current || activeAccount.current !== accountId) return;
+      setWorkspace(null);
       if (cause instanceof SandboxApiError && cause.code === "SANDBOX_NOT_STARTED") {
-        setWorkspace(null);
+        setError(null);
       } else {
-        setWorkspace(null);
         setError(cause instanceof Error ? cause.message : "The authenticated sandbox is unavailable.");
       }
-    } finally { setLoading(false); }
-  }, [auth?.userId]);
-  useEffect(() => { void load(); }, [load]);
+    } finally {
+      if (requestId === requestSequence.current && activeAccount.current === accountId) {
+        setLoading(false);
+      }
+    }
+  }, [accountId]);
+
+  useEffect(() => {
+    requestSequence.current++;
+    actionPending.current = false;
+    setWorkspace(null);
+    setError(null);
+    setBusy(false);
+    setApprovedAcknowledgment(false);
+    setResetAcknowledgment(false);
+    void load();
+    return () => { requestSequence.current++; };
+  }, [load]);
 
   const apply = async (action: () => Promise<ApiSandboxWorkspace>) => {
-    if (!auth || busy) return;
-    setBusy(true); setError(null);
+    if (!accountId || actionPending.current) return;
+    // An immediate ref lock avoids double taps before React updates disabled state.
+    actionPending.current = true;
+    const requestId = ++requestSequence.current;
+    setBusy(true);
+    setError(null);
     try {
       const result = await action();
-      if (result.localUserId.toLowerCase() !== auth.userId.toLowerCase()) {
+      if (requestId !== requestSequence.current || activeAccount.current !== accountId) return;
+      if (result.localUserId.toLowerCase() !== accountId.toLowerCase()) {
         throw new Error("The sandbox returned a different authenticated user.");
       }
       setWorkspace(result);
       setApprovedAcknowledgment(false);
       setResetAcknowledgment(false);
     } catch (cause) {
+      if (requestId !== requestSequence.current || activeAccount.current !== accountId) return;
       setError(cause instanceof Error ? cause.message : "The sandbox operation could not complete.");
-      // Never automatically resubmit a plan, approval or simulated debit.
-      // The status-only refresh below is initiated by the user.
-    } finally { setBusy(false); }
+      // A timed-out mutation could still have committed. Never retry it automatically.
+      // The explicit read-only status button reconciles uncertain outcomes.
+    } finally {
+      actionPending.current = false;
+      if (requestId === requestSequence.current && activeAccount.current === accountId) {
+        setBusy(false);
+      }
+    }
   };
   const plan = workspace?.plan;
   const completed = plan?.state === "COMPLETED";
+  const showsAuthoritativeWorkspace = accountId !== null && workspace?.localUserId.toLowerCase() === accountId.toLowerCase();
 
   return (
     <Screen contentContainerStyle={styles.page}>
@@ -78,7 +120,7 @@ export default function ApiBackedSandboxScreen() {
         </SoftCard>
       ) : loading ? (
         <SoftCard style={styles.card}><StatusPill label="READING SERVER CHECKPOINT" tone="processing" /><Text style={styles.copy}>Checking your saved sandbox state…</Text></SoftCard>
-      ) : workspace === null ? (
+      ) : !showsAuthoritativeWorkspace ? (
         <SoftCard style={styles.card}>
           <Text style={styles.heading}>Start a dedicated simulated workspace.</Text>
           <Text style={styles.copy}>Your demo opens at ₦300,000 once. It cannot change your BMONI profile, real wallet or payment history.</Text>
@@ -158,7 +200,7 @@ export default function ApiBackedSandboxScreen() {
               ) : null}
             </SoftCard>
           )}
-          <SecondaryButton disabled={busy} onPress={() => void load()}>Recheck saved server state</SecondaryButton>
+          <SecondaryButton disabled={busy || loading} onPress={() => void load()}>Recheck saved server state</SecondaryButton>
           <SoftCard style={styles.card}>
             <Text style={styles.micro}>RESET ONLY THIS SIMULATED WORKSPACE</Text>
             <Text style={styles.copy}>For repeated demonstrations you can clear the simulated plan, Pockets and Activity. Real BMONI financial records cannot be affected.</Text>
@@ -173,8 +215,14 @@ export default function ApiBackedSandboxScreen() {
           </SoftCard>
         </>
       )}
-      {error ? <SoftCard style={styles.card}><StatusPill label="ACTION NOT CONFIRMED" tone="warning" />
-        <Text style={styles.error}>{error}</Text><SecondaryButton onPress={() => void load()}>Check status (no retry)</SecondaryButton></SoftCard> : null}
+      {error ? (
+        <SoftCard style={styles.card}>
+          <StatusPill label="STATUS UNCONFIRMED" tone="warning" />
+          <Text style={styles.error}>{error}</Text>
+          <Text style={styles.note}>Do not retry a financial simulation until you have checked the saved status. A timed-out request may already have completed.</Text>
+          <SecondaryButton disabled={busy || loading} onPress={() => void load()}>Read saved server status (no replay)</SecondaryButton>
+        </SoftCard>
+      ) : null}
       <SecondaryButton onPress={() => router.push("/demo/operator")}>Use the offline Operator walkthrough</SecondaryButton>
       <Pressable accessibilityRole="button" style={styles.back} onPress={() => router.replace("/onboarding/welcome")}>
         <Text style={styles.small}>Back to MONIFlow</Text>
