@@ -202,7 +202,7 @@ describe("BmoniUserService", () => {
     const restarted=new SqliteUserMappingRepository(url);
     repositories.push(restarted);
     const fixture=createFixture();
-    const service=new BmoniUserService(fixture.gateway,restarted);
+    const service=new BmoniUserService(fixture.gateway,restarted,PHONE_KEY);
     await expect(service.createOrFindMapping(input))
       .rejects.toMatchObject({state:"PROVIDER_OUTCOME_UNKNOWN"});
     expect(fixture.createUser).not.toHaveBeenCalled();
