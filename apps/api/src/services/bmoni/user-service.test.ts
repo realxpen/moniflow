@@ -110,6 +110,18 @@ describe("BmoniUserService", () => {
     }
   });
 
+  it("holds an unexpected successful provider identity rather than retrying to repair it",async()=>{
+    const {createUser,service,repository}=createFixture();
+    createUser.mockResolvedValueOnce({
+      bmoniUserId:"provider-other-identity",email:"someone-else@example.com",firstName:"Other"
+    });
+    await expect(service.createOrFindMapping(input)).rejects.toBeInstanceOf(UserMappingConflictError);
+    expect((await repository.findHoldByEmail(input.email))?.state).toBe("PROVIDER_OUTCOME_UNKNOWN");
+    await expect(service.createOrFindMapping(input))
+      .rejects.toBeInstanceOf(UserMappingReconciliationHoldError);
+    expect(createUser).toHaveBeenCalledTimes(1);
+  });
+
   it("reopens the same held identity after a real SQLite restart without provider recreation", async () => {
     const dir=mkdtempSync(join(tmpdir(),"bmoni-reconcile-"));
     directories.push(dir);
