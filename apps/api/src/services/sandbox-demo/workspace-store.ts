@@ -45,8 +45,12 @@ export class SqliteSandboxDemoStore implements SandboxDemoStore {
   async mutate(userId: string, update: (current: SandboxWorkspace) => SandboxWorkspace) {
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      const before = await this.find(userId);
-      if (!before) { this.db.exec("ROLLBACK"); return null; }
+      // No await while holding the synchronous SQLite transaction:
+      // another request on the same DB connection must not BEGIN inside it.
+      const row = this.db.prepare("SELECT state_json FROM isolated_sandbox_demo_v1 WHERE user_id=?")
+        .get(userId) as { state_json: string } | undefined;
+      if (!row) { this.db.exec("ROLLBACK"); return null; }
+      const before = unpack(row.state_json, userId);
       const next = update(before);
       if (next !== before) {
         const valid = unpack(next, userId);
