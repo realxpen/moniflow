@@ -9,6 +9,8 @@ export type UserMapping = {
 export type UserProvisioningHold = {
   email: string;
   localUserId: string | null;
+  /** Server-keyed HMAC-SHA256; null only for pre-upgrade/manual legacy holds. */
+  phoneFingerprint?: string | null;
   state: "PROVIDER_USER_EXISTS" | "PROVIDER_OUTCOME_UNKNOWN";
   createdAt: string;
 };
