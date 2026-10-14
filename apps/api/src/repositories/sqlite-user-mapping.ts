@@ -83,7 +83,8 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
 
   async reserveBeforeCreate(hold: UserProvisioningHold): Promise<boolean> {
     if (!hold.localUserId || hold.state!=="PROVIDER_OUTCOME_UNKNOWN" ||
-        !/^[a-f0-9]{64}$/.test(hold.phoneFingerprint??"")) {
+        typeof hold.phoneFingerprint!=="string" ||
+        !/^[a-f0-9]{64}$/.test(hold.phoneFingerprint)) {
       throw new Error("BMONI_INVALID_CREATE_RESERVATION");
     }
     // SQLite inserts are serialized even across processes. Either competing
