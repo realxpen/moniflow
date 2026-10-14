@@ -8,6 +8,9 @@ import { SqliteUserMappingRepository } from "../../repositories/sqlite-user-mapp
 import type { BmoniGateway } from "./gateway.js";
 import { BmoniUserService, UserMappingConflictError, UserMappingReconciliationHoldError } from "./user-service.js";
 import { BmoniProviderError, BmoniTransportError, BmoniResponseValidationError } from "./errors.js";
+import { phoneIdentityFingerprint } from "./phone-identity-fingerprint.js";
+
+const PHONE_KEY="moniflow-disposable-phone-test-key-at-least-32";
 
 const repositories: SqliteUserMappingRepository[] = [];
 const directories: string[]=[];
