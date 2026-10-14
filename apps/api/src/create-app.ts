@@ -57,7 +57,7 @@ function createRuntimeDependencies() {
   return {
     dependencies: {
       getBmoniGateway,
-      getBmoniUserService: () => (userService ??= new BmoniUserService(getBmoniGateway(), getRepositories().users)),
+      getBmoniUserService: () => (userService ??= new BmoniUserService(getBmoniGateway(), getRepositories().users, env.BMONI_IDENTITY_PHONE_HMAC_SECRET)),
       getWalletOwnershipRepository: () => getRepositories().wallets,
       getMoneyPlanRepository: () => getRepositories().plans,
       getBankAccountRepository: () => getRepositories().banks,
