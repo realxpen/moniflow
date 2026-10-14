@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Screen, SectionTitle, SoftCard, StatusPill } from "@/components/ui";
@@ -7,6 +7,7 @@ import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { getSavedDestination, type VerifiedDestination } from "@/services/banking";
 import { loadFinancialProvider, providerBadge, type FinancialProviderRuntime } from "@/services/runtime";
 import { signOut, useAuthSession } from "@/services/auth-session";
+import { workspaceIdentity } from "@/services/flow-recovery";
 import { loadWallet, loadWalletBalance, type WalletBalance, type WalletSummary } from "@/services/wallet-dashboard";
 import { useDemoSession } from "@/store/demo-session";
 import { colors, layout, radius, spacing, typography } from "@/theme";
@@ -19,7 +20,11 @@ export default function ProfileScreen() {
   const savedLocalUserId = useDemoSession((state) => state.localUserId);
   const clearSession = useDemoSession((state) => state.clearSession);
   const signedIn = useAuthSession();
-  const localUserId = routedLocalUserId?.trim() || savedLocalUserId || configuredLocalUserId;
+  const localUserId = workspaceIdentity({
+    routedId: routedLocalUserId, savedId: savedLocalUserId,
+    devId: configuredLocalUserId, authUserId: signedIn?.userId ?? null,
+    development: __DEV__
+  });
 
   const [provider, setProvider] = useState<FinancialProviderRuntime | null>(null);
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
@@ -27,12 +32,15 @@ export default function ProfileScreen() {
   const [destination, setDestination] = useState<VerifiedDestination | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const activeRequest = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = ++activeRequest.current;
     setLoading(true);
     setError(null);
     try {
       const runtime = await loadFinancialProvider();
+      if (requestId !== activeRequest.current) return;
       setProvider(runtime);
       if (!localUserId) {
         setWallet(null);
@@ -45,14 +53,24 @@ export default function ProfileScreen() {
         loadWalletBalance(localUserId),
         getSavedDestination(localUserId, "GTBank").catch(() => null)
       ]);
+      if (requestId !== activeRequest.current) return;
       setWallet(nextWallet);
       setBalance(nextBalance);
       setDestination(nextDestination);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Workspace status could not be loaded.");
+      if (requestId === activeRequest.current) setError(cause instanceof Error ? cause.message : "Workspace status could not be loaded.");
     } finally {
-      setLoading(false);
+      if (requestId === activeRequest.current) setLoading(false);
     }
+  }, [localUserId]);
+
+  useEffect(() => {
+    // Old account information must not remain visible after an identity change.
+    setProvider(null);
+    setWallet(null);
+    setBalance(null);
+    setDestination(null);
+    return () => { activeRequest.current++; };
   }, [localUserId]);
 
   useEffect(() => { void load(); }, [load]);
@@ -66,13 +84,13 @@ export default function ProfileScreen() {
           <Text style={styles.title}>Financial workspace</Text>
           <Text style={styles.description}>Provider connection, wallet readiness, and verified destinations in one place.</Text>
         </View>
-        <StatusPill label={loading ? "CHECKING" : providerBadge(provider)} tone={loading ? "processing" : provider?.simulated ? "processing" : "success"} />
+        <StatusPill label={loading ? "CHECKING" : providerBadge(provider)} tone={loading ? "processing" : !provider || provider.status !== "ok" ? "warning" : provider.simulated ? "processing" : "success"} />
       </View>
 
       <View style={styles.section}>
         <SectionTitle eyebrow="READINESS" title="Financial foundations" />
         <SoftCard style={styles.card}>
-          <ReadinessRow label="Financial provider" meta={provider ? `${provider.label} · ${provider.environment}` : "Unavailable"} ready={Boolean(provider)} />
+          <ReadinessRow label="Financial provider" meta={provider ? `${provider.label} · ${provider.environment}` : "Unavailable"} ready={provider?.status === "ok"} />
           <View style={styles.divider} />
           <ReadinessRow label="CNGN wallet" meta={wallet ? `${wallet.status} · ${shortAddress(wallet.address)}` : "Not connected"} ready={wallet?.status === "active"} />
           <View style={styles.divider} />

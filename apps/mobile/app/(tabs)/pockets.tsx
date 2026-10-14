@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { PocketCard } from "@/components/pockets";
 import { Screen, SectionTitle, StatusPill } from "@/components/ui";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { loadPockets, type Pocket } from "@/services/pockets";
+import { useAuthSession } from "@/services/auth-session";
+import { workspaceIdentity } from "@/services/flow-recovery";
 import { useDemoSession } from "@/store/demo-session";
 import { colors, layout, radius, spacing, typography } from "@/theme";
 
@@ -12,14 +14,22 @@ const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
 
 export default function PocketsScreen() {
   const savedLocalUserId = useDemoSession((state) => state.localUserId);
-  const localUserId = savedLocalUserId || configuredLocalUserId;
+  const signedIn = useAuthSession();
+  const localUserId = workspaceIdentity({
+    savedId: savedLocalUserId, devId: configuredLocalUserId,
+    authUserId: signedIn?.userId ?? null, development: __DEV__
+  });
   const [pockets, setPockets] = useState<Pocket[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const activeRequest = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = ++activeRequest.current;
     if (!localUserId) {
+      setPockets([]);
+      setTotal(0);
       setError("Complete onboarding or start a sandbox workspace first.");
       setLoading(false);
       return;
@@ -28,13 +38,20 @@ export default function PocketsScreen() {
     setError(null);
     try {
       const result = await loadPockets(localUserId);
+      if (requestId !== activeRequest.current) return;
       setPockets(result.pockets);
       setTotal(result.summary.totalAllocated);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Pockets could not be loaded.");
+      if (requestId === activeRequest.current) setError(cause instanceof Error ? cause.message : "Pockets could not be loaded.");
     } finally {
-      setLoading(false);
+      if (requestId === activeRequest.current) setLoading(false);
     }
+  }, [localUserId]);
+
+  useEffect(() => {
+    setPockets([]);
+    setTotal(0);
+    return () => { activeRequest.current++; };
   }, [localUserId]);
 
   useEffect(() => { void load(); }, [load]);
@@ -48,7 +65,8 @@ export default function PocketsScreen() {
           <Text style={styles.title}>Money spaces</Text>
           <Text style={styles.description}>Internal allocations give money a purpose without pretending the provider holds separate balances.</Text>
         </View>
-        <StatusPill label={loading ? "REFRESHING" : "LIVE INTERNAL STATE"} tone={loading ? "processing" : "success"} />
+        <StatusPill label={loading ? "REFRESHING" : error || !localUserId ? "NOT READY" : "INTERNAL STATE"}
+          tone={loading ? "processing" : error || !localUserId ? "warning" : "success"} />
       </View>
       <View style={styles.summary}>
         <Text style={styles.summaryLabel}>ASSIGNED ACROSS SPACES</Text>

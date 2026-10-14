@@ -60,3 +60,21 @@ After any Vercel variable changes, create a **new deliberate release**; earlier 
 - A real-device BMONI SDK signer test and BMONI sandbox user reconciliation remain separate blockers.
 - Consider persistent secure sessions, signup abuse protection/rate limits, account recovery, monitoring/alerts and a formal authorization review before broad public onboarding.
 - GitHub CI success proves typecheck, web bundling and automated tests, **not** a live end-to-end production sign-in or settlement.
+
+
+## Recovery hardening (Phase 18)
+
+- The persisted mobile checkpoint stores **only** `localUserId`, provider ID, workflow stage,
+  persisted plan ID and timestamp. Raw money instructions, Supabase tokens, PINs and
+  signatures are not persisted.
+- Legacy v1 checkpoints are sanitized at hydration: old `command` fields are discarded,
+  and invalid saved provider, user ID, stage and plan ID fields are ignored.
+- When signed in on production, a route-supplied or saved workspace ID must match
+  the authenticated account before Home loads its balances or offers recovery.
+- A valid plan checkpoint is resumed **only after a deliberate tap**. The server
+  remains authoritative for plan ownership, MONI Guard, authorization and execution.
+- If parsing stopped before a persisted plan was returned, an app restart does
+  **not replay** the saved instruction or submit a fresh plan silently.
+  Users must clear that checkpoint and re-enter the instruction.
+- This does not replace provider status checking or true BMONI device-signature
+  verification. The simulated Operator is separately isolated under `/demo/operator`.

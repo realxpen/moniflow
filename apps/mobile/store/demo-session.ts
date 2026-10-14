@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { checkpointForStorage, checkpointFromStorage } from "@/services/flow-recovery";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -79,13 +80,10 @@ export const useDemoSession = create<DemoSessionState>()(
     {
       name: "moniflow-demo-session-v1",
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
-        localUserId: state.localUserId,
-        provider: state.provider,
-        command: state.command,
-        planId: state.planId,
-        stage: state.stage,
-        updatedAt: state.updatedAt
+      partialize: (state) => checkpointForStorage(state),
+      merge: (persisted, current) => ({
+        ...current,
+        ...checkpointFromStorage(persisted)
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHydrated(true);

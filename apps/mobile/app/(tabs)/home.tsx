@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ActivityRow } from "@/components/activity";
@@ -17,6 +17,8 @@ import {
 } from "@/components/ui";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { loadActivity, type FinancialActivity } from "@/services/activity";
+import { useAuthSession } from "@/services/auth-session";
+import { recoveryDecision, workspaceIdentity } from "@/services/flow-recovery";
 import { loadPockets, type Pocket } from "@/services/pockets";
 import {
   loadWallet,
@@ -40,11 +42,20 @@ export default function HomeScreen() {
   const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
   const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
   const savedLocalUserId = useDemoSession((state) => state.localUserId);
-  const savedCommand = useDemoSession((state) => state.command);
+  const savedProvider = useDemoSession((state) => state.provider);
+  const hydrated = useDemoSession((state) => state.hydrated);
+  const signedIn = useAuthSession();
   const savedPlanId = useDemoSession((state) => state.planId);
   const savedStage = useDemoSession((state) => state.stage);
   const beginFlow = useDemoSession((state) => state.beginFlow);
-  const localUserId = routedLocalUserId?.trim() || savedLocalUserId || configuredLocalUserId;
+  const finishFlow = useDemoSession((state) => state.finishFlow);
+  const localUserId = workspaceIdentity({
+    routedId: routedLocalUserId,
+    savedId: savedLocalUserId,
+    devId: configuredLocalUserId,
+    authUserId: signedIn?.userId ?? null,
+    development: __DEV__
+  });
 
   const [command, setCommand] = useState("");
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
@@ -53,6 +64,7 @@ export default function HomeScreen() {
   const [activity, setActivity] = useState<FinancialActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const activeRequest = useRef(0);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -62,7 +74,12 @@ export default function HomeScreen() {
   }, []);
 
   const load = useCallback(async () => {
+    const requestId = ++activeRequest.current;
     if (!localUserId) {
+      setWallet(null);
+      setBalance(null);
+      setPockets([]);
+      setActivity([]);
       setError("Complete onboarding or bootstrap a development identity to load financial state.");
       setLoading(false);
       return;
@@ -77,15 +94,27 @@ export default function HomeScreen() {
         loadPockets(localUserId),
         loadActivity(localUserId, 4)
       ]);
+      if (requestId !== activeRequest.current) return;
       setWallet(nextWallet);
       setBalance(nextBalance);
       setPockets(pocketState.pockets);
       setActivity(recentActivity);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Financial state could not be loaded.");
+      if (requestId === activeRequest.current) {
+        setError(cause instanceof Error ? cause.message : "Financial state could not be loaded.");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === activeRequest.current) setLoading(false);
     }
+  }, [localUserId]);
+
+  useEffect(() => {
+    // Discard old-account balances immediately when the active workspace changes.
+    setWallet(null);
+    setBalance(null);
+    setPockets([]);
+    setActivity([]);
+    return () => { activeRequest.current++; };
   }, [localUserId]);
 
   useEffect(() => { void load(); }, [load]);
@@ -95,13 +124,16 @@ export default function HomeScreen() {
   const providerAmount = balance ? Number.parseFloat(balance.providerBalance) : null;
   const internalAllocated = balance ? Number.parseFloat(balance.internalAllocated) : null;
   const providerBadge = balance?.source === "moniflow-sandbox" ? "MONIFLOW SANDBOX" : "BMONI SANDBOX";
-  const hasRecoverableFlow = Boolean(
-    localUserId &&
-    savedLocalUserId === localUserId &&
-    savedStage &&
-    savedStage !== "home" &&
-    (savedCommand || savedPlanId)
-  );
+  const recovery = recoveryDecision({
+    hydrated,
+    savedLocalUserId,
+    selectedLocalUserId: localUserId,
+    authUserId: signedIn?.userId ?? null,
+    development: __DEV__,
+    provider: savedProvider,
+    stage: savedStage,
+    planId: savedPlanId
+  });
 
   const previewCommand = () => {
     const normalized = command.trim();
@@ -111,23 +143,18 @@ export default function HomeScreen() {
   };
 
   const resumeFlow = () => {
-    if (!localUserId || !hasRecoverableFlow) return;
-    if ((savedStage === "processing" || savedStage === "plan") && savedCommand) {
-      router.push({ pathname: "/operator/processing", params: { command: savedCommand, localUserId } });
-      return;
-    }
-    if (savedPlanId) {
-      const pathname = savedStage === "approve"
-        ? "/operator/approve"
-        : savedStage === "signing"
-          ? "/operator/signing"
-          : savedStage === "execution"
-            ? "/operator/execution"
-            : savedStage === "result"
-              ? "/operator/result"
-              : "/operator/guard";
-      router.push({ pathname, params: { localUserId, planId: savedPlanId } });
-    }
+    if (recovery.kind !== "ready") return;
+    // Explicit tap only. Server plan ownership and execution status remain authoritative.
+    router.push({
+      pathname: recovery.route,
+      params: { localUserId: recovery.localUserId, planId: recovery.planId }
+    });
+  };
+
+  const discardPrePlanAttempt = () => {
+    if (recovery.kind !== "restart") return;
+    finishFlow();
+    setCommand("");
   };
 
   const openBanking = () => {
@@ -145,14 +172,21 @@ export default function HomeScreen() {
         <StatusPill label={providerBadge} tone="processing" />
       </View>
 
-      {hasRecoverableFlow ? (
+      {recovery.kind === "ready" ? (
         <SoftCard style={styles.resumeCard}>
           <View style={styles.resumeCopy}>
-            <StatusPill label="UNFINISHED FLOW" tone="warning" />
-            <Text style={styles.walletStateTitle}>Continue when you are ready.</Text>
-            <Text style={styles.walletStateCopy}>MONIFlow saved the last safe checkpoint. Nothing resumes automatically after an app restart.</Text>
+            <StatusPill label="PERSISTED PLAN CHECKPOINT" tone="warning" />
+            <Text style={styles.walletStateTitle}>Review the saved workflow.</Text>
+            <Text style={styles.walletStateCopy}>A plan reference is saved for this account. Tap to fetch its current server state; no transaction is replayed automatically.</Text>
           </View>
-          <SecondaryButton onPress={resumeFlow}>Resume flow</SecondaryButton>
+          <SecondaryButton onPress={resumeFlow}>Review saved plan</SecondaryButton>
+        </SoftCard>
+      ) : recovery.kind === "restart" ? (
+        <SoftCard style={styles.resumeCard}>
+          <StatusPill label="UNFINISHED INSTRUCTION" tone="warning" />
+          <Text style={styles.walletStateTitle}>A new instruction is required.</Text>
+          <Text style={styles.walletStateCopy}>{recovery.reason}</Text>
+          <SecondaryButton onPress={discardPrePlanAttempt}>Clear unfinished attempt</SecondaryButton>
         </SoftCard>
       ) : null}
 
