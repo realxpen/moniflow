@@ -106,6 +106,19 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
       : new SqlitePartnerOperationStore(env.DATABASE_URL)
     : null;
 
+  const bmoniEvidenceEnabled =
+    env.NODE_ENV === "test" &&
+    env.FINANCIAL_PROVIDER === "moniflow-sandbox" &&
+    env.BMONI_WEBHOOK_EVIDENCE_TEST_ENABLED === "true";
+  if (bmoniEvidenceEnabled && !env.BMONI_WEBHOOK_EVIDENCE_TEST_SECRET) {
+    throw new Error("BMONI_WEBHOOK_EVIDENCE_TEST_SECRET required for isolated tests");
+  }
+  const bmoniEvidenceStore = bmoniEvidenceEnabled
+    ? env.DATABASE_URL.startsWith("postgres")
+      ? new PostgresBmoniEvidenceStore(env.DATABASE_URL)
+      : new SqliteBmoniEvidenceStore(env.DATABASE_URL)
+    : null;
+
   const app = Fastify({
     logger: {
       redact: [
