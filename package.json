@@ -13,7 +13,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @moniflow/shared build && pnpm -r typecheck",
     "lint": "eslint . --max-warnings=0",
-    "test": "pnpm --filter @moniflow/shared build && pnpm --filter @moniflow/moniguard build && vitest run"
+    "test": "pnpm --filter @moniflow/shared build && pnpm --filter @moniflow/moniguard build && vitest run && node --test scripts/phase20-release-probe.nodecheck.mjs",
+    "smoke:phase20": "node scripts/phase20-release-smoke.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",
