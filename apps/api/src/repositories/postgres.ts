@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 import postgres, { type Sql } from "postgres";
 import { z } from "zod";
 
@@ -7,6 +9,7 @@ import { moniflowIntentSchema } from "../schemas/intent.js";
 import { moneyPlanSchema } from "../schemas/money-plan.js";
 import type { CreatePersistedMoneyPlanInput, MoneyPlanRepository, PersistedMoneyPlan } from "./money-plan.js";
 import type { UserMapping, UserMappingRepository, UserProvisioningHold } from "./user-mapping.js";
+import { classifyBmoniIdentityReadiness } from "./bmoni-identity-readiness.js";
 import type { WalletOwnership, WalletOwnershipRepository } from "./wallet-ownership.js";
 
 const userRowSchema = z.object({
@@ -55,6 +58,10 @@ export async function ensureMoniflowSchema(sql: Sql) {
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS bmoni_provisioning_hold_phone_unique_v1
     ON moniflow_private.bmoni_user_provisioning_holds_v1(phone_fingerprint)
     WHERE phone_fingerprint IS NOT NULL`;
+  await sql`CREATE TABLE IF NOT EXISTS moniflow_private.bmoni_phone_key_guard_v1 (
+    id integer PRIMARY KEY CHECK(id=1),
+    guard_digest text NOT NULL CHECK(length(guard_digest)=64)
+  )`;
 
 
   await sql`
@@ -180,6 +187,66 @@ function iso(value: string) { return new Date(value).toISOString(); }
 
 export class PostgresUserMappingRepository implements UserMappingRepository {
   constructor(private readonly sql: Sql) {}
+
+  async assertPhoneKeyContinuity(guardDigest:string):Promise<void> {
+    if (!/^[a-f0-9]{64}$/.test(guardDigest)) {
+      throw new Error("BMONI_PHONE_KEY_GUARD_INVALID");
+    }
+    // Serialize first-use enrollment and compare against the stored sentinel
+    // inside a single PG transaction across all instances.
+    await this.sql.begin(async tx=>{
+      // Acquire the same key-specific transactional lock before inspecting
+      // unmarked pre-existing fingerprints. No guessing an old HMAC key.
+      await tx`SELECT pg_advisory_xact_lock(824219327,1)`;
+      const previous=await tx`
+        SELECT guard_digest
+        FROM moniflow_private.bmoni_phone_key_guard_v1
+        WHERE id=1 FOR UPDATE
+      `;
+      const prior=previous[0];
+      if (!prior) {
+        const rows=await tx`
+          SELECT EXISTS(
+            SELECT 1 FROM moniflow_private.bmoni_user_provisioning_holds_v1
+            WHERE phone_fingerprint IS NOT NULL
+          ) AS used
+        `;
+        if (rows[0]?.used===true) throw new Error("BMONI_PHONE_KEY_LEGACY_REVIEW_REQUIRED");
+        await tx`
+          INSERT INTO moniflow_private.bmoni_phone_key_guard_v1(id,guard_digest)
+          VALUES(1,${guardDigest})
+        `;
+      } else {
+        const a=Buffer.from(String(prior.guard_digest),"utf8"),b=Buffer.from(guardDigest,"utf8");
+        if (a.length!==b.length || !timingSafeEqual(a,b)) {
+          throw new Error("BMONI_PHONE_KEY_CONTINUITY_MISMATCH");
+        }
+      }
+    });
+  }
+
+  async inspectIdentityReadiness(expectedGuardDigest?:string) {
+    const [map,holds,guards]=await Promise.all([
+      this.sql`SELECT count(*)::integer AS n
+        FROM moniflow_private.bmoni_user_mappings`,
+      this.sql`SELECT
+        count(*) FILTER(WHERE state='PROVIDER_USER_EXISTS')::integer AS known,
+        count(*) FILTER(WHERE state='PROVIDER_OUTCOME_UNKNOWN')::integer AS unknown,
+        count(*) FILTER(WHERE phone_fingerprint IS NOT NULL)::integer AS fingerprinted,
+        count(*) FILTER(WHERE phone_fingerprint IS NULL)::integer AS legacy
+        FROM moniflow_private.bmoni_user_provisioning_holds_v1`,
+      this.sql`SELECT guard_digest FROM moniflow_private.bmoni_phone_key_guard_v1 WHERE id=1`
+    ]);
+    return classifyBmoniIdentityReadiness({
+      mappingCount:Number(map[0]?.n??0),
+      providerExistsHoldCount:Number(holds[0]?.known??0),
+      unknownOutcomeHoldCount:Number(holds[0]?.unknown??0),
+      fingerprintedHoldCount:Number(holds[0]?.fingerprinted??0),
+      legacyUnfingerprintedHoldCount:Number(holds[0]?.legacy??0),
+      storedGuardDigest:guards[0]?String(guards[0].guard_digest):null,
+      expectedGuardDigest
+    });
+  }
 
   async findByEmail(email: string): Promise<UserMapping | null> {
     const rows = await this.sql`select local_user_id, email, bmoni_user_id, created_at, updated_at from moniflow_private.bmoni_user_mappings where lower(email) = lower(${email}) limit 1`;

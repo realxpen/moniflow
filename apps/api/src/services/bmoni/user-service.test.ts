@@ -8,7 +8,7 @@ import { SqliteUserMappingRepository } from "../../repositories/sqlite-user-mapp
 import type { BmoniGateway } from "./gateway.js";
 import { BmoniUserService, UserMappingConflictError, UserMappingReconciliationHoldError } from "./user-service.js";
 import { BmoniProviderError, BmoniTransportError, BmoniResponseValidationError } from "./errors.js";
-import { phoneIdentityFingerprint } from "./phone-identity-fingerprint.js";
+import { phoneIdentityFingerprint, phoneIdentityKeyGuard } from "./phone-identity-fingerprint.js";
 
 const PHONE_KEY="moniflow-disposable-phone-test-key-at-least-32";
 
@@ -194,6 +194,9 @@ describe("BmoniUserService", () => {
     directories.push(dir);
     const url="file:"+join(dir,"mapping.db");
     const first=new SqliteUserMappingRepository(url);
+    // Crash-gap test models a NEW reserved identity under a previously
+    // enrolled valid key, not an unmarked pre-migration legacy database.
+    await first.assertPhoneKeyContinuity(phoneIdentityKeyGuard(PHONE_KEY));
     expect(await first.reserveBeforeCreate({
       email:input.email,localUserId:input.localUserId,
       phoneFingerprint:phoneIdentityFingerprint(input.phoneNumber,PHONE_KEY),
@@ -283,6 +286,49 @@ describe("BmoniUserService", () => {
     );
     expect(createUser).not.toHaveBeenCalled();
     expect(await repository.findHoldByEmail(input.email)).toBe(null);
+  });
+
+  it("rejects silent HMAC key rotation across SQLite restarts before any new provider call",async()=>{
+    const dir=mkdtempSync(join(tmpdir(),"bmoni-key-guard-"));
+    directories.push(dir);
+    const url="file:"+join(dir,"mapping.db");
+    const firstRepo=new SqliteUserMappingRepository(url);
+    const fixture=createFixture();
+    const first=new BmoniUserService(fixture.gateway,firstRepo,PHONE_KEY);
+    await first.createOrFindMapping(input);
+    await firstRepo.close();
+    const reopened=new SqliteUserMappingRepository(url);
+    repositories.push(reopened);
+    const wrong=new BmoniUserService(fixture.gateway,reopened,PHONE_KEY+"rotated");
+    await expect(wrong.createOrFindMapping(input))
+      .rejects.toThrow("BMONI_PHONE_KEY_CONTINUITY_MISMATCH");
+    await expect(wrong.createOrFindMapping({
+      ...input,email:"unseen@example.com",
+      localUserId:"99999999-9999-4999-8999-999999999999",
+      phoneNumber:"+2348012345679"
+    })).rejects.toThrow("BMONI_PHONE_KEY_CONTINUITY_MISMATCH");
+    expect(fixture.createUser).toHaveBeenCalledTimes(1);
+    const same=new BmoniUserService(fixture.gateway,reopened,PHONE_KEY);
+    await expect(same.createOrFindMapping(input)).resolves.toMatchObject({
+      status:"existing",bmoniUserId:"bmoni-user-1"
+    });
+  });
+
+  it("serializes first-use key enrollment across independent SQLite instances",async()=>{
+    const dir=mkdtempSync(join(tmpdir(),"bmoni-key-guard-instances-"));
+    directories.push(dir);
+    const url="file:"+join(dir,"mapping.db");
+    const repoA=new SqliteUserMappingRepository(url);
+    const repoB=new SqliteUserMappingRepository(url);
+    repositories.push(repoA,repoB);
+    const fixture=createFixture();
+    await Promise.all([
+      repoA.assertPhoneKeyContinuity(phoneIdentityKeyGuard(PHONE_KEY)),
+      repoB.assertPhoneKeyContinuity(phoneIdentityKeyGuard(PHONE_KEY))
+    ]);
+    await expect(repoB.assertPhoneKeyContinuity(phoneIdentityKeyGuard(PHONE_KEY+"changed")))
+      .rejects.toThrow("BMONI_PHONE_KEY_CONTINUITY_MISMATCH");
+    expect(fixture.createUser).not.toHaveBeenCalled();
   });
 
   it("blocks an email from being attached to a second local identity", async () => {

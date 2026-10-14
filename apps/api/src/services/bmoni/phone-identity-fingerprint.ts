@@ -20,3 +20,17 @@ export function phoneIdentityFingerprint(phoneNumber: string, key: string | unde
     .update(phoneNumber, "utf8")
     .digest("hex");
 }
+
+/**
+ * An irreversible, domain-separated CHECK VALUE for the configured HMAC key.
+ * This is NOT the key, a phone fingerprint, or a means to decrypt phone locks.
+ * Its role is to detect accidental rotations across server instances.
+ */
+export function phoneIdentityKeyGuard(key: string | undefined): string {
+  if (!key || key.length < 32) {
+    throw new BmoniConfigurationError("BMONI_IDENTITY_PHONE_HMAC_SECRET must be configured before user creation.");
+  }
+  return createHmac("sha256",key)
+    .update("MONIFLOW_BMONI_PHONE_KEY_CONTINUITY_V1\n")
+    .digest("hex");
+}

@@ -33,3 +33,44 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  b2-postgres-gate:
+    name: B2 disposable PostgreSQL evidence and identity gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: moniflow_ci
+          POSTGRES_PASSWORD: disposable-ci-only-password
+          POSTGRES_DB: moniflow_b2_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U moniflow_ci -d moniflow_b2_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      NODE_ENV: test
+      MONIFLOW_B2_DISPOSABLE_DB_TESTS: "true"
+      MONIFLOW_TEST_POSTGRES_URL: "postgres://moniflow_ci:disposable-ci-only-password@127.0.0.1:5432/moniflow_b2_ci"
+      FINANCIAL_PROVIDER: moniflow-sandbox
+      BMONI_PARTNER_ONBOARDING_ENABLED: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build shared packages
+        run: pnpm --filter @moniflow/shared build && pnpm --filter @moniflow/moniguard build
+      - name: Isolated PostgreSQL identity and receipt evidence
+        run: pnpm exec vitest run apps/api/src/repositories/bmoni-identity-postgres.integration.test.ts --reporter=verbose

@@ -1,8 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
+import { timingSafeEqual } from "node:crypto";
 
 import { z } from "zod";
 
 import type { UserMapping, UserMappingRepository, UserProvisioningHold } from "./user-mapping.js";
+import { classifyBmoniIdentityReadiness } from "./bmoni-identity-readiness.js";
 
 const userMappingRowSchema = z.object({
   local_user_id: z.string(),
@@ -64,6 +66,75 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
       "ON bmoni_user_provisioning_holds_v1(phone_fingerprint) "+
       "WHERE phone_fingerprint IS NOT NULL"
     );
+    this.database.exec(
+      "CREATE TABLE IF NOT EXISTS bmoni_phone_key_guard_v1 ("+
+      "id INTEGER PRIMARY KEY CHECK(id=1),"+
+      "guard_digest TEXT NOT NULL CHECK(length(guard_digest)=64)"+
+      ") STRICT"
+    );
+  }
+
+  async assertPhoneKeyContinuity(guardDigest: string): Promise<void> {
+    if (!/^[a-f0-9]{64}$/.test(guardDigest)) {
+      throw new Error("BMONI_PHONE_KEY_GUARD_INVALID");
+    }
+    // BEGIN IMMEDIATE serializes simultaneous first-time enrollment of a
+    // key, even across distinct SQLite connections using this database.
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const prior=this.database.prepare(
+        "SELECT guard_digest FROM bmoni_phone_key_guard_v1 WHERE id=1"
+      ).get() as {guard_digest:string}|undefined;
+      if (!prior) {
+        // Never silently bind a freshly configured key to legacy hashes from
+        // an unknown older key. Manual source review is mandatory.
+        const existing=this.database.prepare(
+          "SELECT COUNT(*) AS n FROM bmoni_user_provisioning_holds_v1 "+
+          "WHERE phone_fingerprint IS NOT NULL"
+        ).get() as {n:number};
+        if (existing.n>0) throw new Error("BMONI_PHONE_KEY_LEGACY_REVIEW_REQUIRED");
+        this.database.prepare(
+          "INSERT INTO bmoni_phone_key_guard_v1(id,guard_digest) VALUES(1,?)"
+        ).run(guardDigest);
+      } else {
+        const a=Buffer.from(prior.guard_digest,"utf8"),b=Buffer.from(guardDigest,"utf8");
+        if (a.length!==b.length || !timingSafeEqual(a,b)) {
+          throw new Error("BMONI_PHONE_KEY_CONTINUITY_MISMATCH");
+        }
+      }
+      this.database.exec("COMMIT");
+    } catch(error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  async inspectIdentityReadiness(expectedGuardDigest?: string) {
+    // Intentionally SELECT-only. No key enrollment, auto-unlock or provider
+    // operation; only aggregate counts are returned.
+    const mapping=this.database.prepare(
+      "SELECT COUNT(*) AS n FROM bmoni_user_mappings"
+    ).get() as {n:number};
+    const held=this.database.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN state='PROVIDER_USER_EXISTS' THEN 1 ELSE 0 END),0) AS known,
+        COALESCE(SUM(CASE WHEN state='PROVIDER_OUTCOME_UNKNOWN' THEN 1 ELSE 0 END),0) AS unknown,
+        COALESCE(SUM(CASE WHEN phone_fingerprint IS NOT NULL THEN 1 ELSE 0 END),0) AS fingerprinted,
+        COALESCE(SUM(CASE WHEN phone_fingerprint IS NULL THEN 1 ELSE 0 END),0) AS legacy
+      FROM bmoni_user_provisioning_holds_v1
+    `).get() as {known:number;unknown:number;fingerprinted:number;legacy:number};
+    const guard=this.database.prepare(
+      "SELECT guard_digest FROM bmoni_phone_key_guard_v1 WHERE id=1"
+    ).get() as {guard_digest:string}|undefined;
+    return classifyBmoniIdentityReadiness({
+      mappingCount:mapping.n,
+      providerExistsHoldCount:held.known,
+      unknownOutcomeHoldCount:held.unknown,
+      fingerprintedHoldCount:held.fingerprinted,
+      legacyUnfingerprintedHoldCount:held.legacy,
+      storedGuardDigest:guard?.guard_digest??null,
+      expectedGuardDigest
+    });
   }
 
   async findByEmail(email: string): Promise<UserMapping | null> {

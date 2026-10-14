@@ -74,4 +74,76 @@ describe("SqliteUserMappingRepository", () => {
     raw.close();
   });
 
+  it("refuses to adopt an unverified new key when older phone fingerprints exist without a guard",async()=>{
+    const dir=mkdtempSync(join(tmpdir(),"bmoni-unmarked-phone-guard-"));
+    dirs.push(dir);
+    const dbPath=join(dir,"existing.sqlite");
+    const repository=new SqliteUserMappingRepository("file:"+dbPath);
+    repositories.push(repository);
+    expect(await repository.reserveBeforeCreate({
+      email:"held@example.com",
+      localUserId:"44444444-4444-4444-8444-444444444444",
+      state:"PROVIDER_OUTCOME_UNKNOWN",
+      phoneFingerprint:"b".repeat(64),
+      createdAt:new Date().toISOString()
+    })).toBe(true);
+    await expect(repository.assertPhoneKeyContinuity("a".repeat(64)))
+      .rejects.toThrow("BMONI_PHONE_KEY_LEGACY_REVIEW_REQUIRED");
+    const other=new SqliteUserMappingRepository("file:"+dbPath);
+    repositories.push(other);
+    await expect(other.assertPhoneKeyContinuity("c".repeat(64)))
+      .rejects.toThrow("BMONI_PHONE_KEY_LEGACY_REVIEW_REQUIRED");
+    expect((await other.findHoldByEmail("held@example.com"))?.phoneFingerprint)
+      .toBe("b".repeat(64));
+  });
+
+  it("persists a key-guard marker without ever storing the HMAC secret",async()=>{
+    const repository=new SqliteUserMappingRepository(":memory:");
+    repositories.push(repository);
+    const guard="a".repeat(64);
+    await repository.assertPhoneKeyContinuity(guard);
+    await repository.assertPhoneKeyContinuity(guard);
+    await expect(repository.assertPhoneKeyContinuity("b".repeat(64)))
+      .rejects.toThrow("BMONI_PHONE_KEY_CONTINUITY_MISMATCH");
+    // A failed check must never overwrite the established guard.
+    await repository.assertPhoneKeyContinuity(guard);
+  });
+
+  it("provides a SELECT-only, PII-free operator readiness snapshot",async()=>{
+    const repository=new SqliteUserMappingRepository(":memory:");
+    repositories.push(repository);
+    const uninitialized=await repository.inspectIdentityReadiness("a".repeat(64));
+    expect(uninitialized).toMatchObject({
+      keyContinuity:"NOT_ENROLLED",
+      mappingCount:0,unknownOutcomeHoldCount:0,manualReviewRequired:false,
+      providerUserRecoveryConfirmed:false,providerFinancialExecutionAllowed:false
+    });
+    // Inspecting must NOT enroll the key. Both keys still report UNENROLLED.
+    expect((await repository.inspectIdentityReadiness("b".repeat(64))).keyContinuity)
+      .toBe("NOT_ENROLLED");
+
+    await repository.assertPhoneKeyContinuity("a".repeat(64));
+    await repository.reserveBeforeCreate({
+      email:"unknown@example.invalid",localUserId:"11111111-1111-4111-8111-111111111111",
+      phoneFingerprint:"c".repeat(64),
+      state:"PROVIDER_OUTCOME_UNKNOWN",createdAt:new Date().toISOString()
+    });
+    await repository.createHold({
+      email:"legacy@example.invalid",
+      localUserId:"22222222-2222-4222-8222-222222222222",
+      phoneFingerprint:null,state:"PROVIDER_USER_EXISTS",createdAt:new Date().toISOString()
+    });
+    const result=await repository.inspectIdentityReadiness("a".repeat(64));
+    expect(result).toMatchObject({
+      keyContinuity:"MATCH",unknownOutcomeHoldCount:1,
+      providerExistsHoldCount:1,fingerprintedHoldCount:1,
+      legacyUnfingerprintedHoldCount:1,manualReviewRequired:true
+    });
+    expect(JSON.stringify(result)).not.toContain("unknown@example.invalid");
+    expect(JSON.stringify(result)).not.toContain("legacy@example.invalid");
+    expect(JSON.stringify(result)).not.toContain("c".repeat(64));
+    expect((await repository.inspectIdentityReadiness("b".repeat(64))).keyContinuity)
+      .toBe("MISMATCH");
+  });
+
 });

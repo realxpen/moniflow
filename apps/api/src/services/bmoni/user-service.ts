@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { UserMappingRepository } from "../../repositories/user-mapping.js";
 import type { CreateMoniflowUserInput } from "../../schemas/onboarding.js";
 import { BmoniProviderError } from "./errors.js";
-import { phoneIdentityFingerprint } from "./phone-identity-fingerprint.js";
+import { phoneIdentityFingerprint, phoneIdentityKeyGuard } from "./phone-identity-fingerprint.js";
 
 import type { BmoniGateway } from "./gateway.js";
 
@@ -44,6 +44,11 @@ export class BmoniUserService {
   }
 
   async createOrFindMapping(input: CreateMoniflowUserInput): Promise<ProvisionBmoniUserResult> {
+    // Check durable key continuity before any local identity is returned or
+    // any BMONI user-create is even considered. Missing/rotated keys fail shut.
+    await this.mappings.assertPhoneKeyContinuity(
+      phoneIdentityKeyGuard(this.phoneHmacSecret)
+    );
     if (input.localUserId) {
       const localMapping = await this.mappings.findByLocalUserId(input.localUserId);
       if (localMapping) {
