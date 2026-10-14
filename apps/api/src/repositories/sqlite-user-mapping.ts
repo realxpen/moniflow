@@ -48,7 +48,10 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
         local_user_id TEXT,
         state TEXT NOT NULL CHECK (state IN ('PROVIDER_USER_EXISTS','PROVIDER_OUTCOME_UNKNOWN')),
         created_at TEXT NOT NULL
-      ) STRICT
+      ) STRICT;
+      CREATE UNIQUE INDEX IF NOT EXISTS bmoni_provisioning_hold_local_id_unique_v1
+      ON bmoni_user_provisioning_holds_v1(local_user_id)
+      WHERE local_user_id IS NOT NULL
     `);
   }
 
@@ -65,6 +68,28 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
   async save(mapping: UserMapping): Promise<UserMapping> {
     this.database.prepare(`INSERT INTO bmoni_user_mappings (local_user_id, email, bmoni_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run(mapping.localUserId, mapping.email, mapping.bmoniUserId, mapping.createdAt, mapping.updatedAt);
     return mapping;
+  }
+
+  async reserveBeforeCreate(hold: UserProvisioningHold): Promise<boolean> {
+    if (!hold.localUserId || hold.state!=="PROVIDER_OUTCOME_UNKNOWN") {
+      throw new Error("BMONI_INVALID_CREATE_RESERVATION");
+    }
+    // SQLite inserts are serialized even across processes. Either competing
+    // email or local UUID claims wins, never both.
+    const inserted=this.database.prepare(
+      "INSERT OR IGNORE INTO bmoni_user_provisioning_holds_v1(email,local_user_id,state,created_at) VALUES (?,?,?,?)"
+    ).run(hold.email.trim().toLowerCase(),hold.localUserId,hold.state,hold.createdAt);
+    return inserted.changes===1;
+  }
+
+  async markProviderUserExists(email:string):Promise<void> {
+    const updated=this.database.prepare(
+      "UPDATE bmoni_user_provisioning_holds_v1 SET state='PROVIDER_USER_EXISTS' WHERE email=? COLLATE NOCASE AND state='PROVIDER_OUTCOME_UNKNOWN'"
+    ).run(email.trim().toLowerCase());
+    if(updated.changes!==1){
+      const existing=await this.findHoldByEmail(email);
+      if(existing?.state!=="PROVIDER_USER_EXISTS") throw new Error("BMONI_IDENTITY_HOLD_NOT_FOUND");
+    }
   }
 
   async findHoldByEmail(email: string): Promise<UserProvisioningHold | null> {

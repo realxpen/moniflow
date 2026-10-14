@@ -142,6 +142,79 @@ describe("BmoniUserService", () => {
     expect((await reopened.findHoldByEmail(input.email))?.localUserId).toBe(input.localUserId);
   });
 
+  it("allows exactly one concurrent first-time provider request across two SQLite processes",async()=>{
+    const dir=mkdtempSync(join(tmpdir(),"bmoni-atomic-"));
+    directories.push(dir);
+    const url="file:"+join(dir,"mapping.db");
+    const repositoryA=new SqliteUserMappingRepository(url);
+    const repositoryB=new SqliteUserMappingRepository(url);
+    repositories.push(repositoryA,repositoryB);
+    const fixture=createFixture();
+    let release!:()=>void;
+    const pending=new Promise<void>(resolve=>{release=resolve;});
+    fixture.createUser.mockImplementation(async()=>{
+      await pending;
+      return {bmoniUserId:"bmoni-user-1",email:input.email,firstName:"Ada"};
+    });
+    const serviceA=new BmoniUserService(fixture.gateway,repositoryA);
+    const serviceB=new BmoniUserService(fixture.gateway,repositoryB);
+    const first=serviceA.createOrFindMapping(input);
+    await vi.waitFor(()=>expect(fixture.createUser).toHaveBeenCalledTimes(1));
+    await expect(serviceB.createOrFindMapping({...input,email:"ADA@example.com"}))
+      .rejects.toBeInstanceOf(UserMappingReconciliationHoldError);
+    expect(fixture.createUser).toHaveBeenCalledTimes(1);
+    release();
+    await expect(first).resolves.toMatchObject({status:"created",bmoniUserId:"bmoni-user-1"});
+    expect(fixture.createUser).toHaveBeenCalledTimes(1);
+    await expect(serviceB.createOrFindMapping(input)).resolves.toMatchObject({status:"existing"});
+  });
+
+  it("blocks different emails from claiming the same local identity concurrently",async()=>{
+    const {createUser,service}=createFixture();
+    let release!:()=>void;
+    const pending=new Promise<void>(resolve=>{release=resolve;});
+    createUser.mockImplementation(async()=>{
+      await pending;
+      return {bmoniUserId:"bmoni-user-1",email:input.email,firstName:"Ada"};
+    });
+    const first=service.createOrFindMapping(input);
+    await vi.waitFor(()=>expect(createUser).toHaveBeenCalledTimes(1));
+    await expect(service.createOrFindMapping({...input,email:"second@example.com"}))
+      .rejects.toBeInstanceOf(UserMappingConflictError);
+    expect(createUser).toHaveBeenCalledTimes(1);
+    release();
+    await first;
+  });
+
+  it("holds a crash-gap reservation even when the provider was never contacted",async()=>{
+    const dir=mkdtempSync(join(tmpdir(),"bmoni-crash-gap-"));
+    directories.push(dir);
+    const url="file:"+join(dir,"mapping.db");
+    const first=new SqliteUserMappingRepository(url);
+    expect(await first.reserveBeforeCreate({
+      email:input.email,localUserId:input.localUserId,
+      state:"PROVIDER_OUTCOME_UNKNOWN",createdAt:new Date().toISOString()
+    })).toBe(true);
+    await first.close();
+    const restarted=new SqliteUserMappingRepository(url);
+    repositories.push(restarted);
+    const fixture=createFixture();
+    const service=new BmoniUserService(fixture.gateway,restarted);
+    await expect(service.createOrFindMapping(input))
+      .rejects.toMatchObject({state:"PROVIDER_OUTCOME_UNKNOWN"});
+    expect(fixture.createUser).not.toHaveBeenCalled();
+  });
+
+  it("keeps pre-dispatch hold when provider returns a definite 400, requiring manual review",async()=>{
+    const {createUser,repository,service}=createFixture();
+    createUser.mockRejectedValueOnce(new BmoniProviderError(400,null,"invalid"));
+    await expect(service.createOrFindMapping(input)).rejects.toBeInstanceOf(BmoniProviderError);
+    expect((await repository.findHoldByEmail(input.email))?.state).toBe("PROVIDER_OUTCOME_UNKNOWN");
+    await expect(service.createOrFindMapping(input))
+      .rejects.toBeInstanceOf(UserMappingReconciliationHoldError);
+    expect(createUser).toHaveBeenCalledTimes(1);
+  });
+
   it("blocks an email from being attached to a second local identity", async () => {
     const { service } = createFixture();
     await service.createOrFindMapping(input);
