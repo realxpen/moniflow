@@ -202,7 +202,8 @@ export class PostgresUserMappingRepository implements UserMappingRepository {
 
   async reserveBeforeCreate(hold:UserProvisioningHold):Promise<boolean> {
     if(!hold.localUserId || hold.state!=="PROVIDER_OUTCOME_UNKNOWN" ||
-       !/^[a-f0-9]{64}$/.test(hold.phoneFingerprint??"")) {
+       typeof hold.phoneFingerprint!=="string" ||
+       !/^[a-f0-9]{64}$/.test(hold.phoneFingerprint)) {
       throw new Error("BMONI_INVALID_CREATE_RESERVATION");
     }
     // Unique email + unique non-null local UUID, atomically committed before
