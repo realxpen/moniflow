@@ -152,7 +152,7 @@ export default function IdentityScreen() {
         <SoftCard style={styles.card}>
           <Text style={styles.title}>No new BMONI users for now.</Text>
           <Text style={styles.subtle}>The shared sandbox API key can confirm connectivity, but it does not prove that a test persona belongs to MONIFlow's partner account. Existing test profiles have returned 409 and require reconciliation.</Text>
-          <SecondaryButton onPress={() => router.push("/demo/operator")}>Try interactive Operator simulation</SecondaryButton>
+          <SecondaryButton onPress={() => router.push("/demo/live")}>Open authenticated financial sandbox</SecondaryButton>
           <SecondaryButton onPress={() => void checkPartnerAccess()}>Recheck partner availability</SecondaryButton>
         </SoftCard>
       ) : null}

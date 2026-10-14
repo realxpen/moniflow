@@ -72,7 +72,7 @@ export default function WelcomeScreen() {
   );
 
   return (
-    <Screen contentContainerStyle={styles.screen} scroll={false}>
+    <Screen contentContainerStyle={styles.screen}>
       <View style={styles.top}>
         <View style={styles.brandRow}>
           <Text style={styles.brand}>MONIFlow</Text>
@@ -152,9 +152,12 @@ export default function WelcomeScreen() {
           </View>
         ) : null}
 
-        <PrimaryButton onPress={() => router.push("/demo/operator")}>
-          Try interactive Operator simulation
+        <PrimaryButton onPress={() => router.push("/demo/live")}>
+          Open API-backed financial sandbox
         </PrimaryButton>
+        <SecondaryButton onPress={() => router.push("/demo/operator")}>
+          Try offline Operator simulation
+        </SecondaryButton>
         <SecondaryButton onPress={() => router.push("/demo/walkthrough")}>
           Explore educational walkthrough
         </SecondaryButton>
