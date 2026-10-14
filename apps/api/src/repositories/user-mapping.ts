@@ -20,6 +20,11 @@ export type UserProvisioningHold = {
  * must not cause another POST /v1/users, even after a process restart.
  */
 export interface UserMappingRepository {
+  /** Fail closed before ANY user mapping read or new provider dispatch if the
+   * server fingerprint key differs from the one that established these holds.
+   * Never auto-adopt a new key over existing fingerprinted rows.
+   */
+  assertPhoneKeyContinuity(guardDigest: string): Promise<void>;
   findByEmail(email: string): Promise<UserMapping | null>;
   findByLocalUserId(localUserId: string): Promise<UserMapping | null>;
   save(mapping: UserMapping): Promise<UserMapping>;
