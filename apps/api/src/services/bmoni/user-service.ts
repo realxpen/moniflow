@@ -103,17 +103,30 @@ export class BmoniUserService {
       throw error;
     }
     if (user.email.toLowerCase() !== input.email.toLowerCase()) {
+      await this.mappings.createHold({
+        email:input.email.trim().toLowerCase(),localUserId:input.localUserId??null,
+        state:"PROVIDER_OUTCOME_UNKNOWN",createdAt:new Date().toISOString()
+      });
       throw new UserMappingConflictError("The provider response did not preserve the requested identity.");
     }
 
     const timestamp = new Date().toISOString();
-    const mapping = await this.mappings.save({
-      bmoniUserId: user.bmoniUserId,
-      createdAt: timestamp,
-      email: user.email,
-      localUserId,
-      updatedAt: timestamp
-    });
-    return { bmoniUserId: mapping.bmoniUserId, localUserId: mapping.localUserId, status: "created" };
+    try {
+      const mapping = await this.mappings.save({
+        bmoniUserId: user.bmoniUserId,
+        createdAt: timestamp,
+        email: user.email,
+        localUserId,
+        updatedAt: timestamp
+      });
+      return { bmoniUserId: mapping.bmoniUserId, localUserId: mapping.localUserId, status: "created" };
+    } catch(error) {
+      // BMONI may have created the user despite a local database failure.
+      await this.mappings.createHold({
+        email:input.email.trim().toLowerCase(),localUserId:input.localUserId??null,
+        state:"PROVIDER_OUTCOME_UNKNOWN",createdAt:new Date().toISOString()
+      });
+      throw error;
+    }
   }
 }
