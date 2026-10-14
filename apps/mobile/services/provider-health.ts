@@ -6,6 +6,7 @@ export type ProviderHealthBody = {
   simulated?: unknown;
   currencies?: unknown;
   reason?: unknown;
+  partnerRegistrationEnabled?: unknown;
 };
 
 export function providerHealthProblem(status: number, body: ProviderHealthBody) {
