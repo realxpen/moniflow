@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recoveryDecision, workspaceIdentity, type RecoveryInput } from "./flow-recovery";
+import { checkpointForStorage, checkpointFromStorage, recoveryDecision, workspaceIdentity, type RecoveryInput } from "./flow-recovery";
 
 const alice = "11111111-1111-4111-8111-111111111111";
 const bob = "22222222-2222-4222-8222-222222222222";
@@ -41,4 +41,31 @@ describe("operator flow recovery", () => {
     expect(recoveryDecision({ ...fixture, stage: "home" }).kind).toBe("none");
     expect(recoveryDecision({ ...fixture, stage: null }).kind).toBe("none");
   });
+  it("does not persist a raw financial command and drops legacy v1 saved instructions", () => {
+    const projection = checkpointForStorage({
+      localUserId: alice, provider: "bmoni", planId, stage: "approve",
+      updatedAt: "2026-10-14T10:00:00.000Z"
+    });
+    expect(Object.keys(projection)).not.toContain("command");
+    const legacy = checkpointFromStorage({
+      ...projection,
+      command: "Pay an account number and a private instruction",
+      accessToken: "do-not-restore",
+      refreshToken: "do-not-restore"
+    });
+    expect(legacy.command).toBe("");
+    expect(legacy).not.toHaveProperty("accessToken");
+    expect(legacy).not.toHaveProperty("refreshToken");
+    expect(legacy).toMatchObject({ localUserId: alice, provider: "bmoni", planId, stage: "approve" });
+  });
+  it("does not trust malformed or unknown stored financial recovery fields", () => {
+    expect(checkpointFromStorage({
+      localUserId: "not-a-user", provider: "malicious", stage: "sign-anything",
+      planId: "not-a-plan", command: "sensitive"
+    })).toEqual({
+      localUserId: "", provider: null, stage: null,
+      planId: "", updatedAt: null, command: ""
+    });
+  });
+
 });

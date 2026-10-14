@@ -58,7 +58,7 @@ export function recoveryDecision(input: RecoveryInput): RecoveryDecision {
       reason: "This instruction has no persisted plan to recover. Re-enter it to start a new plan; MONIFlow will not replay it automatically."
     };
   }
-  const routes: Record<DemoRecoveryStage, RecoveryDecision["kind"] extends never ? never : string> = {
+  const routes: Record<DemoRecoveryStage, Extract<RecoveryDecision, { kind: "ready" }>["route"]> = {
     home: "/operator/guard",
     processing: "/operator/guard",
     plan: "/operator/guard",
@@ -70,8 +70,49 @@ export function recoveryDecision(input: RecoveryInput): RecoveryDecision {
   };
   return {
     kind: "ready",
-    route: routes[input.stage] as Extract<RecoveryDecision, { kind: "ready" }>["route"],
+    route: routes[input.stage],
     localUserId: input.savedLocalUserId,
     planId: input.planId
+  };
+}
+
+const validStages: DemoRecoveryStage[] = [
+  "home", "processing", "plan", "guard", "approve", "signing", "execution", "result"
+];
+
+/** Persist only identifiers/checkpoint metadata, never raw financial instructions. */
+export function checkpointForStorage(input: {
+  localUserId: string; provider: DemoProviderId | null; stage: DemoRecoveryStage | null;
+  planId: string; updatedAt: string | null;
+}) {
+  return {
+    localUserId: input.localUserId,
+    provider: input.provider,
+    stage: input.stage,
+    planId: input.planId,
+    updatedAt: input.updatedAt
+  };
+}
+
+/**
+ * Migrates v1 on-device state. Old saved `command` is intentionally dropped,
+ * never hydrated into the new store or copied to subsequent storage writes.
+ */
+export function checkpointFromStorage(persisted: unknown) {
+  const raw = persisted && typeof persisted === "object"
+    ? persisted as Record<string, unknown> : {};
+  const provider: DemoProviderId | null =
+    raw.provider === "bmoni" || raw.provider === "moniflow-sandbox" ? raw.provider : null;
+  const stage: DemoRecoveryStage | null =
+    typeof raw.stage === "string" && validStages.includes(raw.stage as DemoRecoveryStage)
+      ? raw.stage as DemoRecoveryStage : null;
+  return {
+    localUserId: typeof raw.localUserId === "string" && uuid.test(raw.localUserId) ? raw.localUserId : "",
+    provider,
+    stage,
+    planId: typeof raw.planId === "string" && uuid.test(raw.planId) ? raw.planId : "",
+    updatedAt: typeof raw.updatedAt === "string" && !Number.isNaN(Date.parse(raw.updatedAt))
+      ? raw.updatedAt : null,
+    command: ""
   };
 }
