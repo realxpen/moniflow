@@ -21,3 +21,19 @@ MONIFlow's selected provider is separate from MONIFlow's own **simulated** devel
 5. Promote to a deliberate API release through the manual GitHub workflow only after CI and the relevant integration gates pass.
 
 BMONI support must clarify partner isolation and recover/reset behavior. A dedicated key **does not guarantee** a previously used phone number is reusable.
+
+## Partner registration guard (implemented)
+
+The API defaults `BMONI_PARTNER_ONBOARDING_ENABLED=false`; production and local development
+reject `POST /api/onboarding/user(s)` with `423 PARTNER_ACCESS_PENDING` before contacting
+BMONI unless that server-only switch is explicitly enabled. Isolated automated tests retain
+their own fixture override via `NODE_ENV=test`. Never publish an API with `NODE_ENV=test`.
+`/health/provider` reports `partnerRegistrationEnabled` separately from provider readiness.
+A green provider health response is not evidence that user registration is authorized.
+
+When credentials are issued and confirmed, set the flag to `true` **only** on the
+server side, with a dedicated authorized partner key and BMONI's user-recovery instructions.
+This flag is an operator control, not proof of ownership of the key.
+
+The standalone `/demo/walkthrough` route is an educational simulation. It calls
+no financial API or BMONI SDK, does not persist financial memory, and cannot authorize funds.

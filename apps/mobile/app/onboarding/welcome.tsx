@@ -61,6 +61,7 @@ export default function WelcomeScreen() {
 
   const sandboxDemo = provider?.provider === "moniflow-sandbox";
   const ready = provider?.status === "ok";
+  const partnerPending = provider?.provider === "bmoni" && !provider.partnerRegistrationEnabled;
   const canResume = Boolean(
     hydrated &&
     savedLocalUserId &&
@@ -100,6 +101,17 @@ export default function WelcomeScreen() {
           </Text>
         </SoftCard>
 
+        {partnerPending ? (
+          <SoftCard style={styles.resumeCard}>
+            <StatusPill label="BMONI PARTNER ACCESS PENDING" tone="warning" />
+            <Text style={styles.resumeTitle}>Provider connected. Registration paused.</Text>
+            <Text style={styles.providerCopy}>
+              BMONI sandbox connectivity is available, but MONIFlow has not enabled partner-specific user creation.
+              We are waiting for dedicated credentials and the supported reconciliation process.
+            </Text>
+          </SoftCard>
+        ) : null}
+
         {canResume ? (
           <SoftCard style={styles.resumeCard}>
             <View style={styles.resumeCopy}>
@@ -126,7 +138,7 @@ export default function WelcomeScreen() {
             {preparing ? "Preparing clean demo…" : canResume ? "Restart with a clean sandbox demo" : "Start clean sandbox demo"}
           </SecondaryButton>
         ) : (
-          <PrimaryButton disabled={checking || !ready} onPress={() => router.push("/onboarding/identity")}>
+<PrimaryButton disabled={checking || !ready || partnerPending} onPress={() => router.push("/onboarding/identity")}>
             Begin secure setup
           </PrimaryButton>
         )}
@@ -139,6 +151,10 @@ export default function WelcomeScreen() {
             </SecondaryButton>
           </View>
         ) : null}
+
+        <SecondaryButton onPress={() => router.push("/demo/walkthrough")}>
+          Explore simulated walkthrough
+        </SecondaryButton>
 
         <Text style={styles.disclosure}>
           {sandboxDemo

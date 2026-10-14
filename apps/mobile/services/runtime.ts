@@ -10,6 +10,7 @@ export type FinancialProviderRuntime = {
   environment: string;
   simulated: boolean;
   currencies: string[];
+  partnerRegistrationEnabled: boolean;
   reason?: string;
   issue?: string;
 };
@@ -74,6 +75,7 @@ export async function loadFinancialProvider(): Promise<FinancialProviderRuntime>
     label: typeof payload.label === "string" ? payload.label : payload.provider === "bmoni" ? "BMONI" : "MONIFlow Sandbox",
     environment: typeof payload.environment === "string" ? payload.environment : "unknown",
     simulated: payload.simulated === true,
+    partnerRegistrationEnabled: payload.partnerRegistrationEnabled === true,
     currencies: Array.isArray(payload.currencies) ? payload.currencies.filter((v): v is string => typeof v === "string") : [],
     ...(problem ? { reason: problem.reason, issue: problem.message } : {})
   };
