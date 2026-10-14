@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 
 import { createMoniflowUserInputSchema } from "../schemas/onboarding.js";
+import { env } from "../config/env.js";
+import { partnerRegistrationEnabled } from "../services/bmoni/partner-access.js";
 import {
   BmoniConfigurationError,
   BmoniProviderError,
@@ -19,6 +21,19 @@ type OnboardingRouteOptions = {
 
 export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = async (app, options) => {
   const createUser = async (request: FastifyRequest<{ Body: unknown }>, reply: FastifyReply) => {
+    // Block at the server boundary: UI flags do not authorize use of a shared key.
+    // The only bypass is for isolated automated tests (NODE_ENV=test).
+    if (env.NODE_ENV !== "test" &&
+      !partnerRegistrationEnabled(env.FINANCIAL_PROVIDER, env.BMONI_PARTNER_ONBOARDING_ENABLED)) {
+      return reply.status(423).send({
+        statusCode: 423,
+        error: "Locked",
+        provisioningState: "PARTNER_ACCESS_PENDING",
+        retryable: false,
+        message: "BMONI partner registration is paused until MONIFlow receives approved partner sandbox access."
+      });
+    }
+
     const input = createMoniflowUserInputSchema.safeParse(request.body);
     if (!input.success) {
       return reply.status(400).send({

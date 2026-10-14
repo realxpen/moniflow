@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { env } from "../config/env.js";
+import { partnerRegistrationEnabled } from "../services/bmoni/partner-access.js";
 import {
   BmoniConfigurationError,
   BmoniProviderError,
@@ -37,6 +38,7 @@ export const healthRoutes: FastifyPluginAsync<HealthRouteOptions> = async (
         label: provider.label,
         environment: provider.environment,
         simulated: provider.simulated,
+        partnerRegistrationEnabled: partnerRegistrationEnabled(provider.id, env.BMONI_PARTNER_ONBOARDING_ENABLED),
         currencies: result.currencies
       };
     } catch (error) {
@@ -55,6 +57,7 @@ export const healthRoutes: FastifyPluginAsync<HealthRouteOptions> = async (
         label: provider.label,
         environment: provider.environment,
         simulated: provider.simulated,
+        partnerRegistrationEnabled: partnerRegistrationEnabled(provider.id, env.BMONI_PARTNER_ONBOARDING_ENABLED),
         reason
       });
     }
