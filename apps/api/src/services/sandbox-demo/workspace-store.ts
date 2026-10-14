@@ -74,9 +74,14 @@ export class PostgresSandboxDemoStore implements SandboxDemoStore {
   private ready() {
     if (!this.schemaReady) {
       this.schemaReady = (async () => {
-        await this.sql.unsafe("CREATE SCHEMA IF NOT EXISTS moniflow_private");
-        await this.sql.unsafe("REVOKE ALL ON SCHEMA moniflow_private FROM PUBLIC");
-        await this.sql.unsafe("CREATE TABLE IF NOT EXISTS moniflow_private.isolated_sandbox_demo_v1 (user_id uuid PRIMARY KEY, state_json jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())");
+        // Two cold Vercel instances can concurrently create the same schema/table.
+        // CREATE TABLE IF NOT EXISTS alone is not safe for first-use concurrency.
+        await this.sql.begin(async tx => {
+          await tx.unsafe("SELECT pg_advisory_xact_lock(824219327, 2)");
+          await tx.unsafe("CREATE SCHEMA IF NOT EXISTS moniflow_private");
+          await tx.unsafe("REVOKE ALL ON SCHEMA moniflow_private FROM PUBLIC");
+          await tx.unsafe("CREATE TABLE IF NOT EXISTS moniflow_private.isolated_sandbox_demo_v1 (user_id uuid PRIMARY KEY, state_json jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())");
+        });
       })().catch(error => { this.schemaReady = null; throw error; });
     }
     return this.schemaReady;
