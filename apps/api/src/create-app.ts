@@ -125,6 +125,8 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
         "req.headers.authorization",
         "req.headers.cookie",
         "req.headers.x-api-key",
+        "req.headers.x-webhook-signature",
+        "headers.x-webhook-signature",
         "headers.authorization",
         "req.headers.x-moniflow-signature",
         "headers.x-moniflow-signature",
