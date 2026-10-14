@@ -138,7 +138,7 @@ describe("BmoniUserService", () => {
     await first.close();
     const reopened=new SqliteUserMappingRepository(databaseUrl);
     repositories.push(reopened);
-    const restarted=new BmoniUserService(fixture.gateway,reopened);
+    const restarted=new BmoniUserService(fixture.gateway,reopened,PHONE_KEY);
     await expect(restarted.createOrFindMapping(input))
       .rejects.toMatchObject({state:"PROVIDER_USER_EXISTS"});
     expect(createUser).toHaveBeenCalledTimes(1);
