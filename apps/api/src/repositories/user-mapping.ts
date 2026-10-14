@@ -9,6 +9,8 @@ export type UserMapping = {
 export type UserProvisioningHold = {
   email: string;
   localUserId: string | null;
+  /** Server-keyed HMAC-SHA256; null only for pre-upgrade/manual legacy holds. */
+  phoneFingerprint?: string | null;
   state: "PROVIDER_USER_EXISTS" | "PROVIDER_OUTCOME_UNKNOWN";
   createdAt: string;
 };
@@ -22,6 +24,7 @@ export interface UserMappingRepository {
   findByLocalUserId(localUserId: string): Promise<UserMapping | null>;
   save(mapping: UserMapping): Promise<UserMapping>;
   findHoldByEmail(email: string): Promise<UserProvisioningHold | null>;
+  findHoldByPhoneFingerprint(fingerprint: string): Promise<UserProvisioningHold | null>;
   createHold(hold: UserProvisioningHold): Promise<UserProvisioningHold>;
   /**
    * Unique atomic reservation BEFORE any provider create call.

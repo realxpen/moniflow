@@ -53,6 +53,17 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
       ON bmoni_user_provisioning_holds_v1(local_user_id)
       WHERE local_user_id IS NOT NULL
     `);
+    // Historical holds cannot be backfilled safely.
+    const columns=this.database.prepare("PRAGMA table_info(bmoni_user_provisioning_holds_v1)")
+      .all() as Array<{name:string}>;
+    if(!columns.some(c=>c.name==="phone_fingerprint")){
+      this.database.exec("ALTER TABLE bmoni_user_provisioning_holds_v1 ADD COLUMN phone_fingerprint TEXT");
+    }
+    this.database.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS bmoni_hold_phone_fingerprint_unique_v1 "+
+      "ON bmoni_user_provisioning_holds_v1(phone_fingerprint) "+
+      "WHERE phone_fingerprint IS NOT NULL"
+    );
   }
 
   async findByEmail(email: string): Promise<UserMapping | null> {
@@ -71,14 +82,16 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
   }
 
   async reserveBeforeCreate(hold: UserProvisioningHold): Promise<boolean> {
-    if (!hold.localUserId || hold.state!=="PROVIDER_OUTCOME_UNKNOWN") {
+    if (!hold.localUserId || hold.state!=="PROVIDER_OUTCOME_UNKNOWN" ||
+        typeof hold.phoneFingerprint!=="string" ||
+        !/^[a-f0-9]{64}$/.test(hold.phoneFingerprint)) {
       throw new Error("BMONI_INVALID_CREATE_RESERVATION");
     }
     // SQLite inserts are serialized even across processes. Either competing
     // email or local UUID claims wins, never both.
     const inserted=this.database.prepare(
-      "INSERT OR IGNORE INTO bmoni_user_provisioning_holds_v1(email,local_user_id,state,created_at) VALUES (?,?,?,?)"
-    ).run(hold.email.trim().toLowerCase(),hold.localUserId,hold.state,hold.createdAt);
+      "INSERT OR IGNORE INTO bmoni_user_provisioning_holds_v1(email,local_user_id,state,created_at,phone_fingerprint) VALUES (?,?,?,?,?)"
+    ).run(hold.email.trim().toLowerCase(),hold.localUserId,hold.state,hold.createdAt,hold.phoneFingerprint);
     return inserted.changes===1;
   }
 
@@ -94,11 +107,26 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
 
   async findHoldByEmail(email: string): Promise<UserProvisioningHold | null> {
     const row=this.database.prepare(
-      "SELECT email,local_user_id,state,created_at FROM bmoni_user_provisioning_holds_v1 WHERE email=? COLLATE NOCASE LIMIT 1"
+      "SELECT email,local_user_id,state,created_at,phone_fingerprint FROM bmoni_user_provisioning_holds_v1 WHERE email=? COLLATE NOCASE LIMIT 1"
     ).get(email.trim().toLowerCase()) as Record<string,unknown>|undefined;
     return row ? {
       email:String(row.email),
       localUserId:row.local_user_id===null?null:String(row.local_user_id),
+      phoneFingerprint:row.phone_fingerprint===null?null:String(row.phone_fingerprint),
+      state:String(row.state) as UserProvisioningHold["state"],
+      createdAt:String(row.created_at)
+    } : null;
+  }
+
+  async findHoldByPhoneFingerprint(fingerprint:string):Promise<UserProvisioningHold|null> {
+    if (!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error("BMONI_INVALID_PHONE_FINGERPRINT");
+    const row=this.database.prepare(
+      "SELECT email,local_user_id,state,created_at,phone_fingerprint "+
+      "FROM bmoni_user_provisioning_holds_v1 WHERE phone_fingerprint=? LIMIT 1"
+    ).get(fingerprint) as Record<string,unknown>|undefined;
+    return row ? {
+      email:String(row.email),localUserId:row.local_user_id===null?null:String(row.local_user_id),
+      phoneFingerprint:String(row.phone_fingerprint),
       state:String(row.state) as UserProvisioningHold["state"],
       createdAt:String(row.created_at)
     } : null;
@@ -107,10 +135,11 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
   async createHold(hold:UserProvisioningHold):Promise<UserProvisioningHold> {
     // The first uncertain outcome is authoritative until human reconciliation.
     this.database.prepare(
-      "INSERT OR IGNORE INTO bmoni_user_provisioning_holds_v1(email,local_user_id,state,created_at) VALUES (?,?,?,?)"
-    ).run(hold.email.trim().toLowerCase(),hold.localUserId,hold.state,hold.createdAt);
+      "INSERT OR IGNORE INTO bmoni_user_provisioning_holds_v1(email,local_user_id,state,created_at,phone_fingerprint) VALUES (?,?,?,?,?)"
+    ).run(hold.email.trim().toLowerCase(),hold.localUserId,hold.state,hold.createdAt,hold.phoneFingerprint??null);
     const existing=await this.findHoldByEmail(hold.email);
-    if (!existing || (existing.localUserId && hold.localUserId && existing.localUserId!==hold.localUserId)) {
+    if (!existing || (existing.localUserId && hold.localUserId && existing.localUserId!==hold.localUserId) ||
+        (hold.phoneFingerprint && existing.phoneFingerprint!==hold.phoneFingerprint)) {
       throw new Error("BMONI_PROVISIONING_HOLD_IDENTITY_CONFLICT");
     }
     return existing;

@@ -68,7 +68,7 @@ async function fixture(state: "COMPLETED" | "PROCESSING") {
     signProposal: vi.fn()
   } as unknown as BmoniGateway;
 
-  const userService = new BmoniUserService(gateway, repositories.users);
+  const userService = new BmoniUserService(gateway, repositories.users, "sandbox-only-phone-finalization-test-secret-32chars");
   await userService.createOrFindMapping({
     localUserId: userId, email: "sandbox@example.test",
     firstName: "Sandbox", phoneNumber: "+2348012345678"

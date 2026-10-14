@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { UserMappingRepository } from "../../repositories/user-mapping.js";
 import type { CreateMoniflowUserInput } from "../../schemas/onboarding.js";
 import { BmoniProviderError } from "./errors.js";
+import { phoneIdentityFingerprint } from "./phone-identity-fingerprint.js";
 
 import type { BmoniGateway } from "./gateway.js";
 
@@ -32,7 +33,8 @@ export type BmoniUserMappingStatus = {
 export class BmoniUserService {
   constructor(
     private readonly gateway: BmoniGateway,
-    private readonly mappings: UserMappingRepository
+    private readonly mappings: UserMappingRepository,
+    private readonly phoneHmacSecret?: string
   ) {}
 
   async getMapping(localUserId: string): Promise<BmoniUserMappingStatus> {
@@ -48,6 +50,11 @@ export class BmoniUserService {
         if (localMapping.email.toLowerCase() !== input.email.toLowerCase()) {
           throw new UserMappingConflictError("The local user is already associated with a different BMONI identity.");
         }
+        const held=await this.mappings.findHoldByEmail(localMapping.email);
+        if (held?.phoneFingerprint &&
+            held.phoneFingerprint!==phoneIdentityFingerprint(input.phoneNumber,this.phoneHmacSecret)) {
+          throw new UserMappingConflictError("Phone identity does not match the existing verified local mapping.");
+        }
         return { bmoniUserId: localMapping.bmoniUserId, localUserId: localMapping.localUserId, status: "existing" };
       }
     }
@@ -57,17 +64,31 @@ export class BmoniUserService {
       if (input.localUserId && emailMapping.localUserId !== input.localUserId) {
         throw new UserMappingConflictError("The email is already associated with another local user.");
       }
+      const held=await this.mappings.findHoldByEmail(emailMapping.email);
+      if (held?.phoneFingerprint &&
+          held.phoneFingerprint!==phoneIdentityFingerprint(input.phoneNumber,this.phoneHmacSecret)) {
+        throw new UserMappingConflictError("Phone identity does not match the existing verified local mapping.");
+      }
       return { bmoniUserId: emailMapping.bmoniUserId, localUserId: emailMapping.localUserId, status: "existing" };
     }
 
     // A previous 409 or uncertain create outcome must never issue another
     // mutation, even if this service was restarted or the user retries.
+    const phoneFingerprint=phoneIdentityFingerprint(input.phoneNumber,this.phoneHmacSecret);
     const hold=await this.mappings.findHoldByEmail(input.email);
     if (hold) {
+      if (hold.phoneFingerprint && hold.phoneFingerprint!==phoneFingerprint) {
+        throw new UserMappingConflictError("A held email has a different phone identity.");
+      }
       if (hold.localUserId && input.localUserId && hold.localUserId!==input.localUserId) {
         throw new UserMappingConflictError("A held identity belongs to another local user.");
       }
       throw new UserMappingReconciliationHoldError(hold.state);
+    }
+
+    const byPhone=await this.mappings.findHoldByPhoneFingerprint(phoneFingerprint);
+    if (byPhone && byPhone.email!==input.email.trim().toLowerCase()) {
+      throw new UserMappingConflictError("A different identity has already reserved this phone.");
     }
 
     const localUserId = input.localUserId ?? randomUUID();
@@ -78,12 +99,14 @@ export class BmoniUserService {
     const reserved=await this.mappings.reserveBeforeCreate({
       email:input.email.trim().toLowerCase(),
       localUserId,
+      phoneFingerprint,
       state:"PROVIDER_OUTCOME_UNKNOWN",
       createdAt:new Date().toISOString()
     });
     if (!reserved) {
       const concurrent=await this.mappings.findHoldByEmail(input.email);
-      if (!concurrent || (concurrent.localUserId && concurrent.localUserId!==localUserId)) {
+      if (!concurrent || (concurrent.localUserId && concurrent.localUserId!==localUserId) ||
+          (concurrent.phoneFingerprint && concurrent.phoneFingerprint!==phoneFingerprint)) {
         throw new UserMappingConflictError("Identity already reserved for a different local account.");
       }
       throw new UserMappingReconciliationHoldError(concurrent.state);

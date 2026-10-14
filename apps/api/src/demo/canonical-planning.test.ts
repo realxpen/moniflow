@@ -19,7 +19,7 @@ describe("canonical MONIFlow sandbox planning", () => {
   it("bootstraps a clean demo and builds the expected guarded Money Plan", async () => {
     repositories = createRepositories(":memory:");
     const gateway = new MoniflowSandboxProvider();
-    const userService = new BmoniUserService(gateway, repositories.users);
+    const userService = new BmoniUserService(gateway, repositories.users, "sandbox-only-phone-lock-fixture-key-over-32");
 
     app = buildApp({
       getBmoniGateway: () => gateway,

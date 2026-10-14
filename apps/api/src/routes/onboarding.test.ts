@@ -41,7 +41,7 @@ function additionalGatewayMethods(): Omit<BmoniGateway, "createUser" | "getSuppo
 
 function createAppWithGateway(gateway: BmoniGateway) {
   const repository = new SqliteUserMappingRepository(":memory:");
-  const service = new BmoniUserService(gateway, repository);
+  const service = new BmoniUserService(gateway, repository,"moniflow-disposable-phone-test-key-at-least-32");
   const app = buildApp({ getBmoniGateway: () => gateway, getBmoniUserService: () => service });
   app.addHook("onClose", async () => repository.close());
   apps.push(app);

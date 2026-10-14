@@ -61,7 +61,12 @@ async function bootstrapDemo(options: DevBootstrapOptions, localUserId: string) 
     firstName: "MONIFlow",
     lastName: "Sandbox",
     email: `sandbox+${compact.slice(0, 12)}@moniflow.local`,
-    phoneNumber: "+2348000000099"
+    // Each simulated demo identity needs a stable, distinct fake phone.
+    // Do NOT submit this derived phone to actual BMONI; requireSandbox()
+    // rejects all real-provider execution before this point.
+    phoneNumber: "+2348"+(
+      BigInt("0x"+createHash("sha256").update(localUserId).digest("hex")) % 10_000_000_000n
+    ).toString().padStart(10,"0")
   });
 
   const ownership = options.getWalletOwnershipRepository();
