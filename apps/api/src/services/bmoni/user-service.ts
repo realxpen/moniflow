@@ -2,11 +2,19 @@ import { randomUUID } from "node:crypto";
 
 import type { UserMappingRepository } from "../../repositories/user-mapping.js";
 import type { CreateMoniflowUserInput } from "../../schemas/onboarding.js";
+import { BmoniProviderError, BmoniResponseValidationError, BmoniTransportError } from "./errors.js";
 
 import type { BmoniGateway } from "./gateway.js";
 
 export class UserMappingConflictError extends Error {
   override readonly name = "UserMappingConflictError";
+}
+
+export class UserMappingReconciliationHoldError extends Error {
+  override readonly name = "UserMappingReconciliationHoldError";
+  constructor(readonly state: "PROVIDER_USER_EXISTS" | "PROVIDER_OUTCOME_UNKNOWN") {
+    super("BMONI identity provisioning is on a durable manual reconciliation hold.");
+  }
 }
 
 export type ProvisionBmoniUserResult = {
@@ -52,6 +60,16 @@ export class BmoniUserService {
       return { bmoniUserId: emailMapping.bmoniUserId, localUserId: emailMapping.localUserId, status: "existing" };
     }
 
+    // A previous 409 or uncertain create outcome must never issue another
+    // mutation, even if this service was restarted or the user retries.
+    const hold=await this.mappings.findHoldByEmail(input.email);
+    if (hold) {
+      if (hold.localUserId && input.localUserId && hold.localUserId!==input.localUserId) {
+        throw new UserMappingConflictError("A held identity belongs to another local user.");
+      }
+      throw new UserMappingReconciliationHoldError(hold.state);
+    }
+
     const localUserId = input.localUserId ?? randomUUID();
     const compactLocalId = localUserId.replace(/-/g, "");
     const { localUserId: _ignoredLocalUserId, ...providerInputFromRequest } = input;
@@ -64,7 +82,26 @@ export class BmoniUserService {
       identityId: providerInputFromRequest.identityId ?? `moniflow-${compactLocalId}`
     };
 
-    const user = await this.gateway.createUser(providerInput);
+    let user: Awaited<ReturnType<BmoniGateway["createUser"]>>;
+    try {
+      user=await this.gateway.createUser(providerInput);
+    } catch(error) {
+      const state = error instanceof BmoniProviderError && error.statusCode===409
+        ? "PROVIDER_USER_EXISTS" as const
+        : error instanceof BmoniTransportError || error instanceof BmoniResponseValidationError
+          ? "PROVIDER_OUTCOME_UNKNOWN" as const
+          : null;
+      if (state) {
+        // Provider state is uncertain; persist a permanent manual hold.
+        // Never assume an ID from an error payload is an authorized mapping.
+        await this.mappings.createHold({
+          email:input.email.trim().toLowerCase(),
+          localUserId:input.localUserId??null,
+          state,createdAt:new Date().toISOString()
+        });
+      }
+      throw error;
+    }
     if (user.email.toLowerCase() !== input.email.toLowerCase()) {
       throw new UserMappingConflictError("The provider response did not preserve the requested identity.");
     }
