@@ -1,5 +1,9 @@
 # MONIFlow Project State
 
+## BMONI Webhook Evidence Foundation — Phase B1 (2026-10-14)
+
+Following owner-confirmed merge of Hustle #114 and initial BMONI merchant capability source audit, MONIFlow branch `test/bmoni-webhook-evidence-foundation` implements a **test-only fixture verifier** grounded in documented partner-scoped `employee.deposit.*` and `employee.withdrawal.*` names. It checks raw-body `X-Webhook-Signature` unprefixed hex HMAC-SHA256, `X-Webhook-Id` consistency, strict signed envelope, stores only immutable digest metadata in SQLite/Postgres, deduplicates stable IDs and keeps `providerSettlementConfirmed=false`. Endpoint requires explicit opt-in, NODE_ENV=test and moniflow-sandbox provider; normal deployments never register it. No actual BMONI webhook, subscription, production keys, user identity, refund/payout rail, client Order payment, financial provider request or custody evidence. PR/CI pending; see `docs/BMONI_WEBHOOK_EVIDENCE_FOUNDATION_B1.md`.
+
 ## Hustle receipt outbox delivery — Test-only Phase 03 (2026-10-13)
 
 Owner approved merged MONIFlow #6 (298f87c) and Hustle #111 (14a8dbe). Branch feat/hustle-receipt-delivery-outbox adds a SQLite/PostgreSQL durable recovery queue for authenticated `operation.received` notifications, atomic 30s lease, at-least-once retries with finite attempt cap and an explicitly invoked test-only sender restricted to 127.0.0.1 Hustle sandbox inbox. The sender never executes BMONI/PSP, changes money or starts automatically. The existing command store remains RECEIVED-only; new test demonstrates crash replay protection and queue recovery. CI/PR pending; docs/HUSTLE_RECEIPT_PUSH_OUTBOX_SANDBOX.md.

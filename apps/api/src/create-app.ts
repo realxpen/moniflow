@@ -25,6 +25,8 @@ import { operatorRoutes } from "./routes/operator.js";
 import { pocketRoutes } from "./routes/pockets.js";
 import { partnerRoutes } from "./routes/partner.js";
 import { SqlitePartnerOperationStore } from "./services/partner/sqlite-store.js";
+import { bmoniWebhookEvidenceRoutes } from "./routes/bmoni-webhook-evidence.js";
+import { PostgresBmoniEvidenceStore, SqliteBmoniEvidenceStore } from "./services/bmoni/webhook-evidence-store.js";
 import { PostgresPartnerOperationStore } from "./services/partner/postgres-store.js";
 import { walletFundingRoutes } from "./routes/wallet-funding.js";
 import { walletRoutes } from "./routes/wallet.js";
@@ -104,12 +106,27 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
       : new SqlitePartnerOperationStore(env.DATABASE_URL)
     : null;
 
+  const bmoniEvidenceEnabled =
+    env.NODE_ENV === "test" &&
+    env.FINANCIAL_PROVIDER === "moniflow-sandbox" &&
+    env.BMONI_WEBHOOK_EVIDENCE_TEST_ENABLED === "true";
+  if (bmoniEvidenceEnabled && !env.BMONI_WEBHOOK_EVIDENCE_TEST_SECRET) {
+    throw new Error("BMONI_WEBHOOK_EVIDENCE_TEST_SECRET required for isolated tests");
+  }
+  const bmoniEvidenceStore = bmoniEvidenceEnabled
+    ? env.DATABASE_URL.startsWith("postgres")
+      ? new PostgresBmoniEvidenceStore(env.DATABASE_URL)
+      : new SqliteBmoniEvidenceStore(env.DATABASE_URL)
+    : null;
+
   const app = Fastify({
     logger: {
       redact: [
         "req.headers.authorization",
         "req.headers.cookie",
         "req.headers.x-api-key",
+        "req.headers.x-webhook-signature",
+        "headers.x-webhook-signature",
         "headers.authorization",
         "req.headers.x-moniflow-signature",
         "headers.x-moniflow-signature",
@@ -138,6 +155,14 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   }
   app.register(multipart, { limits: { fields: 12, files: 4, fileSize: 8 * 1024 * 1024, parts: 16 } });
   if (testRepositories) app.addHook("onClose", async () => testRepositories.close());
+  if (bmoniEvidenceStore) {
+    app.register(bmoniWebhookEvidenceRoutes, {
+      prefix:"/internal/test-only/bmoni-webhook-evidence",
+      store:bmoniEvidenceStore,
+      secretKey:env.BMONI_WEBHOOK_EVIDENCE_TEST_SECRET!
+    });
+    app.addHook("onClose", async()=>bmoniEvidenceStore.close());
+  }
   if (partnerStore) {
     app.register(partnerRoutes, { prefix: "/internal/v1", store: partnerStore, secret: env.PARTNER_HUSTLE_HMAC_SECRET! });
     app.addHook("onClose", async () => partnerStore.close());

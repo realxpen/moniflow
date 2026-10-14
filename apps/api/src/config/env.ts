@@ -33,6 +33,11 @@ const envSchema = z.object({
   ),
   // Never enable with only BMONI's shared sandbox key. Requires partner approval.
   BMONI_PARTNER_ONBOARDING_ENABLED: z.enum(["true", "false"]).default("false"),
+  // Test fixture webhook only: never subscribe real provider callbacks.
+  BMONI_WEBHOOK_EVIDENCE_TEST_ENABLED: z.enum(["true", "false"]).default("false"),
+  BMONI_WEBHOOK_EVIDENCE_TEST_SECRET: z.preprocess(
+    emptyStringToUndefined, z.string().regex(/^[0-9a-fA-F]{64}$/).optional()
+  ),
   BMONI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().max(30_000).default(10_000),
   DATABASE_URL: z.string().default("file:./moniflow.db"),
   // Explicit, non-production, simulated partner control plane only.
