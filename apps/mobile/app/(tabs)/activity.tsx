@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ActivityRow } from "@/components/activity";
 import { Screen, SectionTitle, StatusPill } from "@/components/ui";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { loadActivity, type FinancialActivity } from "@/services/activity";
+import { useAuthSession } from "@/services/auth-session";
+import { workspaceIdentity } from "@/services/flow-recovery";
 import { useDemoSession } from "@/store/demo-session";
 import { colors, layout, radius, spacing, typography } from "@/theme";
 
@@ -12,13 +14,20 @@ const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
 
 export default function ActivityScreen() {
   const savedLocalUserId = useDemoSession((state) => state.localUserId);
-  const localUserId = savedLocalUserId || configuredLocalUserId;
+  const signedIn = useAuthSession();
+  const localUserId = workspaceIdentity({
+    savedId: savedLocalUserId, devId: configuredLocalUserId,
+    authUserId: signedIn?.userId ?? null, development: __DEV__
+  });
   const [activity, setActivity] = useState<FinancialActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const activeRequest = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = ++activeRequest.current;
     if (!localUserId) {
+      setActivity([]);
       setError("Complete onboarding or start a sandbox workspace first.");
       setLoading(false);
       return;
@@ -26,12 +35,19 @@ export default function ActivityScreen() {
     setLoading(true);
     setError(null);
     try {
-      setActivity(await loadActivity(localUserId));
+      const result = await loadActivity(localUserId);
+      if (requestId !== activeRequest.current) return;
+      setActivity(result);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Activity could not be loaded.");
+      if (requestId === activeRequest.current) setError(cause instanceof Error ? cause.message : "Activity could not be loaded.");
     } finally {
-      setLoading(false);
+      if (requestId === activeRequest.current) setLoading(false);
     }
+  }, [localUserId]);
+
+  useEffect(() => {
+    setActivity([]);
+    return () => { activeRequest.current++; };
   }, [localUserId]);
 
   useEffect(() => { void load(); }, [load]);
@@ -45,7 +61,8 @@ export default function ActivityScreen() {
           <Text style={styles.title}>Activity</Text>
           <Text style={styles.description}>Provider-confirmed movement and MONIFlow internal bookkeeping remain visibly distinct.</Text>
         </View>
-        <StatusPill label={loading ? "REFRESHING" : "PERSISTED"} tone={loading ? "processing" : "success"} />
+        <StatusPill label={loading ? "REFRESHING" : error || !localUserId ? "NOT READY" : "PERSISTED"}
+          tone={loading ? "processing" : error || !localUserId ? "warning" : "success"} />
       </View>
       <View style={styles.legend}>
         <Text style={styles.legendTitle}>SOURCE LABELS</Text>

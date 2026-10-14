@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ActivityRow } from "@/components/activity";
@@ -64,6 +64,7 @@ export default function HomeScreen() {
   const [activity, setActivity] = useState<FinancialActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const activeRequest = useRef(0);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -73,6 +74,7 @@ export default function HomeScreen() {
   }, []);
 
   const load = useCallback(async () => {
+    const requestId = ++activeRequest.current;
     if (!localUserId) {
       setWallet(null);
       setBalance(null);
@@ -92,15 +94,27 @@ export default function HomeScreen() {
         loadPockets(localUserId),
         loadActivity(localUserId, 4)
       ]);
+      if (requestId !== activeRequest.current) return;
       setWallet(nextWallet);
       setBalance(nextBalance);
       setPockets(pocketState.pockets);
       setActivity(recentActivity);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Financial state could not be loaded.");
+      if (requestId === activeRequest.current) {
+        setError(cause instanceof Error ? cause.message : "Financial state could not be loaded.");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === activeRequest.current) setLoading(false);
     }
+  }, [localUserId]);
+
+  useEffect(() => {
+    // Discard old-account balances immediately when the active workspace changes.
+    setWallet(null);
+    setBalance(null);
+    setPockets([]);
+    setActivity([]);
+    return () => { activeRequest.current++; };
   }, [localUserId]);
 
   useEffect(() => { void load(); }, [load]);
