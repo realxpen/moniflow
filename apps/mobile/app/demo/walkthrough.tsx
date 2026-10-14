@@ -55,6 +55,9 @@ export default function WalkthroughScreen() {
           </View>
         )}
       </SoftCard>
+      <SecondaryButton onPress={() => router.push("/demo/operator")}>
+        Try the interactive Operator simulator
+      </SecondaryButton>
       <View style={styles.controls}>
         <View style={styles.row}>
           <SecondaryButton disabled={index === 0} onPress={() => setIndex(v => Math.max(0, v - 1))}>Previous</SecondaryButton>

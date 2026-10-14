@@ -152,8 +152,11 @@ export default function WelcomeScreen() {
           </View>
         ) : null}
 
+        <PrimaryButton onPress={() => router.push("/demo/operator")}>
+          Try interactive Operator simulation
+        </PrimaryButton>
         <SecondaryButton onPress={() => router.push("/demo/walkthrough")}>
-          Explore simulated walkthrough
+          Explore educational walkthrough
         </SecondaryButton>
 
         <Text style={styles.disclosure}>

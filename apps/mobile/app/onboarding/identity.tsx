@@ -152,7 +152,7 @@ export default function IdentityScreen() {
         <SoftCard style={styles.card}>
           <Text style={styles.title}>No new BMONI users for now.</Text>
           <Text style={styles.subtle}>The shared sandbox API key can confirm connectivity, but it does not prove that a test persona belongs to MONIFlow's partner account. Existing test profiles have returned 409 and require reconciliation.</Text>
-          <SecondaryButton onPress={() => router.push("/demo/walkthrough")}>Explore simulated walkthrough</SecondaryButton>
+          <SecondaryButton onPress={() => router.push("/demo/operator")}>Try interactive Operator simulation</SecondaryButton>
           <SecondaryButton onPress={() => void checkPartnerAccess()}>Recheck partner availability</SecondaryButton>
         </SoftCard>
       ) : null}
@@ -180,7 +180,7 @@ export default function IdentityScreen() {
           <Text style={styles.title}>Registration stopped safely.</Text>
           <Text style={styles.subtle}>Do not repeat this BMONI user-creation request. Recover/reset the persona through BMONI support before proceeding. The existing provider user ID must never be guessed.</Text>
           {supportRequestId ? <Text style={styles.subtle}>Provider request reference: {supportRequestId}</Text> : null}
-          <SecondaryButton onPress={() => router.push("/demo/walkthrough")}>View the simulated walkthrough</SecondaryButton>
+          <SecondaryButton onPress={() => router.push("/demo/operator")}>Open the isolated Operator simulation</SecondaryButton>
         </SoftCard>
       ) : null}
 
