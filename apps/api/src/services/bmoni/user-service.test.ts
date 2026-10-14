@@ -160,7 +160,7 @@ describe("BmoniUserService", () => {
       return {bmoniUserId:"bmoni-user-1",email:input.email,firstName:"Ada"};
     });
     const serviceA=new BmoniUserService(fixture.gateway,repositoryA,PHONE_KEY);
-    const serviceB=new BmoniUserService(fixture.gateway,repositoryB);
+    const serviceB=new BmoniUserService(fixture.gateway,repositoryB,PHONE_KEY);
     const first=serviceA.createOrFindMapping(input);
     await vi.waitFor(()=>expect(fixture.createUser).toHaveBeenCalledTimes(1));
     await expect(serviceB.createOrFindMapping({...input,email:"ADA@example.com"}))
