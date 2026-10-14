@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { UserMappingRepository } from "../../repositories/user-mapping.js";
 import type { CreateMoniflowUserInput } from "../../schemas/onboarding.js";
-import { BmoniProviderError, BmoniResponseValidationError, BmoniTransportError } from "./errors.js";
+import { BmoniProviderError } from "./errors.js";
 
 import type { BmoniGateway } from "./gateway.js";
 
@@ -71,6 +71,24 @@ export class BmoniUserService {
     }
 
     const localUserId = input.localUserId ?? randomUUID();
+    // The reservation must commit BEFORE the external side effect. A concurrent
+    // request in this process or any other process cannot reserve this email
+    // or local user ID. If we crash at any later point, the identity remains
+    // held for manual reconciliation rather than potentially creating twice.
+    const reserved=await this.mappings.reserveBeforeCreate({
+      email:input.email.trim().toLowerCase(),
+      localUserId,
+      state:"PROVIDER_OUTCOME_UNKNOWN",
+      createdAt:new Date().toISOString()
+    });
+    if (!reserved) {
+      const concurrent=await this.mappings.findHoldByEmail(input.email);
+      if (!concurrent || (concurrent.localUserId && concurrent.localUserId!==localUserId)) {
+        throw new UserMappingConflictError("Identity already reserved for a different local account.");
+      }
+      throw new UserMappingReconciliationHoldError(concurrent.state);
+    }
+
     const compactLocalId = localUserId.replace(/-/g, "");
     const { localUserId: _ignoredLocalUserId, ...providerInputFromRequest } = input;
     const providerInput = {
@@ -86,27 +104,17 @@ export class BmoniUserService {
     try {
       user=await this.gateway.createUser(providerInput);
     } catch(error) {
-      const state = error instanceof BmoniProviderError && error.statusCode===409
-        ? "PROVIDER_USER_EXISTS" as const
-        : error instanceof BmoniTransportError || error instanceof BmoniResponseValidationError
-          ? "PROVIDER_OUTCOME_UNKNOWN" as const
-          : null;
-      if (state) {
-        // Provider state is uncertain; persist a permanent manual hold.
-        // Never assume an ID from an error payload is an authorized mapping.
-        await this.mappings.createHold({
-          email:input.email.trim().toLowerCase(),
-          localUserId:input.localUserId??null,
-          state,createdAt:new Date().toISOString()
-        });
+      if (error instanceof BmoniProviderError && error.statusCode===409) {
+        // The pre-dispatch reservation already protects unknown outcomes.
+        // A documented provider 409 can be classified more precisely.
+        await this.mappings.markProviderUserExists(input.email);
       }
+      // Never delete or auto-release a reservation after ANY provider error.
+      // Even a supposedly permanent upstream failure needs human review.
       throw error;
     }
     if (user.email.toLowerCase() !== input.email.toLowerCase()) {
-      await this.mappings.createHold({
-        email:input.email.trim().toLowerCase(),localUserId:input.localUserId??null,
-        state:"PROVIDER_OUTCOME_UNKNOWN",createdAt:new Date().toISOString()
-      });
+      // Reservation was committed before dispatch and stays in place.
       throw new UserMappingConflictError("The provider response did not preserve the requested identity.");
     }
 
@@ -121,11 +129,8 @@ export class BmoniUserService {
       });
       return { bmoniUserId: mapping.bmoniUserId, localUserId: mapping.localUserId, status: "created" };
     } catch(error) {
-      // BMONI may have created the user despite a local database failure.
-      await this.mappings.createHold({
-        email:input.email.trim().toLowerCase(),localUserId:input.localUserId??null,
-        state:"PROVIDER_OUTCOME_UNKNOWN",createdAt:new Date().toISOString()
-      });
+      // Provider may have created a user despite local persistence failing.
+      // The committed pre-dispatch hold survives; retrying would be unsafe.
       throw error;
     }
   }
