@@ -11,7 +11,7 @@ Production financial API routes require a **signed Supabase Auth user JWT**. The
 - Fails closed (`503 AUTH_NOT_CONFIGURED`) if production auth verifier settings are missing; no hard-coded token, public bypass, or production demo override is accepted.
 - Does not trust a browser CORS allowlist as authorization.
 
-The app uses Supabase email/password sign-in, and only attaches bearer tokens to requests going to the configured MONIFlow API origin. Access tokens are **memory-only** for this first release: refreshing the website or restarting the mobile app requires signing in again. The existing Zustand demo-session store continues to persist only non-secret flow metadata, not tokens.
+The app renews near-expiry Supabase access tokens through a serialized refresh request while the app remains open. No financial mutation is automatically replayed after a refresh or authorization failure. Refresh tokens are memory-only and are cleared on sign-out; a full browser reload still requires sign-in.\n\nThe app uses Supabase email/password sign-in and attaches bearer tokens only to the configured MONIFlow API origin. Both access and refresh tokens are **memory-only**: refreshing the website or restarting the app requires signing in again. The existing Zustand demo-session store continues to persist only non-secret flow metadata, not tokens.
 
 **Important:** local `NODE_ENV=development` flows are still for isolated development; do not publish a development-mode API. Real BMONI financial movement remains subject to its own Guard, approval, provider proposal, and device-signing checks. Auth is an additional access boundary, not a substitute for them.
 
