@@ -35,3 +35,7 @@ Before manually deploying:
 ## Milestone 6: disposable PostgreSQL concurrency test
 
 The CI disposable PostgreSQL 16 gate also runs a separate sandbox database integration test. Two independent database connections race to create the same plan and execute the same approved simulation; the expected single plan, two activity entries, 260k/20k/240k reconciliation and cross-user isolation must hold. The test only runs against the explicit 127.0.0.1:5432/moniflow_b2_ci disposable test database, never on production.
+
+## Phase 20 startup safety gate
+
+With AUTHENTICATED_SANDBOX_DEMO_ENABLED=true, the API now refuses to initialize this feature unless NODE_ENV=production, DATABASE_URL is PostgreSQL, and the Supabase JWT issuer/JWKS/audience settings are valid and HTTPS same-origin. The error reports only which configuration field is unsafe and **never logs secrets or the database URL**. The feature is disabled by default; this gate makes an accidental public SQLite or development-mode activation fail closed.

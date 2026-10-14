@@ -12,6 +12,7 @@ import { createRepositories, type RepositorySet } from "./repositories/index.js"
 import { getAuthenticatedUserId } from "./security/user-authorization.js";
 import { authenticatedSandboxDemoRoutes } from "./routes/sandbox-demo.js";
 import { createSandboxDemoStore } from "./services/sandbox-demo/workspace-store.js";
+import { assertSandboxReleaseReady } from "./services/sandbox-demo/release-gate.js";
 import type { MoneyPlanRepository } from "./repositories/money-plan.js";
 import type { PocketRepository } from "./repositories/pocket.js";
 import type { WalletOwnershipRepository } from "./repositories/wallet-ownership.js";
@@ -237,6 +238,7 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
 
   // Separate authenticated simulated ledger. NEVER maps demo identities into BMONI.
   if (env.AUTHENTICATED_SANDBOX_DEMO_ENABLED === "true") {
+    assertSandboxReleaseReady(env);
     const demoStore = createSandboxDemoStore(env.DATABASE_URL);
     app.register(authenticatedSandboxDemoRoutes, {
       prefix: "/api/sandbox-demo", store: demoStore,
