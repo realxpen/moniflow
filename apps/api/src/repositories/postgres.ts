@@ -9,6 +9,7 @@ import { moniflowIntentSchema } from "../schemas/intent.js";
 import { moneyPlanSchema } from "../schemas/money-plan.js";
 import type { CreatePersistedMoneyPlanInput, MoneyPlanRepository, PersistedMoneyPlan } from "./money-plan.js";
 import type { UserMapping, UserMappingRepository, UserProvisioningHold } from "./user-mapping.js";
+import { classifyBmoniIdentityReadiness } from "./bmoni-identity-readiness.js";
 import type { WalletOwnership, WalletOwnershipRepository } from "./wallet-ownership.js";
 
 const userRowSchema = z.object({
@@ -221,6 +222,29 @@ export class PostgresUserMappingRepository implements UserMappingRepository {
           throw new Error("BMONI_PHONE_KEY_CONTINUITY_MISMATCH");
         }
       }
+    });
+  }
+
+  async inspectIdentityReadiness(expectedGuardDigest?:string) {
+    const [map,holds,guards]=await Promise.all([
+      this.sql`SELECT count(*)::integer AS n
+        FROM moniflow_private.bmoni_user_mappings`,
+      this.sql`SELECT
+        count(*) FILTER(WHERE state='PROVIDER_USER_EXISTS')::integer AS known,
+        count(*) FILTER(WHERE state='PROVIDER_OUTCOME_UNKNOWN')::integer AS unknown,
+        count(*) FILTER(WHERE phone_fingerprint IS NOT NULL)::integer AS fingerprinted,
+        count(*) FILTER(WHERE phone_fingerprint IS NULL)::integer AS legacy
+        FROM moniflow_private.bmoni_user_provisioning_holds_v1`,
+      this.sql`SELECT guard_digest FROM moniflow_private.bmoni_phone_key_guard_v1 WHERE id=1`
+    ]);
+    return classifyBmoniIdentityReadiness({
+      mappingCount:Number(map[0]?.n??0),
+      providerExistsHoldCount:Number(holds[0]?.known??0),
+      unknownOutcomeHoldCount:Number(holds[0]?.unknown??0),
+      fingerprintedHoldCount:Number(holds[0]?.fingerprinted??0),
+      legacyUnfingerprintedHoldCount:Number(holds[0]?.legacy??0),
+      storedGuardDigest:guards[0]?String(guards[0].guard_digest):null,
+      expectedGuardDigest
     });
   }
 
