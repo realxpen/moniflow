@@ -44,12 +44,18 @@ export const healthRoutes: FastifyPluginAsync<HealthRouteOptions> = async (
         { provider: provider.id, errorName: error instanceof Error ? error.name : "Unknown" },
         "Financial provider health check failed"
       );
-      return reply.status(503).send({
+      const reason = error instanceof BmoniConfigurationError ? "not_configured"
+        : error instanceof BmoniResponseValidationError ? "contract_mismatch"
+        : error instanceof BmoniProviderError || error instanceof BmoniTransportError ? "provider_unavailable"
+        : "unexpected_error";
+      return reply.status(reason === "contract_mismatch" ? 502 : 503).send({
         status: "unavailable",
         service: "financial-provider",
         provider: provider.id,
+        label: provider.label,
         environment: provider.environment,
-        simulated: provider.simulated
+        simulated: provider.simulated,
+        reason
       });
     }
   });

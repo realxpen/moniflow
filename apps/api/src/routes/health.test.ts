@@ -90,4 +90,29 @@ describe("GET /health", () => {
     expect(response.json()).toEqual({ currencies: ["CNGN", "USDB"], environment: "sandbox", service: "bmoni", status: "ok" });
     expect(response.body).not.toContain("x-api-key");
   });
+  it("identifies a failing BMONI provider without leaking secrets", async () => {
+    const gateway: BmoniGateway = {
+      createUser: vi.fn(),
+      getSupportedSmartWalletCurrencies: vi.fn().mockRejectedValue(new Error("not reachable")),
+      ...gatewayMethods()
+    };
+    const repository = new SqliteUserMappingRepository(":memory:");
+    const app = buildApp({
+      getBmoniGateway: () => gateway,
+      getBmoniUserService: () => new BmoniUserService(gateway, repository)
+    });
+    app.addHook("onClose", async () => repository.close());
+    apps.push(app);
+    const response = await app.inject({ method: "GET", url: "/health/provider" });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      status: "unavailable",
+      provider: "bmoni",
+      environment: "sandbox",
+      reason: "unexpected_error",
+      simulated: false
+    });
+    expect(response.body).not.toContain("BMONI_API_KEY");
+  });
+
 });
