@@ -12,7 +12,8 @@ import {
 } from "../services/bmoni/index.js";
 import {
   BmoniUserService,
-  UserMappingConflictError
+  UserMappingConflictError,
+  UserMappingReconciliationHoldError
 } from "../services/bmoni/user-service.js";
 
 type OnboardingRouteOptions = {
@@ -58,6 +59,17 @@ export const onboardingRoutes: FastifyPluginAsync<OnboardingRouteOptions> = asyn
           provisioningState: "RECONCILIATION_REQUIRED",
           retryable: false,
           message: "The local identity cannot be safely associated with this BMONI user. Reconciliation is required."
+        });
+      }
+
+      if (error instanceof UserMappingReconciliationHoldError) {
+        const unknown=error.state==="PROVIDER_OUTCOME_UNKNOWN";
+        return reply.status(unknown ? 503 : 409).send({
+          statusCode:unknown ? 503 : 409,
+          error:unknown ? "Service Unavailable" : "Conflict",
+          provisioningState:unknown ? "OUTCOME_UNKNOWN" : "RECONCILIATION_REQUIRED",
+          retryable:false,
+          message:"BMONI identity provisioning is on a persistent manual reconciliation hold. No further user-creation request was sent."
         });
       }
 
