@@ -55,7 +55,7 @@ function createFixture() {
   const repository = new SqliteUserMappingRepository(":memory:");
   repositories.push(repository);
 
-  return { createUser, gateway, repository, service: new BmoniUserService(gateway, repository) };
+  return { createUser, gateway, repository, service: new BmoniUserService(gateway, repository, PHONE_KEY) };
 }
 
 const input = {
