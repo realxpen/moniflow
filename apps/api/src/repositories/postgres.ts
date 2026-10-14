@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 import postgres, { type Sql } from "postgres";
 import { z } from "zod";
 
@@ -55,6 +57,10 @@ export async function ensureMoniflowSchema(sql: Sql) {
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS bmoni_provisioning_hold_phone_unique_v1
     ON moniflow_private.bmoni_user_provisioning_holds_v1(phone_fingerprint)
     WHERE phone_fingerprint IS NOT NULL`;
+  await sql`CREATE TABLE IF NOT EXISTS moniflow_private.bmoni_phone_key_guard_v1 (
+    id integer PRIMARY KEY CHECK(id=1),
+    guard_digest text NOT NULL CHECK(length(guard_digest)=64)
+  )`;
 
 
   await sql`
@@ -180,6 +186,43 @@ function iso(value: string) { return new Date(value).toISOString(); }
 
 export class PostgresUserMappingRepository implements UserMappingRepository {
   constructor(private readonly sql: Sql) {}
+
+  async assertPhoneKeyContinuity(guardDigest:string):Promise<void> {
+    if (!/^[a-f0-9]{64}$/.test(guardDigest)) {
+      throw new Error("BMONI_PHONE_KEY_GUARD_INVALID");
+    }
+    // Serialize first-use enrollment and compare against the stored sentinel
+    // inside a single PG transaction across all instances.
+    await this.sql.begin(async tx=>{
+      // Acquire the same key-specific transactional lock before inspecting
+      // unmarked pre-existing fingerprints. No guessing an old HMAC key.
+      await tx`SELECT pg_advisory_xact_lock(824219327,1)`;
+      const previous=await tx`
+        SELECT guard_digest
+        FROM moniflow_private.bmoni_phone_key_guard_v1
+        WHERE id=1 FOR UPDATE
+      `;
+      const prior=previous[0];
+      if (!prior) {
+        const rows=await tx`
+          SELECT EXISTS(
+            SELECT 1 FROM moniflow_private.bmoni_user_provisioning_holds_v1
+            WHERE phone_fingerprint IS NOT NULL
+          ) AS used
+        `;
+        if (rows[0]?.used===true) throw new Error("BMONI_PHONE_KEY_LEGACY_REVIEW_REQUIRED");
+        await tx`
+          INSERT INTO moniflow_private.bmoni_phone_key_guard_v1(id,guard_digest)
+          VALUES(1,${guardDigest})
+        `;
+      } else {
+        const a=Buffer.from(String(prior.guard_digest),"utf8"),b=Buffer.from(guardDigest,"utf8");
+        if (a.length!==b.length || !timingSafeEqual(a,b)) {
+          throw new Error("BMONI_PHONE_KEY_CONTINUITY_MISMATCH");
+        }
+      }
+    });
+  }
 
   async findByEmail(email: string): Promise<UserMapping | null> {
     const rows = await this.sql`select local_user_id, email, bmoni_user_id, created_at, updated_at from moniflow_private.bmoni_user_mappings where lower(email) = lower(${email}) limit 1`;
