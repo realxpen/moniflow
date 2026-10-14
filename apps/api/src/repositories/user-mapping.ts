@@ -24,6 +24,7 @@ export interface UserMappingRepository {
   findByLocalUserId(localUserId: string): Promise<UserMapping | null>;
   save(mapping: UserMapping): Promise<UserMapping>;
   findHoldByEmail(email: string): Promise<UserProvisioningHold | null>;
+  findHoldByPhoneFingerprint(fingerprint: string): Promise<UserProvisioningHold | null>;
   createHold(hold: UserProvisioningHold): Promise<UserProvisioningHold>;
   /**
    * Unique atomic reservation BEFORE any provider create call.
