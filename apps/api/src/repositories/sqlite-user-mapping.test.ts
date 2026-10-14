@@ -74,4 +74,39 @@ describe("SqliteUserMappingRepository", () => {
     raw.close();
   });
 
+  it("refuses to adopt an unverified new key when older phone fingerprints exist without a guard",async()=>{
+    const dir=mkdtempSync(join(tmpdir(),"bmoni-unmarked-phone-guard-"));
+    dirs.push(dir);
+    const dbPath=join(dir,"existing.sqlite");
+    const repository=new SqliteUserMappingRepository("file:"+dbPath);
+    repositories.push(repository);
+    expect(await repository.reserveBeforeCreate({
+      email:"held@example.com",
+      localUserId:"44444444-4444-4444-8444-444444444444",
+      state:"PROVIDER_OUTCOME_UNKNOWN",
+      phoneFingerprint:"b".repeat(64),
+      createdAt:new Date().toISOString()
+    })).toBe(true);
+    await expect(repository.assertPhoneKeyContinuity("a".repeat(64)))
+      .rejects.toThrow("BMONI_PHONE_KEY_LEGACY_REVIEW_REQUIRED");
+    const other=new SqliteUserMappingRepository("file:"+dbPath);
+    repositories.push(other);
+    await expect(other.assertPhoneKeyContinuity("c".repeat(64)))
+      .rejects.toThrow("BMONI_PHONE_KEY_LEGACY_REVIEW_REQUIRED");
+    expect((await other.findHoldByEmail("held@example.com"))?.phoneFingerprint)
+      .toBe("b".repeat(64));
+  });
+
+  it("persists a key-guard marker without ever storing the HMAC secret",async()=>{
+    const repository=new SqliteUserMappingRepository(":memory:");
+    repositories.push(repository);
+    const guard="a".repeat(64);
+    await repository.assertPhoneKeyContinuity(guard);
+    await repository.assertPhoneKeyContinuity(guard);
+    await expect(repository.assertPhoneKeyContinuity("b".repeat(64)))
+      .rejects.toThrow("BMONI_PHONE_KEY_CONTINUITY_MISMATCH");
+    // A failed check must never overwrite the established guard.
+    await repository.assertPhoneKeyContinuity(guard);
+  });
+
 });
