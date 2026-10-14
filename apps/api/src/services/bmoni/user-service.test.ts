@@ -194,6 +194,9 @@ describe("BmoniUserService", () => {
     directories.push(dir);
     const url="file:"+join(dir,"mapping.db");
     const first=new SqliteUserMappingRepository(url);
+    // Crash-gap test models a NEW reserved identity under a previously
+    // enrolled valid key, not an unmarked pre-migration legacy database.
+    await first.assertPhoneKeyContinuity(phoneIdentityKeyGuard(PHONE_KEY));
     expect(await first.reserveBeforeCreate({
       email:input.email,localUserId:input.localUserId,
       phoneFingerprint:phoneIdentityFingerprint(input.phoneNumber,PHONE_KEY),
