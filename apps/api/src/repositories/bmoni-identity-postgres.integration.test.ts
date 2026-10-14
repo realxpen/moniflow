@@ -26,7 +26,7 @@ const id=()=>randomUUID();
 const now=()=>new Date().toISOString();
 
 suite("B2 provider-independent PostgreSQL integration with a disposable local database",()=>{
-  if (!databaseUrl) return;
+  if (!databaseUrl || !safe) return;
   const sql=createPostgresClient(databaseUrl);
   const otherSql=createPostgresClient(databaseUrl);
   const first=new PostgresUserMappingRepository(sql);
@@ -54,6 +54,12 @@ suite("B2 provider-independent PostgreSQL integration with a disposable local da
     await first.assertPhoneKeyContinuity(key);
     const rows=await sql`SELECT count(*)::integer AS n FROM moniflow_private.bmoni_phone_key_guard_v1`;
     expect(rows[0]?.n).toBe(1);
+    const snapshot=await second.inspectIdentityReadiness(key);
+    expect(snapshot).toMatchObject({
+      keyContinuity:"MATCH",providerFinancialExecutionAllowed:false,
+      providerUserRecoveryConfirmed:false
+    });
+    expect(JSON.stringify(snapshot)).not.toContain(key);
   });
 
   it("reserves one E164 phone across two PostgreSQL connections and competing emails",async()=>{
@@ -86,6 +92,13 @@ suite("B2 provider-independent PostgreSQL integration with a disposable local da
       state:"PROVIDER_OUTCOME_UNKNOWN",createdAt:now()})).toBe(false);
     // Never turn a hold into a fabricated provider user ID.
     expect(await first.findByEmail(email)).toBe(null);
+    const snapshot=await second.inspectIdentityReadiness(phoneIdentityKeyGuard(KEY));
+    expect(snapshot).toMatchObject({
+      keyContinuity:"MATCH",providerExistsHoldCount:1,
+      unknownOutcomeHoldCount:1,manualReviewRequired:true
+    });
+    expect(JSON.stringify(snapshot)).not.toContain(email);
+    expect(JSON.stringify(snapshot)).not.toContain(fingerprint);
   });
 
   it("persists real Postgres TEST_OBSERVATION digests, deduplicates and rejects conflicting event IDs",async()=>{
