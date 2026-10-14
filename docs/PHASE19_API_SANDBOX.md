@@ -31,3 +31,7 @@ Before manually deploying:
 - "Human approval" in this simulation acknowledges the illustration; it is not a banking signature, verified destination, or genuine external authorization.
 - The user must explicitly initialize their workspace. A repeated bootstrap cannot refill balances; an explicit own-workspace reset is available for demos.
 - Real partner BMONI KYC, user recovery, genuine wallet balances, CNGN proposal signing and execution remain blocked or unverified until dedicated access and real device support are available.
+
+## Milestone 6: disposable PostgreSQL concurrency test
+
+The CI disposable PostgreSQL 16 gate also runs a separate sandbox database integration test. Two independent database connections race to create the same plan and execute the same approved simulation; the expected single plan, two activity entries, 260k/20k/240k reconciliation and cross-user isolation must hold. The test only runs against the explicit 127.0.0.1:5432/moniflow_b2_ci disposable test database, never on production.

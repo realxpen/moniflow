@@ -74,3 +74,5 @@ jobs:
         run: pnpm --filter @moniflow/shared build && pnpm --filter @moniflow/moniguard build
       - name: Isolated PostgreSQL identity and receipt evidence
         run: pnpm exec vitest run apps/api/src/repositories/bmoni-identity-postgres.integration.test.ts --reporter=verbose
+      - name: Isolated authenticated demo PostgreSQL ledger
+        run: pnpm exec vitest run apps/api/src/services/sandbox-demo/workspace-store.postgres.integration.test.ts --reporter=verbose
