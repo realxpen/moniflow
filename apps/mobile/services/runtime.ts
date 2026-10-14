@@ -11,6 +11,7 @@ export type FinancialProviderRuntime = {
   simulated: boolean;
   currencies: string[];
   partnerRegistrationEnabled: boolean;
+  authenticatedSandboxDemoEnabled: boolean;
   reason?: string;
   issue?: string;
 };
@@ -76,6 +77,7 @@ export async function loadFinancialProvider(): Promise<FinancialProviderRuntime>
     environment: typeof payload.environment === "string" ? payload.environment : "unknown",
     simulated: payload.simulated === true,
     partnerRegistrationEnabled: payload.partnerRegistrationEnabled === true,
+    authenticatedSandboxDemoEnabled: payload.authenticatedSandboxDemoEnabled === true,
     currencies: Array.isArray(payload.currencies) ? payload.currencies.filter((v): v is string => typeof v === "string") : [],
     ...(problem ? { reason: problem.reason, issue: problem.message } : {})
   };

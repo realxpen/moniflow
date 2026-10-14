@@ -39,3 +39,7 @@ The CI disposable PostgreSQL 16 gate also runs a separate sandbox database integ
 ## Phase 20 startup safety gate
 
 With AUTHENTICATED_SANDBOX_DEMO_ENABLED=true, the API now refuses to initialize this feature unless NODE_ENV=production, DATABASE_URL is PostgreSQL, and the Supabase JWT issuer/JWKS/audience settings are valid and HTTPS same-origin. The error reports only which configuration field is unsafe and **never logs secrets or the database URL**. The feature is disabled by default; this gate makes an accidental public SQLite or development-mode activation fail closed.
+
+## Phase 20 release discovery
+
+The public /health/provider document includes a boolean authenticatedSandboxDemoEnabled so the Welcome screen only promotes /demo/live after the API's server-only feature flag is enabled. This is read-only release metadata, not an authorization bypass: the /api/sandbox-demo routes continue to require an authenticated Supabase user. While the flag is false the Welcome screen explains that the feature has not been released and continues offering the offline demo.

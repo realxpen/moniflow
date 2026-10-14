@@ -39,6 +39,7 @@ export const healthRoutes: FastifyPluginAsync<HealthRouteOptions> = async (
         environment: provider.environment,
         simulated: provider.simulated,
         partnerRegistrationEnabled: partnerRegistrationEnabled(provider.id, env.BMONI_PARTNER_ONBOARDING_ENABLED),
+        authenticatedSandboxDemoEnabled: env.AUTHENTICATED_SANDBOX_DEMO_ENABLED === "true",
         currencies: result.currencies
       };
     } catch (error) {
@@ -58,6 +59,7 @@ export const healthRoutes: FastifyPluginAsync<HealthRouteOptions> = async (
         environment: provider.environment,
         simulated: provider.simulated,
         partnerRegistrationEnabled: partnerRegistrationEnabled(provider.id, env.BMONI_PARTNER_ONBOARDING_ENABLED),
+        authenticatedSandboxDemoEnabled: env.AUTHENTICATED_SANDBOX_DEMO_ENABLED === "true",
         reason
       });
     }

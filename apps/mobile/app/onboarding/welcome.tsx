@@ -152,9 +152,19 @@ export default function WelcomeScreen() {
           </View>
         ) : null}
 
-        <PrimaryButton onPress={() => router.push("/demo/live")}>
-          Open API-backed financial sandbox
-        </PrimaryButton>
+        {provider?.authenticatedSandboxDemoEnabled ? (
+          <PrimaryButton onPress={() => router.push("/demo/live")}>
+            Open API-backed financial sandbox
+          </PrimaryButton>
+        ) : (
+          <SoftCard style={styles.resumeCard}>
+            <StatusPill label="API SANDBOX · RELEASE PENDING" tone="processing" />
+            <Text style={styles.providerCopy}>
+              The authenticated simulated-money experience is being prepared for a controlled release.
+              The offline Operator remains available without signing in or using BMONI.
+            </Text>
+          </SoftCard>
+        )}
         <SecondaryButton onPress={() => router.push("/demo/operator")}>
           Try offline Operator simulation
         </SecondaryButton>
