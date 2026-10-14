@@ -49,6 +49,12 @@ export async function ensureMoniflowSchema(sql: Sql) {
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS bmoni_provisioning_hold_local_id_unique_v1
     ON moniflow_private.bmoni_user_provisioning_holds_v1(local_user_id)
     WHERE local_user_id IS NOT NULL`;
+  // Legacy holds remain null: no verified phone fingerprint can be inferred.
+  await sql`ALTER TABLE moniflow_private.bmoni_user_provisioning_holds_v1
+    ADD COLUMN IF NOT EXISTS phone_fingerprint text`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS bmoni_provisioning_hold_phone_unique_v1
+    ON moniflow_private.bmoni_user_provisioning_holds_v1(phone_fingerprint)
+    WHERE phone_fingerprint IS NOT NULL`;
 
 
   await sql`
@@ -195,15 +201,17 @@ export class PostgresUserMappingRepository implements UserMappingRepository {
   }
 
   async reserveBeforeCreate(hold:UserProvisioningHold):Promise<boolean> {
-    if(!hold.localUserId || hold.state!=="PROVIDER_OUTCOME_UNKNOWN") {
+    if(!hold.localUserId || hold.state!=="PROVIDER_OUTCOME_UNKNOWN" ||
+       !/^[a-f0-9]{64}$/.test(hold.phoneFingerprint??"")) {
       throw new Error("BMONI_INVALID_CREATE_RESERVATION");
     }
     // Unique email + unique non-null local UUID, atomically committed before
     // any external BMONI request. ON CONFLICT covers either unique key.
     const rows=await this.sql`
       INSERT INTO moniflow_private.bmoni_user_provisioning_holds_v1
-        (email,local_user_id,state,created_at)
-      VALUES(lower(${hold.email.trim()}),${hold.localUserId}::uuid,${hold.state},${hold.createdAt}::timestamptz)
+        (email,local_user_id,state,created_at,phone_fingerprint)
+      VALUES(lower(${hold.email.trim()}),${hold.localUserId}::uuid,${hold.state},
+        ${hold.createdAt}::timestamptz,${hold.phoneFingerprint})
       ON CONFLICT DO NOTHING RETURNING email
     `;
     return rows.length===1;
@@ -224,13 +232,30 @@ export class PostgresUserMappingRepository implements UserMappingRepository {
 
   async findHoldByEmail(email:string):Promise<UserProvisioningHold|null> {
     const rows=await this.sql`
-      SELECT email,local_user_id,state,created_at
+      SELECT email,local_user_id,state,created_at,phone_fingerprint
       FROM moniflow_private.bmoni_user_provisioning_holds_v1
       WHERE email=lower(${email.trim()}) LIMIT 1
     `;
     const row=rows[0];
     return row ? {
       email:String(row.email),localUserId:row.local_user_id===null?null:String(row.local_user_id),
+      phoneFingerprint:row.phone_fingerprint===null?null:String(row.phone_fingerprint),
+      state:String(row.state) as UserProvisioningHold["state"],
+      createdAt:new Date(String(row.created_at)).toISOString()
+    } : null;
+  }
+
+  async findHoldByPhoneFingerprint(fingerprint:string):Promise<UserProvisioningHold|null> {
+    if(!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error("BMONI_INVALID_PHONE_FINGERPRINT");
+    const rows=await this.sql`
+      SELECT email,local_user_id,state,created_at,phone_fingerprint
+      FROM moniflow_private.bmoni_user_provisioning_holds_v1
+      WHERE phone_fingerprint=${fingerprint} LIMIT 1
+    `;
+    const row=rows[0];
+    return row ? {
+      email:String(row.email),localUserId:row.local_user_id===null?null:String(row.local_user_id),
+      phoneFingerprint:String(row.phone_fingerprint),
       state:String(row.state) as UserProvisioningHold["state"],
       createdAt:new Date(String(row.created_at)).toISOString()
     } : null;
@@ -238,12 +263,14 @@ export class PostgresUserMappingRepository implements UserMappingRepository {
 
   async createHold(hold:UserProvisioningHold):Promise<UserProvisioningHold> {
     await this.sql`
-      INSERT INTO moniflow_private.bmoni_user_provisioning_holds_v1(email,local_user_id,state,created_at)
-      VALUES(lower(${hold.email.trim()}),${hold.localUserId}::uuid,${hold.state},${hold.createdAt}::timestamptz)
+      INSERT INTO moniflow_private.bmoni_user_provisioning_holds_v1(email,local_user_id,state,created_at,phone_fingerprint)
+      VALUES(lower(${hold.email.trim()}),${hold.localUserId}::uuid,
+        ${hold.state},${hold.createdAt}::timestamptz,${hold.phoneFingerprint??null})
       ON CONFLICT DO NOTHING
     `;
     const existing=await this.findHoldByEmail(hold.email);
-    if (!existing || (existing.localUserId && hold.localUserId && existing.localUserId!==hold.localUserId)) {
+    if (!existing || (existing.localUserId && hold.localUserId && existing.localUserId!==hold.localUserId) ||
+        (hold.phoneFingerprint && existing.phoneFingerprint!==hold.phoneFingerprint)) {
       throw new Error("BMONI_PROVISIONING_HOLD_IDENTITY_CONFLICT");
     }
     return existing;
