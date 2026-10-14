@@ -23,5 +23,11 @@ export interface UserMappingRepository {
   save(mapping: UserMapping): Promise<UserMapping>;
   findHoldByEmail(email: string): Promise<UserProvisioningHold | null>;
   createHold(hold: UserProvisioningHold): Promise<UserProvisioningHold>;
+  /**
+   * Unique atomic reservation BEFORE any provider create call.
+   * Returns false if this email or localUserId was already reserved.
+   */
+  reserveBeforeCreate(hold: UserProvisioningHold): Promise<boolean>;
+  markProviderUserExists(email: string): Promise<void>;
   close(): Promise<void>;
 }
