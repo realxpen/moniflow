@@ -147,7 +147,8 @@ export async function runCloudFixtureAction(
     // Exactly one documented POST /v1/users. No retries, fallback,
     // user-ID guessing, wallet creation or production account binding.
     const result = await gateway.createUser(persona);
-    if (!ID_PATTERN.test(result.bmoniUserId) ||
+    if (!ID_PATTERN.test(result?.bmoniUserId ?? "") ||
+        typeof result?.email !== "string" ||
         result.email.toLowerCase() !== persona.email.toLowerCase()) {
       throw new Error("CLOUD_FIXTURE_INVALID_CUSTOM_USER_RESPONSE");
     }
