@@ -1,5 +1,10 @@
 # MONIFlow Project State
 
+## Phase 25 — Real BMONI custom sandbox registration (2026-10-15)
+
+Added a **manual-only**, cloud-hosted `create-custom-user` action to the existing BMONI GitHub Actions workflow. This makes ONE documented real BMONI sandbox `POST /v1/users` only after exact `CREATE_ONE_MONIFLOW_BMONI_SANDBOX_USER` acknowledgment, on main, first run attempt, and using the reviewed fingerprint-pinned public development API key. The profile is generated per GitHub run (`Moniflow Sandbox`, reserved `example.com` email, synthetic E.164-formatted +234800 phone, deterministic employee/identity IDs); no actual customer contact, BVN, NIN, KYC document, key or funds are used. A successful result yields a real provider `bmoniUserId` in the **public** Actions summary; it must NOT be associated with a personal, KYC, funded or production account. The BMONI sandbox may reject the synthetic phone, and KYC verification of this custom identity is unsupported by BMONI's fixed test personas. Existing shared Bunch Dillon 409 remains unresolved; do not retry it. No provider POST is performed by building or merging; separate user authorization and manual GitHub dispatch are necessary. See `docs/PHASE25_REAL_BMONI_SANDBOX_REGISTRATION.md`.
+
+
 ## Phase 24 production release attempt (2026-10-15)
 
 Following merged PR #20 (`9bf7266`) and successful post-merge CI #311, attempted an API-first Git-connected production Vercel deployment. Vercel Hobby rejected the only publish request with HTTP 402 `api-deployments-free-per-day`, more than 100 deployments, `retryAfter=86400`. No API publish or website deploy occurred, production aliases remain on the prior READY SHA, `AUTHENTICATED_SANDBOX_DEMO_ENABLED=false` (read back before attempt), and BMONI partner registration remains disabled. See `docs/PHASE24_VERCEL_RELEASE_ATTEMPT.md`. Wait for quota reset or explicit plan resolution; never conflate merged development with live deployment or with BMONI identity recovery.
