@@ -1,7 +1,7 @@
 import type { BmoniGateway } from "./gateway.js";
 
 /** Only a published BMONI sandbox fixture is accepted. Never open to real customer PII. */
-export type CloudFixtureAction = "connectivity" | "create-fixture" | "inspect-user";
+export type CloudFixtureAction = "connectivity" | "create-fixture" | "create-custom-user" | "inspect-user";
 
 export type CloudFixtureSettings = {
   action: string;
@@ -12,11 +12,14 @@ export type CloudFixtureSettings = {
   githubActions: string;
   financialProvider: string;
   baseUrl: string;
+  githubRunId: string;
+  githubRunAttempt: string;
 };
 
 const SANDBOX_URL = "https://embedded-dev.bmoni.com";
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 export const CREATE_FIXTURE_ACK = "CREATE_ONE_BMONI_SANDBOX_TEST_USER";
+export const CREATE_CUSTOM_USER_ACK = "CREATE_ONE_MONIFLOW_BMONI_SANDBOX_USER";
 
 export function validateCloudFixtureRequest(input: CloudFixtureSettings): CloudFixtureAction {
   // A main-branch push may only run the credential-free connectivity read.
@@ -40,6 +43,18 @@ export function validateCloudFixtureRequest(input: CloudFixtureSettings): CloudF
     }
     return "create-fixture";
   }
+  if (input.action === "create-custom-user") {
+    // The only custom POST is explicitly approved, manually dispatched, on main.
+    // Re-running the same GitHub job is forbidden, including after timeouts.
+    // Every fresh dispatch has an auditably unique, synthetic test identity.
+    if (input.userId || input.acknowledgment !== CREATE_CUSTOM_USER_ACK ||
+        !/^[1-9][0-9]{8,17}$/.test(input.githubRunId) ||
+        input.githubRunAttempt !== "1" ||
+        input.githubEvent !== "workflow_dispatch") {
+      throw new Error("CLOUD_FIXTURE_CUSTOM_USER_APPROVAL_REQUIRED");
+    }
+    return "create-custom-user";
+  }
   if (input.action === "inspect-user") {
     if (!ID_PATTERN.test(input.userId) || input.acknowledgment) {
       throw new Error("CLOUD_FIXTURE_VERIFIED_USER_ID_REQUIRED");
@@ -56,6 +71,29 @@ const FIXTURE = Object.freeze({
   phoneNumber: "+2348000000000"
 });
 
+/** This is an unverified sandbox registration identity, not an approved KYC persona.
+ * Synthetic details use IANA's reserved example.com domain, never the user's
+ * real email/phone/BVN. GitHub run IDs make each attempt auditable.
+ * Phone numbers may not be accepted by BMONI; never improvise KYC on failure.
+ */
+export function syntheticRegistrationForRun(githubRunId: string) {
+  if (!/^[1-9][0-9]{8,17}$/.test(githubRunId)) {
+    throw new Error("CLOUD_FIXTURE_RUN_ID_INVALID");
+  }
+  const lastSeven = githubRunId.slice(-7).padStart(7, "0");
+  if (lastSeven === "0000000" || lastSeven === "0000001") {
+    throw new Error("CLOUD_FIXTURE_RESERVED_SANDBOX_PHONE");
+  }
+  return Object.freeze({
+    firstName: "Moniflow",
+    lastName: "Sandbox",
+    email: `moniflow.sandbox.${githubRunId}@example.com`,
+    phoneNumber: `+234800${lastSeven}`,
+    employeeId: `MF-CLOUD-${githubRunId}`,
+    identityId: `moniflow-cloud-${githubRunId}`
+  });
+}
+
 export type CloudFixtureFinding = {
   stage: string;
   pass: boolean;
@@ -68,6 +106,8 @@ export type CloudFixtureOutcome = {
   // The BMONI test ID is the documented sandbox's non-personal fixture identifier.
   // It is only returned to the manually-triggered job summary after a successful create.
   fixtureUserId?: string;
+  /** Synthetic identifiers only; never use this profile for Nigerian KYC. */
+  syntheticIdentity?: { email: string; phoneNumber: string };
   readyForDeviceProof: boolean;
 };
 
@@ -98,6 +138,24 @@ export async function runCloudFixtureAction(
     findings.push({ stage: "documented-fixture-created", pass: true });
     return {
       action, sandbox: true, findings, fixtureUserId: result.bmoniUserId,
+      readyForDeviceProof: false
+    };
+  }
+
+  if (action === "create-custom-user") {
+    const persona = syntheticRegistrationForRun(input.githubRunId);
+    // Exactly one documented POST /v1/users. No retries, fallback,
+    // user-ID guessing, wallet creation or production account binding.
+    const result = await gateway.createUser(persona);
+    if (!ID_PATTERN.test(result?.bmoniUserId ?? "") ||
+        typeof result?.email !== "string" ||
+        result.email.toLowerCase() !== persona.email.toLowerCase()) {
+      throw new Error("CLOUD_FIXTURE_INVALID_CUSTOM_USER_RESPONSE");
+    }
+    findings.push({ stage: "real-bmoni-sandbox-registration", pass: true });
+    return {
+      action, sandbox: true, findings, fixtureUserId: result.bmoniUserId,
+      syntheticIdentity: { email: persona.email, phoneNumber: persona.phoneNumber },
       readyForDeviceProof: false
     };
   }
