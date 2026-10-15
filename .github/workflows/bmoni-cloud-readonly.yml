@@ -3,6 +3,12 @@ name: MONIFlow BMONI Cloud Read-Only Probe
 # Runs from GitHub's cloud runner. No laptop, CLI login, secrets or deployment.
 on:
   workflow_dispatch:
+  # Automatically run once when this cloud-only probe lands on main.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/bmoni-cloud-readonly.yml"
+      - "scripts/bmoni-cloud-readonly-*.mjs"
 
 permissions:
   contents: read
