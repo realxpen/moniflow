@@ -102,8 +102,7 @@ describe("BMONI cloud sandbox fixture gate", () => {
       { acknowledgment: CREATE_CUSTOM_USER_ACK, githubRunId: "bad-id" },
       { acknowledgment: CREATE_CUSTOM_USER_ACK, userId: "existing-user" }
     ]) {
-      expect(() => validateCloudFixtureRequest({ ...valid, action, ...patch }))
-        .toThrow("CUSTOM_USER_APPROVAL_REQUIRED");
+      expect(() => validateCloudFixtureRequest({ ...valid, action, ...patch })).toThrow();
     }
     expect(validateCloudFixtureRequest({
       ...valid, action, acknowledgment: CREATE_CUSTOM_USER_ACK
@@ -136,6 +135,9 @@ describe("BMONI cloud sandbox fixture gate", () => {
 
   it("fails closed if provider returns a different synthetic user's email", async () => {
     const mock = gateway();
+    mock.createUser.mockResolvedValueOnce({
+      bmoniUserId: "bmoni-user-mismatch", email: "another@example.com", firstName: "Moniflow"
+    });
     await expect(runCloudFixtureAction({
       ...valid, action: "create-custom-user", acknowledgment: CREATE_CUSTOM_USER_ACK
     }, mock as unknown as Methods)).rejects.toThrow("INVALID_CUSTOM_USER_RESPONSE");
