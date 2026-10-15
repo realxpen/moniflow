@@ -19,7 +19,11 @@ const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 export const CREATE_FIXTURE_ACK = "CREATE_ONE_BMONI_SANDBOX_TEST_USER";
 
 export function validateCloudFixtureRequest(input: CloudFixtureSettings): CloudFixtureAction {
-  if (input.githubActions !== "true" || input.githubEvent !== "workflow_dispatch" ||
+  // A main-branch push may only run the credential-free connectivity read.
+  // All provider writes still require a separate manual workflow_dispatch.
+  const automaticRead = input.githubEvent === "push" && input.action === "connectivity";
+  if (input.githubActions !== "true" ||
+      (!automaticRead && input.githubEvent !== "workflow_dispatch") ||
       input.githubRef !== "refs/heads/main") {
     throw new Error("CLOUD_FIXTURE_ACTION_NOT_AUTHORIZED");
   }
