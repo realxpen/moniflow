@@ -7,7 +7,10 @@
     "scheme": "moniflow",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "plugins": ["expo-router", "./plugins/with-bmoni-sdk.js"],
+    "plugins": [
+      "expo-router",
+      "./plugins/with-bmoni-sdk.js"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.realxpen.moniflow"
@@ -17,6 +20,12 @@
     },
     "experiments": {
       "typedRoutes": true
+    },
+    "owner": "xpen",
+    "extra": {
+      "eas": {
+        "projectId": "3d986249-f72b-494b-9ceb-eef8335a5ae0"
+      }
     }
   }
 }
