@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       expo_owner:
-        description: "Your Expo account username or team owner (not email or token)"
+        description: "Registered Expo owner: xpen (lowercase; exact)"
         required: true
         type: string
       approval:
@@ -40,8 +40,8 @@ jobs:
             echo "::error::Explicit iOS Simulator build approval is required."
             exit 1
           fi
-          if [[ ! "$EXPO_OWNER" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,49}$ ]]; then
-            echo "::error::Enter a valid Expo owner username, not an email, password or token."
+          if [[ "$EXPO_OWNER" != "xpen" ]]; then
+            echo "::error::This project is linked to Expo owner xpen; use exactly xpen, not an alternate account."
             exit 1
           fi
           if [[ -z "$EXPO_TOKEN" ]]; then
@@ -68,20 +68,21 @@ jobs:
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
-      - name: Link or create MONIFlow Expo project in chosen account
+      - name: Verify existing MONIFlow Expo project and ownership
         working-directory: apps/mobile
         shell: bash
         run: |
           set -euo pipefail
-          # The change to app.json is limited to this transient GitHub runner.
-          # Do not commit any unrelated runtime-generated Expo config.
-          eas init --account "$EXPO_OWNER" --non-interactive
+          # Phase 26 registration was completed on GitHub run 38753238741.
+          # This check must NEVER create or relink another project.
           node - <<'NODE'
           const fs = require("node:fs");
           const app = JSON.parse(fs.readFileSync("app.json", "utf8")).expo;
           const projectId = app.extra?.eas?.projectId;
-          if (typeof projectId !== "string" || !/^[0-9a-f-]{36}$/i.test(projectId)) {
-            throw new Error("Expo did not link the project ID; no iOS build was submitted.");
+          if (app.owner !== "xpen" || process.env.EXPO_OWNER !== app.owner ||
+              app.slug !== "moniflow" ||
+              projectId !== "3d986249-f72b-494b-9ceb-eef8335a5ae0") {
+            throw new Error("EXPO_PROJECT_ID_OR_OWNER_MISMATCH: no build submitted. Do not silently create or relink an Expo project.");
           }
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
             "## MONIFlow Expo iOS Simulator build\n" +
@@ -90,6 +91,8 @@ jobs:
             "- This is a simulator app, NOT an installable iPhone IPA.\n" +
             "- MONIFlow production BMONI onboarding and financial simulation flags were NOT changed.\n");
           NODE
+          # Authenticated read of the already-linked project; no mutation.
+          eas project:info
       - name: Request exactly one standalone iOS Simulator build
         working-directory: apps/mobile
         shell: bash
