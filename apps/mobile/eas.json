@@ -9,6 +9,16 @@
     },
     "preview": {
       "distribution": "internal"
+    },
+    "ios-simulator": {
+      "extends": "preview",
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://moniflow-api-silk.vercel.app",
+        "EAS_NO_FROZEN_LOCKFILE": "1"
+      }
     }
   }
 }
