@@ -18,6 +18,7 @@ import {
   type NigeriaOnboardingStatus
 } from "@/services/nigeria-onboarding";
 import { colors, radius, spacing, typography } from "@/theme";
+import { BMONI_SANDBOX_PERSONAS, getSandboxPersona, assertDocumentedSandboxPersona, type SandboxPersonaId } from "@/services/bmoni-sandbox-persona";
 
 const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
 type Asset = DocumentPicker.DocumentPickerAsset;
@@ -31,33 +32,55 @@ export default function CompleteNigeriaOnboardingScreen() {
   const routed = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
   const localUserId = routed?.trim() || configuredLocalUserId;
 
-  const [firstName, setFirstName] = useState("Chiamaka");
-  const [lastName, setLastName] = useState("Okafor");
-  const [phoneNumber, setPhoneNumber] = useState("+2348012345678");
-  const [dateOfBirth, setDateOfBirth] = useState("1990-01-01");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState<string | null>(null);
-  const [bvn, setBvn] = useState("22222222222");
-  const [streetLine1, setStreetLine1] = useState("15 Admiralty Way");
-  const [city, setCity] = useState("Lagos");
+  const [bvn, setBvn] = useState("");
+  const [streetLine1, setStreetLine1] = useState("");
+  const [city, setCity] = useState("");
   const [stateName, setStateName] = useState("Lagos");
-  const [postalCode, setPostalCode] = useState("101241");
+  const [postalCode, setPostalCode] = useState("");
 
   const [options, setOptions] = useState<NigeriaKycOptions | null>(null);
   const [occupationSearch, setOccupationSearch] = useState("engineer");
   const [occupationHits, setOccupationHits] = useState<NigeriaOccupation[]>([]);
   const [occupationCode, setOccupationCode] = useState<string | null>(null);
   const [occupationLabel, setOccupationLabel] = useState<string | null>(null);
-  const [employerName, setEmployerName] = useState("ACME Corp");
+  const [employerName, setEmployerName] = useState("");
   const [employmentStatus, setEmploymentStatus] = useState<string | null>(null);
   const [sourceOfFunds, setSourceOfFunds] = useState<string | null>(null);
   const [accountPurpose, setAccountPurpose] = useState<string | null>(null);
   const [monthlyVolume, setMonthlyVolume] = useState<KycVolumeRange | null>(null);
   const [actingAsIntermediary, setActingAsIntermediary] = useState(false);
+  const [selectedPersona, setSelectedPersona] = useState<SandboxPersonaId | null>(null);
+  const [sandboxConfirmed, setSandboxConfirmed] = useState(false);
+
+  const choosePersona = (id: SandboxPersonaId) => {
+    const person = getSandboxPersona(id);
+    setSelectedPersona(id);
+    setFirstName(person.firstName);
+    setLastName(person.lastName);
+    setPhoneNumber(person.phoneNumber);
+    setBvn(person.bvn);
+    setSandboxConfirmed(false);
+  };
+  const ensureSandboxIdentity = () => {
+    if (!selectedPersona || !sandboxConfirmed) {
+      throw new Error("Select and confirm a documented BMONI test identity before submitting sandbox KYC.");
+    }
+    const expected = getSandboxPersona(selectedPersona);
+    assertDocumentedSandboxPersona({ firstName, lastName, phoneNumber, bvn });
+    if (expected.firstName !== firstName.trim() || expected.lastName !== lastName.trim()) {
+      throw new Error("The selected BMONI sandbox identity does not match the KYC profile.");
+    }
+  };
 
   const [idType, setIdType] = useState<IdType>("passport");
-  const [documentNumber, setDocumentNumber] = useState("A12345678");
-  const [expirationDate, setExpirationDate] = useState("2030-01-01");
-  const [issueDate, setIssueDate] = useState("2020-01-01");
+  const [documentNumber, setDocumentNumber] = useState("");
+  const [expirationDate, setExpirationDate] = useState("");
+  const [issueDate, setIssueDate] = useState("");
   const [proofAddressType, setProofAddressType] = useState<PoaType>("utility_bill");
   const [idFront, setIdFront] = useState<Asset | null>(null);
   const [poaFront, setPoaFront] = useState<Asset | null>(null);
@@ -120,6 +143,7 @@ export default function CompleteNigeriaOnboardingScreen() {
 
   const prepareProfile = () => run(async () => {
     if (!localUserId) throw new Error("Your MONIFlow identity link is missing.");
+    ensureSandboxIdentity();
     if (!options || !gender || !employmentStatus || !sourceOfFunds || !accountPurpose || !monthlyVolume) {
       throw new Error("Load and select the BMONI KYC options before submitting the profile.");
     }
@@ -149,6 +173,7 @@ export default function CompleteNigeriaOnboardingScreen() {
   });
 
   const uploadDocuments = () => run(async () => {
+    ensureSandboxIdentity();
     if (!localUserId || !idFront || !poaFront) throw new Error("Select an ID-front image and proof-of-address image first.");
     const next = await uploadNigeriaKycDocuments({
       localUserId,
@@ -166,6 +191,7 @@ export default function CompleteNigeriaOnboardingScreen() {
   });
 
   const activate = () => run(async () => {
+    ensureSandboxIdentity();
     if (!localUserId) throw new Error("Your MONIFlow identity link is missing.");
     const next = await activateNigeriaRail(localUserId, bvn.trim());
     setStatus(next);
@@ -195,6 +221,21 @@ export default function CompleteNigeriaOnboardingScreen() {
         <Text style={styles.subtitle}>Use only BMONI sandbox values and permitted sandbox document images. Never enter or upload your real BVN, NIN, passport, or proof of address here.</Text>
       </View>
 
+      <SoftCard style={styles.card}>
+        <Text style={styles.sectionLabel}>PUBLISHED BMONI TEST IDENTITIES</Text>
+        <Text style={styles.copy}>Pick ONE provider-documented persona. Names, test phone and test BVN must match. These are fixtures only, not proof that MONIFlow owns an existing BMONI user ID.</Text>
+        <View style={styles.choiceRow}>
+          {BMONI_SANDBOX_PERSONAS.map(persona => (
+            <Choice key={persona.id} label={persona.firstName + " " + persona.lastName}
+              selected={selectedPersona === persona.id} onPress={() => choosePersona(persona.id)} />
+          ))}
+        </View>
+        <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: sandboxConfirmed }}
+          onPress={() => setSandboxConfirmed(v => !v)} style={styles.toggle}>
+          <Text style={styles.label}>I am using only BMONI-authorized sandbox test details</Text>
+          <Text style={styles.toggleValue}>{sandboxConfirmed ? "CONFIRMED" : "CONFIRM"}</Text>
+        </Pressable>
+      </SoftCard>
       <SoftCard style={styles.card}>
         <View style={styles.environmentRow}>
           <Text style={styles.sectionLabel}>01 · KYC PROFILE</Text>
@@ -234,7 +275,7 @@ export default function CompleteNigeriaOnboardingScreen() {
           <Text style={styles.toggleValue}>{actingAsIntermediary ? "YES" : "NO"}</Text>
         </Pressable>
         <Field label="SANDBOX BVN" value={bvn} onChangeText={(value) => setBvn(value.replace(/\D/g, ""))} keyboardType="number-pad" secure maxLength={11} />
-        <PrimaryButton disabled={busy || !options || !occupationCode} onPress={() => void prepareProfile()}>{busy ? "Submitting…" : "1. Save KYC profile"}</PrimaryButton>
+        <PrimaryButton disabled={busy || !options || !occupationCode || !selectedPersona || !sandboxConfirmed} onPress={() => void prepareProfile()}>{busy ? "Submitting…" : "1. Save KYC profile"}</PrimaryButton>
       </SoftCard>
 
       <SoftCard style={styles.card}>
@@ -246,13 +287,13 @@ export default function CompleteNigeriaOnboardingScreen() {
         <ChoiceRow label="PROOF OF ADDRESS TYPE" values={[...poaTypes]} selected={proofAddressType} onSelect={(value) => setProofAddressType(value as PoaType)} />
         <DocumentButton label="ID FRONT · JPEG/PNG" asset={idFront} onPress={() => void pick(setIdFront)} />
         <DocumentButton label="PROOF OF ADDRESS · JPEG/PNG" asset={poaFront} onPress={() => void pick(setPoaFront)} />
-        <PrimaryButton disabled={busy || status !== "documents_required" || !idFront || !poaFront || !documentNumber.trim() || !expirationDate.trim()} onPress={() => void uploadDocuments()}>{busy ? "Uploading…" : "2. Upload KYC documents"}</PrimaryButton>
+        <PrimaryButton disabled={busy || !selectedPersona || !sandboxConfirmed || status !== "documents_required" || !idFront || !poaFront || !documentNumber.trim() || !expirationDate.trim()} onPress={() => void uploadDocuments()}>{busy ? "Uploading…" : "2. Upload KYC documents"}</PrimaryButton>
       </SoftCard>
 
       <SoftCard style={styles.card}>
         <Text style={styles.sectionLabel}>03 · READINESS → ACTIVATE → NIGERIA RAIL</Text>
         <Text style={styles.copy}>MONIFlow follows BMONI's fixed sequence: readiness, empty-body NGN activation, then start-nigeria with the persisted managed CNGN wallet address.</Text>
-        <PrimaryButton disabled={busy || status !== "documents_uploaded" || bvn.length !== 11} onPress={() => void activate()}>{busy ? "Activating…" : "3. Activate KYC + Nigeria rail"}</PrimaryButton>
+        <PrimaryButton disabled={busy || !selectedPersona || !sandboxConfirmed || status !== "documents_uploaded" || bvn.length !== 11} onPress={() => void activate()}>{busy ? "Activating…" : "3. Activate KYC + Nigeria rail"}</PrimaryButton>
         {(status === "processing" || status === "action_required") ? <PrimaryButton disabled={busy} onPress={() => void refresh()}>{busy ? "Checking…" : "Check BMONI status"}</PrimaryButton> : null}
       </SoftCard>
 
