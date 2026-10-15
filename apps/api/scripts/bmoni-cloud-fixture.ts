@@ -12,7 +12,9 @@ const input = {
   githubEvent: process.env.GITHUB_EVENT_NAME ?? "",
   githubRef: process.env.GITHUB_REF ?? "",
   financialProvider: process.env.FINANCIAL_PROVIDER ?? "",
-  baseUrl: process.env.BMONI_BASE_URL ?? ""
+  baseUrl: process.env.BMONI_BASE_URL ?? "",
+  githubRunId: process.env.GITHUB_RUN_ID ?? "",
+  githubRunAttempt: process.env.GITHUB_RUN_ATTEMPT ?? ""
 };
 
 async function main() {
@@ -26,7 +28,7 @@ async function main() {
   const gateway = new BmoniClient(config);
   const outcome = await runCloudFixtureAction(input, gateway);
 
-  let summary = "## MONIFlow — BMONI documented sandbox fixture\n";
+  let summary = "## MONIFlow — real BMONI sandbox registration or inspection\n";
   summary += "- Host: embedded-dev.bmoni.com (sandbox only)\n";
   summary += "- Stage: " + outcome.action + "\n";
   summary += "- Credential: SHA-256-verified key from BMONI's public documentation (value never logged)\n";
@@ -36,10 +38,15 @@ async function main() {
     summary += "- " + label + ": " + finding.stage + "\n";
   }
   if (outcome.fixtureUserId) {
-    // Sandbox fixture identity only; never put any real customer's ID into this harness.
-    const line = "Documented test fixture BMONI ID: `" + outcome.fixtureUserId + "`";
-    summary += "- " + line + "\n";
-    process.stdout.write(line + "\n");
+    // This workflow is for synthetic test identities only, on a PUBLIC repository.
+    summary += "- BMONI SANDBOX bmoniUserId: `" + outcome.fixtureUserId + "`\n";
+    summary += "- This test-only ID is visible in the GitHub summary. Never fund, use real PII or attach a live account.\n";
+    process.stdout.write("PASS: real BMONI sandbox user ID returned (see GitHub summary)\n");
+  }
+  if (outcome.syntheticIdentity) {
+    summary += "- Synthetic sandbox email: `" + outcome.syntheticIdentity.email + "`\n";
+    summary += "- Synthetic sandbox phone: `" + outcome.syntheticIdentity.phoneNumber + "`\n";
+    summary += "- KYC status: NOT VERIFIED; unique synthetic identities are not BMONI's approved KYC personas.\n";
   }
   summary += "- Device-owned wallet proof: NOT PERFORMED\n";
   summary += "- Transactions, signing, KYC submission, real funds and public onboarding: NOT PERFORMED\n";
@@ -61,7 +68,7 @@ try {
   let code = cause instanceof Error && cause.message.startsWith("CLOUD_FIXTURE_")
     ? cause.message : "BMONI_SANDBOX_STAGE_FAILED";
   if (cause instanceof BmoniProviderError && cause.statusCode === 409) {
-    code = "BMONI_FIXTURE_ALREADY_EXISTS_OR_CONFLICT: Stop, reconcile existing sandbox identity; DO NOT retry the create request.";
+    code = "BMONI_SANDBOX_IDENTITY_CONFLICT: Stop and reconcile with BMONI; DO NOT rerun this creation.";
   } else if (cause instanceof BmoniProviderError && cause.statusCode !== 409) {
     code = "BMONI_SANDBOX_PROVIDER_HTTP_" + cause.statusCode;
   }
