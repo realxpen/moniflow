@@ -64,7 +64,16 @@ export default function CompleteNigeriaOnboardingScreen() {
     setLastName(person.lastName);
     setPhoneNumber(person.phoneNumber);
     setBvn(person.bvn);
+    // Switching sandbox identities invalidates all KYC and document progress.
     setSandboxConfirmed(false);
+    setStatus("idle");
+    setMessage(null);
+    setDateOfBirth("");
+    setDocumentNumber("");
+    setIdFront(null);
+    setPoaFront(null);
+    setOccupationCode(null);
+    setOccupationLabel(null);
   };
   const ensureSandboxIdentity = () => {
     if (!selectedPersona || !sandboxConfirmed) {
