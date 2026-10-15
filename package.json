@@ -13,7 +13,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @moniflow/shared build && pnpm -r typecheck",
     "lint": "eslint . --max-warnings=0",
-    "test": "pnpm --filter @moniflow/shared build && pnpm --filter @moniflow/moniguard build && vitest run && node --test scripts/phase20-release-probe.nodecheck.mjs && node --test scripts/bmoni-cloud-readonly-probe.nodecheck.mjs",
+    "test": "pnpm --filter @moniflow/shared build && pnpm --filter @moniflow/moniguard build && vitest run && node --test scripts/phase20-release-probe.nodecheck.mjs && node --test scripts/bmoni-cloud-readonly-probe.nodecheck.mjs && node --test scripts/phase26-eas-simulator.nodecheck.mjs",
     "smoke:phase20": "node scripts/phase20-release-smoke.mjs",
     "smoke:bmoni:cloud": "node scripts/bmoni-cloud-readonly-smoke.mjs"
   },
