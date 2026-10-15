@@ -1,0 +1,35 @@
+name: MONIFlow BMONI Cloud Read-Only Probe
+
+# Runs from GitHub's cloud runner. No laptop, CLI login, secrets or deployment.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moniflow-bmoni-cloud-readonly
+  cancel-in-progress: false
+
+jobs:
+  provider-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check the deployed API and BMONI sandbox using GET only
+        run: node scripts/bmoni-cloud-readonly-smoke.mjs
+      - name: Summarize scope
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## BMONI cloud-only probe"
+            echo "- Requests: GET /health, GET /health/bmoni, GET /health/provider"
+            echo "- Uses the Vercel API's already configured provider credential, never a GitHub copy."
+            echo "- No registrations, KYC changes, wallets, transfers, signatures, database writes, or deployments."
+            echo "- A green job is BMONI **connectivity** evidence, not an end-to-end transaction test."
+          } >> "$GITHUB_STEP_SUMMARY"
