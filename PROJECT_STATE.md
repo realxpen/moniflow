@@ -1,5 +1,10 @@
 # MONIFlow Project State
 
+## Phase 24 production release attempt (2026-10-15)
+
+Following merged PR #20 (`9bf7266`) and successful post-merge CI #311, attempted an API-first Git-connected production Vercel deployment. Vercel Hobby rejected the only publish request with HTTP 402 `api-deployments-free-per-day`, more than 100 deployments, `retryAfter=86400`. No API publish or website deploy occurred, production aliases remain on the prior READY SHA, `AUTHENTICATED_SANDBOX_DEMO_ENABLED=false` (read back before attempt), and BMONI partner registration remains disabled. See `docs/PHASE24_VERCEL_RELEASE_ATTEMPT.md`. Wait for quota reset or explicit plan resolution; never conflate merged development with live deployment or with BMONI identity recovery.
+
+
 ## Phase 24 — BMONI owner-proof and KYC identity readiness (2026-10-15)
 
 Made the native BMONI SDK owner-proof path stricter: validate EVM address, provider challenge fields, a 65-byte EIP-191 signature, and expiry guard before sending managed wallet creation. Nigeria KYC now selects one of BMONI's two *documented* Nigerian sandbox personas, leaves undocumented identity/document inputs empty, and rejects accidental mixed names/phones/BVNs before profile submission, document upload or activation. Existing onboarding 409 halt now includes an explicit safe support email compose path with provider request reference but no financial/identity secrets. Regression tests cover invalid data and challenge aging. See `docs/PHASE24_KYC_DEVICE_READINESS.md`. **No sandbox user ID was recovered, no native wallet or KYC provider request executed, and no production release/financial feature was enabled.** Release and actual identity ownership remain separate gates.
