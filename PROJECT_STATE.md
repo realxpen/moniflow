@@ -1,5 +1,10 @@
 # MONIFlow Project State
 
+## Phase 23 — Cloud-only BMONI test fixture (2026-10-15)
+
+Built a browser-triggered GitHub Actions sandbox workflow (`.github/workflows/bmoni-cloud-fixture.yml`), requiring main-branch workflow_dispatch and exact explicit acknowledgment for the only permitted write: creating one published BMONI test identity (Bunch Dillon). It uses the public BMONI sandbox key recovered from official HTTPS documentation and checked against a reviewed hash (no secret stored in GitHub or copied out of Vercel). The same workflow supports read-only CNGN connectivity and inspecting one test-user's wallet/balance/KYC/onboarding endpoints with redacted stage results. All provider execution is single-shot; HTTP 409 or uncertain responses halt and require reconciliation. No wallet device signing, KYC submission, transactions, provider registration toggle, private database mutation, or public API endpoint. See `docs/PHASE23_BMONI_CLOUD_FIXTURE.md`. **No live user was created merely by merging the code: the provider-writing workflow is manual and requires separate typed acknowledgment.** GitHub CI must pass before merging.
+
+
 ## Phase 21 — Isolated authenticated demo Pockets and Activity (2026-10-15)
 
 Branch `feat/phase21-sandbox-money-spaces-activity` adds dedicated simulated money-space and activity screens at `/demo/pockets` and `/demo/activity`. Both perform read-only authenticated loads of the separate sandbox ledger, reject stale account responses, check arithmetic and simulation evidence, and never link their data to provider-backed financial tables or imply a settled bank payment. The canonical completed state projects a ₦20,000 Laptop allocation and precisely two simulated activity entries, with ₦240,000 illustrative available funds. The demo screen links to both routes, and `sandbox-view.test.ts` covers invariant violations and pending/reset states. See `docs/PHASE21_SANDBOX_VIEWS.md`. GitHub CI and review required. **Phase 20 live release is still blocked by quota and remains unverified; real BMONI registration, settlement, and production flag are unchanged.**
