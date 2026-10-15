@@ -2,6 +2,12 @@ name: MONIFlow BMONI Sandbox Fixture — Cloud
 
 # Owner-initiated sandbox tests only. No automatic provider user creation.
 on:
+  # Run safe read-only sandbox connectivity automatically when THIS workflow changes on main.
+  # No push can create a user: source gate permits writes on workflow_dispatch only.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/bmoni-cloud-fixture.yml"
   workflow_dispatch:
     inputs:
       action:
@@ -40,7 +46,7 @@ jobs:
       NODE_ENV: development
       FINANCIAL_PROVIDER: bmoni
       BMONI_BASE_URL: https://embedded-dev.bmoni.com
-      MONIFLOW_FIXTURE_ACTION: ${{ inputs.action }}
+      MONIFLOW_FIXTURE_ACTION: ${{ inputs.action || 'connectivity' }}
       MONIFLOW_FIXTURE_ACKNOWLEDGMENT: ${{ inputs.acknowledgment }}
       MONIFLOW_FIXTURE_USER_ID: ${{ inputs.bmoni_user_id }}
     steps:

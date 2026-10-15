@@ -31,12 +31,27 @@ const gateway = () => ({
 describe("BMONI cloud sandbox fixture gate", () => {
   it("allows only manual main-branch GitHub Actions and the exact sandbox provider", () => {
     for (const change of [
-      { githubActions: "false" }, { githubEvent: "push" },
+      { githubActions: "false" },
       { githubRef: "refs/pull/12/merge" }, { githubRef: "refs/heads/feature" },
       { financialProvider: "moniflow-sandbox" }, { baseUrl: "https://embedded.bmoni.com" }
     ]) {
       expect(() => validateCloudFixtureRequest({ ...valid, ...change })).toThrow();
     }
+  });
+
+  it("permits only connectivity on an automatic main-branch push", () => {
+    expect(validateCloudFixtureRequest({ ...valid, githubEvent: "push" })).toBe("connectivity");
+    expect(() => validateCloudFixtureRequest({
+      ...valid, githubEvent: "push", action: "create-fixture",
+      acknowledgment: CREATE_FIXTURE_ACK
+    })).toThrow("NOT_AUTHORIZED");
+    expect(() => validateCloudFixtureRequest({
+      ...valid, githubEvent: "push", action: "inspect-user",
+      userId: "sandbox-bunch-01"
+    })).toThrow("NOT_AUTHORIZED");
+    expect(() => validateCloudFixtureRequest({
+      ...valid, githubEvent: "push", acknowledgment: "unexpected"
+    })).toThrow("UNEXPECTED_INPUT");
   });
 
   it("fails closed for unrecognized action and unexpected read inputs", () => {
