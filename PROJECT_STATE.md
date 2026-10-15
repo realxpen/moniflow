@@ -1,5 +1,10 @@
 # MONIFlow Project State
 
+## Phase 24 — BMONI owner-proof and KYC identity readiness (2026-10-15)
+
+Made the native BMONI SDK owner-proof path stricter: validate EVM address, provider challenge fields, a 65-byte EIP-191 signature, and expiry guard before sending managed wallet creation. Nigeria KYC now selects one of BMONI's two *documented* Nigerian sandbox personas, leaves undocumented identity/document inputs empty, and rejects accidental mixed names/phones/BVNs before profile submission, document upload or activation. Existing onboarding 409 halt now includes an explicit safe support email compose path with provider request reference but no financial/identity secrets. Regression tests cover invalid data and challenge aging. See `docs/PHASE24_KYC_DEVICE_READINESS.md`. **No sandbox user ID was recovered, no native wallet or KYC provider request executed, and no production release/financial feature was enabled.** Release and actual identity ownership remain separate gates.
+
+
 ## Phase 23 — Cloud-only BMONI test fixture (2026-10-15)
 
 Built a browser-triggered GitHub Actions sandbox workflow (`.github/workflows/bmoni-cloud-fixture.yml`), requiring main-branch workflow_dispatch and exact explicit acknowledgment for the only permitted write: creating one published BMONI test identity (Bunch Dillon). It uses the public BMONI sandbox key recovered from official HTTPS documentation and checked against a reviewed hash (no secret stored in GitHub or copied out of Vercel). The same workflow supports read-only CNGN connectivity and inspecting one test-user's wallet/balance/KYC/onboarding endpoints with redacted stage results. All provider execution is single-shot; HTTP 409 or uncertain responses halt and require reconciliation. No wallet device signing, KYC submission, transactions, provider registration toggle, private database mutation, or public API endpoint. See `docs/PHASE23_BMONI_CLOUD_FIXTURE.md`. **No live user was created merely by merging the code: the provider-writing workflow is manual and requires separate typed acknowledgment.** GitHub CI must pass before merging.

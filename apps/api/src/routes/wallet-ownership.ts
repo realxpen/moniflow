@@ -17,8 +17,9 @@ const challengeBodySchema = z.object({ localUserId: localUserIdSchema, ownerAddr
 const createWalletBodySchema = z.object({
   localUserId: localUserIdSchema,
   ownerAddress: ownerAddressSchema,
-  challengeId: z.string().min(1),
-  signature: z.string().regex(/^0x[a-fA-F0-9]+$/)
+  challengeId: z.string().trim().min(1).max(256),
+  // 65-byte EIP-191 signature only. A proposal hash signature is a distinct flow.
+  signature: z.string().regex(/^0x[a-fA-F0-9]{130}$/)
 }).strict();
 
 type WalletOwnershipRouteOptions = {
