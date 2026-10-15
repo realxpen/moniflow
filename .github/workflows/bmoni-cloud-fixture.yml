@@ -1,6 +1,6 @@
 name: MONIFlow BMONI Sandbox Fixture — Cloud
 
-# Owner-initiated sandbox tests only. No automatic provider user creation.
+# Owner-initiated real BMONI sandbox user tests only. No automatic provider user creation.
 on:
   # Run safe read-only sandbox connectivity automatically when THIS workflow changes on main.
   # No push can create a user: source gate permits writes on workflow_dispatch only.
@@ -18,9 +18,10 @@ on:
         options:
           - connectivity
           - create-fixture
+          - create-custom-user
           - inspect-user
       acknowledgment:
-        description: "For create-fixture ONLY enter CREATE_ONE_BMONI_SANDBOX_TEST_USER"
+        description: "For create-custom-user enter CREATE_ONE_MONIFLOW_BMONI_SANDBOX_USER (create-fixture uses its original exact acknowledgment)"
         required: false
         type: string
       bmoni_user_id:
@@ -32,7 +33,7 @@ permissions:
   contents: read
 
 concurrency:
-  # Ensures two GitHub runs cannot concurrently create this known fixture.
+  # Serializes all BMONI sandbox creation/inspection runs; no concurrency retry.
   group: moniflow-bmoni-known-sandbox-fixture
   cancel-in-progress: false
 
