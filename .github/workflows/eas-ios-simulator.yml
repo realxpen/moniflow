@@ -1,0 +1,99 @@
+name: MONIFlow iOS Simulator — Expo Cloud Build
+
+# Deliberately manual and simulator-only: no Apple credentials, IPA, TestFlight,
+# real device provisioning, production financial enablement, or automatic builds.
+on:
+  workflow_dispatch:
+    inputs:
+      expo_owner:
+        description: "Your Expo account username or team owner (not email or token)"
+        required: true
+        type: string
+      approval:
+        description: "Enter LINK_AND_BUILD_MONIFLOW_IOS_SIMULATOR exactly"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moniflow-eas-ios-simulator-only
+  cancel-in-progress: false
+
+jobs:
+  ios-simulator:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      EXPO_OWNER: ${{ inputs.expo_owner }}
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      APPROVAL: ${{ inputs.approval }}
+      CI: "1"
+    steps:
+      - name: Verify explicit simulator-only approval and Expo connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$APPROVAL" != "LINK_AND_BUILD_MONIFLOW_IOS_SIMULATOR" ]]; then
+            echo "::error::Explicit iOS Simulator build approval is required."
+            exit 1
+          fi
+          if [[ ! "$EXPO_OWNER" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,49}$ ]]; then
+            echo "::error::Enter a valid Expo owner username, not an email, password or token."
+            exit 1
+          fi
+          if [[ -z "$EXPO_TOKEN" ]]; then
+            echo "::error::Add EXPO_TOKEN via GitHub repository Settings → Secrets and variables → Actions. Never paste it in this chat or commit it."
+            exit 1
+          fi
+          echo "Build platform: iOS Simulator ONLY (Apple Developer account is not used)."
+
+      - uses: actions/checkout@v4
+      - name: Enable Corepack
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install MONIFlow monorepo dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Validate simulator configuration and TypeScript
+        run: |
+          node --test scripts/phase26-eas-simulator.nodecheck.mjs
+          pnpm typecheck
+      - name: Set up EAS CLI using the GitHub secret
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Link or create MONIFlow Expo project in chosen account
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The change to app.json is limited to this transient GitHub runner.
+          # Do not commit any unrelated runtime-generated Expo config.
+          eas init --account "$EXPO_OWNER" --non-interactive
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const app = JSON.parse(fs.readFileSync("app.json", "utf8")).expo;
+          const projectId = app.extra?.eas?.projectId;
+          if (typeof projectId !== "string" || !/^[0-9a-f-]{36}$/i.test(projectId)) {
+            throw new Error("Expo did not link the project ID; no iOS build was submitted.");
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            "## MONIFlow Expo iOS Simulator build\n" +
+            "- Expo owner: `" + process.env.EXPO_OWNER + "`\n" +
+            "- Expo projectId: `" + projectId + "`\n" +
+            "- This is a simulator app, NOT an installable iPhone IPA.\n" +
+            "- MONIFlow production BMONI onboarding and financial simulation flags were NOT changed.\n");
+          NODE
+      - name: Request exactly one standalone iOS Simulator build
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          eas build --platform ios --profile ios-simulator --non-interactive --no-wait
+          echo "- One iOS Simulator build requested on Expo EAS; check expo.dev for progress, completion, and the simulator artifact." >> "$GITHUB_STEP_SUMMARY"
