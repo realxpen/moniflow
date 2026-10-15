@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { FlowHeader, PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { apiFetch } from "@/services/api-fetch";
@@ -180,6 +180,11 @@ export default function IdentityScreen() {
           <Text style={styles.title}>Registration stopped safely.</Text>
           <Text style={styles.subtle}>Do not repeat this BMONI user-creation request. Recover/reset the persona through BMONI support before proceeding. The existing provider user ID must never be guessed.</Text>
           {supportRequestId ? <Text style={styles.subtle}>Provider request reference: {supportRequestId}</Text> : null}
+          <Text style={styles.subtle}>To recover the existing provider user ID, contact BMONI's developer support. Share the request reference if available, but never send your API key, BVN, PIN or private wallet key.</Text>
+          <SecondaryButton onPress={() => void Linking.openURL(
+            "mailto:developers@bkey.me?subject=" + encodeURIComponent("MONIFlow sandbox user 409 recovery") +
+            "&body=" + encodeURIComponent("Hello BMONI team, MONIFlow received an HTTP 409 creating a documented sandbox test persona. Please advise how to recover or reconcile the existing bmoniUserId for our partner sandbox. Provider request reference: " + (supportRequestId ?? "not available") + ". We will not retry the registration until confirmed.")
+          )}>Ask BMONI to reconcile the sandbox user</SecondaryButton>
           <SecondaryButton onPress={() => router.push("/demo/operator")}>Open the isolated Operator simulation</SecondaryButton>
         </SoftCard>
       ) : null}
