@@ -43,7 +43,6 @@ jobs:
     timeout-minutes: 10
     env:
       # Keep host fixed to the explicitly documented shared-key development environment.
-      NODE_ENV: development
       FINANCIAL_PROVIDER: bmoni
       BMONI_BASE_URL: https://embedded-dev.bmoni.com
       MONIFLOW_FIXTURE_ACTION: ${{ inputs.action || 'connectivity' }}
@@ -63,4 +62,6 @@ jobs:
         run: pnpm typecheck && pnpm test
       - name: Execute exactly one approved BMONI sandbox stage
         shell: bash
+        env:
+          NODE_ENV: development
         run: pnpm --filter @moniflow/api lab:bmoni:cloud
