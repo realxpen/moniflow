@@ -20,6 +20,9 @@ test("MONIFlow iOS Simulator is a separate unsigned standalone build profile", (
   assert.equal(profile.env.EXPO_PUBLIC_API_URL, "https://moniflow-api-silk.vercel.app");
   assert.equal(profile.env.EAS_NO_FROZEN_LOCKFILE, "1");
   assert.equal(app.ios.bundleIdentifier, "com.realxpen.moniflow");
+  assert.equal(app.owner, "xpen");
+  assert.equal(app.slug, "moniflow");
+  assert.equal(app.extra?.eas?.projectId, "3d986249-f72b-494b-9ceb-eef8335a5ae0");
 });
 
 test("cloud workflow is manual, branch-bound, simulator-only, and blocks missing credentials", () => {
@@ -29,7 +32,10 @@ test("cloud workflow is manual, branch-bound, simulator-only, and blocks missing
   assert.match(workflow, /LINK_AND_BUILD_MONIFLOW_IOS_SIMULATOR/);
   assert.match(workflow, /secrets\.EXPO_TOKEN/);
   assert.match(workflow, /\[\[ -z "\$EXPO_TOKEN" \]\]/);
-  assert.match(workflow, /eas init --account "\$EXPO_OWNER" --non-interactive/);
+  assert.match(workflow, /EXPO_OWNER" != "xpen"/);
+  assert.match(workflow, /projectId !== "3d986249-f72b-494b-9ceb-eef8335a5ae0"/);
+  assert.match(workflow, /eas project:info/);
+  assert.doesNotMatch(workflow, /eas init|eas project:init|--force/);
   assert.match(workflow, /eas build --platform ios --profile ios-simulator --non-interactive --no-wait/);
   assert.doesNotMatch(workflow, /--auto-submit|\beas submit\b|\bvercel deploy\b|BMONI_API_KEY/);
 });
