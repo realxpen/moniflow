@@ -6,6 +6,7 @@ import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import { PrimaryButton, Screen, StatusPill } from "@/components/ui";
 import { bmoniDevice } from "@/services/bmoni-device";
+import { assertDeviceOwnerAddress, assertOwnerProofChallenge, assertOwnerProofSignature } from "@/services/bmoni-owner-proof-policy";
 import { colors, radius, spacing, typography } from "@/theme";
 
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL ?? "";
@@ -159,7 +160,7 @@ export default function NativeWalletSetupScreen() {
       const address = (await bmoniDevice.hasWallet())
         ? await bmoniDevice.walletAddress()
         : await bmoniDevice.initWallet();
-      if (!address) throw new Error("BMONI did not return a device wallet address.");
+      assertDeviceOwnerAddress(address);
 
       if (await bmoniDevice.hasPin()) {
         if (!(await bmoniDevice.matchPin(pin))) throw new Error("The PIN does not match this device wallet.");
@@ -176,14 +177,17 @@ export default function NativeWalletSetupScreen() {
         body: JSON.stringify({ localUserId, ownerAddress: address })
       });
       const challenge = (await challengeResponse.json()) as { challengeId?: string; message?: string; code?: string; messageText?: string };
+      const challengeReceivedAtMs = Date.now();
       if (!challengeResponse.ok || !challenge.challengeId || !challenge.message) {
         if (challenge.code === "WALLET_ALREADY_CREATED" && await restorePersistedWallet(apiUrl)) return;
         throw new Error(challenge.message ?? challenge.messageText ?? "Ownership challenge could not be created.");
       }
 
+      assertOwnerProofChallenge(challenge);
       // Owner proof is EIP-191 text signing. Proposal execution later uses
       // signTransactionHash and never reuses this signature method.
       const signature = await bmoniDevice.signMessage(challenge.message, pin);
+      assertOwnerProofSignature(signature, challengeReceivedAtMs, Date.now());
       update("ownership", "done");
 
       update("cngn", "working");
