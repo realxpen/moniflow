@@ -1,4 +1,8 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src/**/*.ts", "scripts/shared-key-lab.ts"]
+  "include": [
+    "src/**/*.ts",
+    "scripts/shared-key-lab.ts",
+    "scripts/bmoni-cloud-fixture.ts"
+  ]
 }
