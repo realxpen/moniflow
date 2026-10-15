@@ -209,6 +209,10 @@ export default function ApiBackedSandboxScreen() {
               ) : null}
             </SoftCard>
           )}
+          <View style={styles.demoLinks}>
+            <SecondaryButton onPress={() => router.push("/demo/pockets")}>View simulated money spaces</SecondaryButton>
+            <SecondaryButton onPress={() => router.push("/demo/activity")}>View simulated activity</SecondaryButton>
+          </View>
           <SecondaryButton disabled={busy || loading} onPress={() => void load()}>Recheck saved server state</SecondaryButton>
           <SoftCard style={styles.card}>
             <Text style={styles.micro}>RESET ONLY THIS SIMULATED WORKSPACE</Text>
@@ -247,6 +251,7 @@ function MoneyRow({ title, amount, emphasis = false }: { title: string; amount: 
 const styles = StyleSheet.create({
   page: { gap: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.xxxl },
   card: { gap: spacing.md },
+  demoLinks: { gap: spacing.sm },
   heading: { ...typography.section, color: colors.textPrimary },
   copy: { ...typography.body, color: colors.textSecondary, flexShrink: 1 },
   micro: { ...typography.technical, color: colors.statusProcessing },
