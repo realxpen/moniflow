@@ -12,14 +12,14 @@ The owner can initiate a separately controlled test from the **GitHub web interf
 
 [Actions → MONIFlow BMONI Sandbox Fixture — Cloud](https://github.com/realxpen/moniflow/actions/workflows/bmoni-cloud-fixture.yml)
 
-1. **connectivity (read only)** — call `GET /v1/smart-wallets/supported-currencies`, require `CNGN`. Uses the public shared sandbox key, fetched from BMONI's official HTTPS documentation at runtime and verified against its reviewed SHA-256 fingerprint. If documentation is unavailable or the key changes, **stop**. No key is stored in GitHub, published into a workflow log or copied from Vercel.
+1. **connectivity (read only)** — automatically runs once on merge when the workflow file changes, and can also be dispatched manually; call `GET /v1/smart-wallets/supported-currencies`, require `CNGN`. Uses the public shared sandbox key, fetched from BMONI's official HTTPS documentation at runtime and verified against its reviewed SHA-256 fingerprint. If documentation is unavailable or the key changes, **stop**. No key is stored in GitHub, published into a workflow log or copied from Vercel.
 2. **create-fixture (one sandbox POST)** — selects exactly one documented test persona: Bunch Dillon, `bunch.dillon@example.com`, `+2348000000000`. Requires choosing `create-fixture` AND typing the exact action-specific acknowledgment `CREATE_ONE_BMONI_SANDBOX_TEST_USER` in the GitHub workflow form. Only one `POST /v1/users` is made. On success, GitHub's job summary shows the **sandbox test identity ID**, which is not a MONIFlow app user ID and is needed for subsequent read-only inspection. **Do not enter any personal customer information.**
 3. **inspect-user (read only)** — supply the BMONI sandbox test ID from the earlier creation result. Calls the existing BMONI client to read `GET` wallets, balances, KYC readiness and onboarding status. Prints **only PASS/BLOCKED per endpoint**: no personal data, wallet addresses, BVNs, balances, provider bodies, or API keys.
 4. **Device ownership is NOT bypassed** — `readyForDeviceProof` remains false until a device-owned test wallet creates an EIP-191 owner signature over an actual BMONI challenge. This phase never generates/stores a private key, signs, deploys a wallet, submits KYC or sends money.
 
 ## How to operate (no terminal)
 
-1. After the Phase 23 PR is merged and CI is green, open [the GitHub Action](https://github.com/realxpen/moniflow/actions/workflows/bmoni-cloud-fixture.yml).
+1. After the Phase 23 PR is merged and CI is green, the workflow performs one automatic read-only connectivity check. For further checks open [the GitHub Action](https://github.com/realxpen/moniflow/actions/workflows/bmoni-cloud-fixture.yml).
 2. Pick `connectivity` and select **Run workflow**. The job must pass `CNGN` support before the next action.
 3. For one expressly approved BMONI sandbox test identity, select `create-fixture`, leave `bmoni_user_id` blank and enter exact acknowledgment `CREATE_ONE_BMONI_SANDBOX_TEST_USER`; click **Run workflow** **once**.
 4. Read the result. On success, note the returned sandbox-only `bmoniUserId` from the job summary.
