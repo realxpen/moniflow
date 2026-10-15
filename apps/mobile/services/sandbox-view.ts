@@ -1,5 +1,7 @@
 import type { ApiSandboxWorkspace } from "./sandbox-api";
 
+const SIMULATED_OPENING = 300_000;
+
 export type SimulatedPocket = { reference: string; label: string; amount: number };
 export type SimulatedActivity = ApiSandboxWorkspace["activity"][number];
 
@@ -18,7 +20,11 @@ export function isConsistentSandboxReadModel(workspace: ApiSandboxWorkspace): bo
       !Array.isArray(workspace.activity)) return false;
 
   const completed = workspace.plan?.state === "COMPLETED";
-  if (!completed) return workspace.activity.length === 0 && workspace.internalAllocated === 0;
+  if (!completed) return workspace.activity.length === 0 && workspace.internalAllocated === 0 &&
+    workspace.providerBalance === SIMULATED_OPENING && workspace.availableToSpend === SIMULATED_OPENING;
+
+  const totals = workspace.plan?.plan?.totals;
+  if (!totals) return false;
 
   if (workspace.activity.length !== 2) return false;
   const references = new Set<string>();
@@ -37,9 +43,10 @@ export function isConsistentSandboxReadModel(workspace: ApiSandboxWorkspace): bo
     }
   }
   return withdrawal > 0 && allocation > 0 &&
+    workspace.providerBalance === SIMULATED_OPENING - withdrawal &&
     allocation === workspace.internalAllocated &&
-    withdrawal === workspace.plan.plan.totals.externalMovement &&
-    allocation === workspace.plan.plan.totals.internalAllocation;
+    withdrawal === totals.externalMovement &&
+    allocation === totals.internalAllocation;
 }
 
 export function simulatedPocketAllocations(workspace: ApiSandboxWorkspace): SimulatedPocket[] {
