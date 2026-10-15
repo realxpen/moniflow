@@ -1,0 +1,60 @@
+name: MONIFlow BMONI Sandbox Fixture — Cloud
+
+# Owner-initiated sandbox tests only. No automatic provider user creation.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "BMONI sandbox operation (single action per run)"
+        type: choice
+        required: true
+        default: connectivity
+        options:
+          - connectivity
+          - create-fixture
+          - inspect-user
+      acknowledgment:
+        description: "For create-fixture ONLY enter CREATE_ONE_BMONI_SANDBOX_TEST_USER"
+        required: false
+        type: string
+      bmoni_user_id:
+        description: "For inspect-user ONLY: BMONI sandbox test user's ID"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # Ensures two GitHub runs cannot concurrently create this known fixture.
+  group: moniflow-bmoni-known-sandbox-fixture
+  cancel-in-progress: false
+
+jobs:
+  sandbox-fixture:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Keep host fixed to the explicitly documented shared-key development environment.
+      NODE_ENV: development
+      FINANCIAL_PROVIDER: bmoni
+      BMONI_BASE_URL: https://embedded-dev.bmoni.com
+      MONIFLOW_FIXTURE_ACTION: ${{ inputs.action }}
+      MONIFLOW_FIXTURE_ACKNOWLEDGMENT: ${{ inputs.acknowledgment }}
+      MONIFLOW_FIXTURE_USER_ID: ${{ inputs.bmoni_user_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable Corepack
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install from repository lockfile
+        run: pnpm install --frozen-lockfile
+      - name: Verify required cloud checks before provider access
+        run: pnpm typecheck && pnpm test
+      - name: Execute exactly one approved BMONI sandbox stage
+        shell: bash
+        run: pnpm --filter @moniflow/api lab:bmoni:cloud
