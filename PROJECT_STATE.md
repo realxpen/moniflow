@@ -1,5 +1,10 @@
 # MONIFlow Project State
 
+## Phase 21 — Isolated authenticated demo Pockets and Activity (2026-10-15)
+
+Branch `feat/phase21-sandbox-money-spaces-activity` adds dedicated simulated money-space and activity screens at `/demo/pockets` and `/demo/activity`. Both perform read-only authenticated loads of the separate sandbox ledger, reject stale account responses, check arithmetic and simulation evidence, and never link their data to provider-backed financial tables or imply a settled bank payment. The canonical completed state projects a ₦20,000 Laptop allocation and precisely two simulated activity entries, with ₦240,000 illustrative available funds. The demo screen links to both routes, and `sandbox-view.test.ts` covers invariant violations and pending/reset states. See `docs/PHASE21_SANDBOX_VIEWS.md`. GitHub CI and review required. **Phase 20 live release is still blocked by quota and remains unverified; real BMONI registration, settlement, and production flag are unchanged.**
+
+
 ## Phase 20 — release verification batch (2026-10-14)
 
 Branch `chore/phase20-readonly-release-checks` adds the GET-only production health/security smoke probe and CLI, offline regression checks included in `pnpm test`, and the quota-safe release/authenticated acceptance runbook (`docs/PHASE20_READONLY_RELEASE_CHECKLIST.md`). Vercel domains still resolve to older production deployment IDs; the last release attempt was rejected by Vercel Hobby daily deployment quota. Supabase MONIFlow project is ACTIVE_HEALTHY and `moniflow_private` remains inaccessible to `anon`, `authenticated`, and `service_role`; the separate `isolated_sandbox_demo_v1` table has not yet been initialized. No live runtime smoke has passed, no production flag changed, no new Vercel deployment, no provider transactions, and no real BMONI partner onboarding. Do not merge/deploy or mark Phase 20 complete without passing CI, quota availability, a fresh release gate, and end-to-end disposable-account evidence.
