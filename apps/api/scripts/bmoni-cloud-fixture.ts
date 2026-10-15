@@ -1,5 +1,4 @@
 /** Cloud runner entrypoint. No local setup, Vercel secret export or public API endpoint. */
-import { getBmoniConfig } from "../src/services/bmoni/config.js";
 import { BmoniClient } from "../src/services/bmoni/client.js";
 import { BmoniProviderError } from "../src/services/bmoni/errors.js";
 import { validateCloudFixtureRequest, runCloudFixtureAction } from "../src/services/bmoni/cloud-fixture-gate.js";
@@ -21,6 +20,8 @@ async function main() {
   const key = await loadPublicSandboxKey();
   // Never print the key, copy it to GitHub secrets/artifacts, or put it in GITHUB_ENV.
   process.env.BMONI_API_KEY = key;
+  // Load config only AFTER injecting the ephemeral public key. Env parser freezes at import time.
+  const { getBmoniConfig } = await import("../src/services/bmoni/config.js");
   const config = getBmoniConfig();
   const gateway = new BmoniClient(config);
   const outcome = await runCloudFixtureAction(input, gateway);
