@@ -6,7 +6,7 @@
 
 MONIFlow is managed through GitHub and Vercel. **The default operator workflow does not require a laptop or `.env` file.** This is the first checkpoint, and it is intentionally read-only.
 
-1. On GitHub, open **Actions → MONIFlow BMONI Cloud Read-Only Probe → Run workflow** after merging the PR. The workflow is `workflow_dispatch` only; it does not change deployments.
+1. **The cloud probe runs automatically once its files are merged to `main`.** It can also be rerun from GitHub **Actions → MONIFlow BMONI Cloud Read-Only Probe → Run workflow**. No local setup, new secret or production deployment is required.
 2. GitHub's cloud runner issues GET requests only to the already-deployed Vercel API: `/health`, `/health/bmoni`, `/health/provider`.
 3. The deployed API—**not the GitHub runner**—reads its existing `BMONI_BASE_URL` and `BMONI_API_KEY` settings and requests BMONI supported currencies. GitHub never needs, fetches, downloads or logs the shared key.
 4. A pass confirms server-to-server BMONI sandbox connectivity, correct provider selection, production Node environment and `BMONI_PARTNER_ONBOARDING_ENABLED=false`. A failed job is diagnostic only, **not** authorization to enable public user creation.
