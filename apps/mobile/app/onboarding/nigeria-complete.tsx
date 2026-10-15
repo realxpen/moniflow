@@ -72,7 +72,8 @@ export default function CompleteNigeriaOnboardingScreen() {
     }
     const expected = getSandboxPersona(selectedPersona);
     assertDocumentedSandboxPersona({ firstName, lastName, phoneNumber, bvn });
-    if (expected.firstName !== firstName.trim() || expected.lastName !== lastName.trim()) {
+    if (expected.firstName !== firstName.trim() || expected.lastName !== lastName.trim() ||
+        expected.phoneNumber !== phoneNumber.trim() || expected.bvn !== bvn.trim()) {
       throw new Error("The selected BMONI sandbox identity does not match the KYC profile.");
     }
   };
