@@ -56,6 +56,7 @@ describe("isolated demo financial read models", () => {
     const state = completed();
     for (const invalid of [
       { ...state, availableToSpend: 239999 },
+      { ...state, providerBalance: 500000, availableToSpend: 480000 },
       { ...state, internalAllocated: 21000, availableToSpend: 239000 },
       { ...state, activity: [{ ...state.activity[0]!, amount: 20000 }, state.activity[1]!] },
       { ...state, activity: [state.activity[0]!, { ...state.activity[1]!, reference: state.activity[0]!.reference }] },
