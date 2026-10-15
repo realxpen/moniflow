@@ -2,6 +2,24 @@
 
 **Status:** Code-only, opt-in. This is a local developer test harness, **not** production partner activation and **not** the authenticated simulated ₦300,000 MONIFlow demo.
 
+## Default workflow — Cloud only (no local setup)
+
+MONIFlow is managed through GitHub and Vercel. **The default operator workflow does not require a laptop or `.env` file.** This is the first checkpoint, and it is intentionally read-only.
+
+1. On GitHub, open **Actions → MONIFlow BMONI Cloud Read-Only Probe → Run workflow** after merging the PR. The workflow is `workflow_dispatch` only; it does not change deployments.
+2. GitHub's cloud runner issues GET requests only to the already-deployed Vercel API: `/health`, `/health/bmoni`, `/health/provider`.
+3. The deployed API—**not the GitHub runner**—reads its existing `BMONI_BASE_URL` and `BMONI_API_KEY` settings and requests BMONI supported currencies. GitHub never needs, fetches, downloads or logs the shared key.
+4. A pass confirms server-to-server BMONI sandbox connectivity, correct provider selection, production Node environment and `BMONI_PARTNER_ONBOARDING_ENABLED=false`. A failed job is diagnostic only, **not** authorization to enable public user creation.
+5. The GitHub Actions run prints only sanitized stage results. Any real sandbox user creation or wallet write remains outside the cloud probe and requires a separate reviewed cloud-operated workflow with an explicit approval gate.
+
+Direct browser-accessible run: https://github.com/realxpen/moniflow/actions/workflows/bmoni-cloud-readonly.yml
+
+This public health probe performs a real BMONI API read **only if** the deployed API has selected the BMONI provider and valid existing credentials. It does not prove who owns the credentials or that a dedicated partner key was issued. It never executes the isolated `/demo/live` simulated financial actions.
+
+## Optional developer-local diagnostic (not required for project progress)
+
+The original `lab:bmoni` CLI remains useful as an optional development test harness. **You do not need to run it locally to complete the initial cloud connectivity checkpoint.** The sections below document it for future authorized developer use; they are not instructions for the MONIFlow owner to install anything.
+
 ## Why this exists
 
 BMONI's official quickstart documents a shared sandbox API key that works only with `https://embedded-dev.bmoni.com`. It explicitly permits sandbox exploration before a dedicated production key is issued. Sandbox user/wallet creation is part of the documented lifecycle, but this shared credential must never become open public user provisioning. The BMONI API supports the lifecycle **user → wallet → KYC → rail → fund → money movement**, with separate device signing.
