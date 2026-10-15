@@ -11,7 +11,7 @@ export const BMONI_SANDBOX_PERSONAS = [
 ] as const;
 
 export type SandboxPersonaId = typeof BMONI_SANDBOX_PERSONAS[number]["id"];
-export type SandboxPersonaFields = Pick<typeof BMONI_SANDBOX_PERSONAS[number], "firstName" | "lastName" | "phoneNumber" | "bvn">;
+export type SandboxPersonaFields = { firstName: string; lastName: string; phoneNumber: string; bvn: string };
 export function getSandboxPersona(id: SandboxPersonaId) {
   return BMONI_SANDBOX_PERSONAS.find(persona => persona.id === id)!;
 }
