@@ -1,3 +1,4 @@
+import { AuthenticatedWorkspace } from "@/components/AuthenticatedWorkspace";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -38,7 +39,15 @@ const suggestions = [
   "Show my recent activity"
 ];
 
+/**
+ * Production builds always use the JWT-owned workspace overview.
+ * The historical tab implementation is retained for isolated __DEV__ only.
+ */
 export default function HomeScreen() {
+  return __DEV__ ? <LegacyHomeScreen /> : <AuthenticatedWorkspace tab="home" />;
+}
+
+function LegacyHomeScreen() {
   const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
   const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
   const savedLocalUserId = useDemoSession((state) => state.localUserId);
