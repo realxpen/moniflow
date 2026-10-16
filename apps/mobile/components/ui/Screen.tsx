@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from "react";
+import type { PropsWithChildren, Ref } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -14,6 +14,8 @@ import { colors, layout, spacing } from "@/theme";
 type ScreenProps = PropsWithChildren<{
   contentContainerStyle?: StyleProp<ViewStyle>;
   scroll?: boolean;
+  /** Optional ref for screens that must reset scroll position after an in-place step change. */
+  scrollRef?: Ref<ScrollView>;
   scrollProps?: Omit<ScrollViewProps, "contentContainerStyle">;
 }>;
 
@@ -21,6 +23,7 @@ export function Screen({
   children,
   contentContainerStyle,
   scroll = true,
+  scrollRef,
   scrollProps
 }: ScreenProps) {
   const contentStyle = [styles.content, contentContainerStyle];
@@ -30,6 +33,7 @@ export function Screen({
       {scroll ? (
         <ScrollView
           {...scrollProps}
+          ref={scrollRef}
           contentContainerStyle={contentStyle}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
