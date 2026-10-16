@@ -157,6 +157,10 @@ export default function WelcomeScreen() {
           >
             {launchReadiness.canOfferSignIn ? "Sign in to continue" : "Sign-in unavailable in this build"}
           </PrimaryButton>
+        ) : !__DEV__ && auth ? (
+          <PrimaryButton onPress={() => router.push("/auth/session")}>
+            Verify signed-in API session
+          </PrimaryButton>
         ) : sandboxDemo ? (
           <SecondaryButton disabled={preparing || checking || !ready || !__DEV__} onPress={() => void startCleanDemo()}>
             {preparing ? "Preparing clean demo…" : canResume ? "Restart with a clean sandbox demo" : "Start clean sandbox demo"}
