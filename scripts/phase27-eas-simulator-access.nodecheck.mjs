@@ -20,6 +20,13 @@ test("EAS Simulator workflow is manual and read-only, never starts a session", (
   assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
   assert.match(workflow, /secrets\.EXPO_TOKEN/);
   assert.match(workflow, /\[ -z "\$EXPO_TOKEN" \]/);
+  // Expo loads app.json plugins (including expo-router) before querying simulator access.
+  // A fresh GitHub runner must install our pnpm workspace before running eas-cli.
+  assert.match(workflow, /corepack enable/);
+  assert.match(workflow, /pnpm install --no-frozen-lockfile/);
+  const installIndex = workflow.indexOf("pnpm install --no-frozen-lockfile");
+  const accessIndex = workflow.indexOf("npx --yes eas-cli@latest simulator:availability --json");
+  assert.ok(installIndex > 0 && accessIndex > installIndex, "pnpm install must precede Expo availability");
   assert.match(workflow, /simulator:availability --json/);
   assert.doesNotMatch(workflow, /simulator:start|simulator:stop|simulator:exec|\beas build\b|\beas init\b|eas project:init|BMONI_API_KEY|VERCEL_TOKEN/);
   assert.match(workflow, /data\.available === true/);

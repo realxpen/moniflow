@@ -1,5 +1,10 @@
 # MONIFlow Project State
 
+## Phase 27 access-check failure and fix (2026-10-16)
+
+The first manual [EAS Simulator access workflow](https://github.com/realxpen/moniflow/actions/runs/38881412582) failed **before querying Expo eligibility** because GitHub did not install pnpm workspace dependencies. The EAS CLI reported `Failed to resolve plugin for module "expo-router"` while loading `apps/mobile/app.json`. This is **not** a negative eligibility result, token revocation, Apple provisioning failure or app compilation failure. The successful [Expo iOS Simulator build](https://expo.dev/accounts/xpen/projects/moniflow/builds/aee7b52f-2ae1-431a-9e02-bef7d012ebd4) remains unaffected. Fixed the manual workflow to enable Corepack, install pnpm workspace dependencies before EAS CLI, and added a regression test guarding execution order. No access check, simulator session, build or provider financial write is triggered by merging. Re-run the manual read-only eligibility check after CI; interpret only a later successful `AVAILABLE` or `NOT AVAILABLE` result as Expo eligibility evidence.
+
+
 ## Phase 27 — Successful Expo iOS Simulator build; account access check (2026-10-16)
 
 Owner-supplied [Expo build screenshot](https://expo.dev/accounts/xpen/projects/moniflow/builds/aee7b52f-2ae1-431a-9e02-bef7d012ebd4) confirms standalone `ios-simulator` build **Succeeded** (Expo SDK 57.0.0, 7m19s build), completing the compilation milestone. A real simulator launch and BMONI native-wallet behavior are NOT yet proven, and the `.app` cannot be installed on a physical iPhone. Added manual read-only GitHub `MONIFlow EAS Simulator Access — Cloud` workflow to check EAS Simulator availability for linked `@xpen/moniflow` using the existing encrypted `EXPO_TOKEN`; no simulator session is created, so no session runtime quota/charges are incurred by checking. Future browser-hosted simulator session requires its own approval because Expo limits eligibility and session runtime. See `docs/PHASE27_EAS_SIMULATOR_ACCESS.md`.
