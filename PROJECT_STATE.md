@@ -1,5 +1,10 @@
 # MONIFlow Project State
 
+## Phase 27 — Successful Expo iOS Simulator build; account access check (2026-10-16)
+
+Owner-supplied [Expo build screenshot](https://expo.dev/accounts/xpen/projects/moniflow/builds/aee7b52f-2ae1-431a-9e02-bef7d012ebd4) confirms standalone `ios-simulator` build **Succeeded** (Expo SDK 57.0.0, 7m19s build), completing the compilation milestone. A real simulator launch and BMONI native-wallet behavior are NOT yet proven, and the `.app` cannot be installed on a physical iPhone. Added manual read-only GitHub `MONIFlow EAS Simulator Access — Cloud` workflow to check EAS Simulator availability for linked `@xpen/moniflow` using the existing encrypted `EXPO_TOKEN`; no simulator session is created, so no session runtime quota/charges are incurred by checking. Future browser-hosted simulator session requires its own approval because Expo limits eligibility and session runtime. See `docs/PHASE27_EAS_SIMULATOR_ACCESS.md`.
+
+
 ## Phase 26 — Expo account/project linked; build submitted (2026-10-15)
 
 Github Actions [MONIFlow iOS Simulator run #2](https://github.com/realxpen/moniflow/actions/runs/38753238741) **passed** on Oct 15. Expo authenticated as `xpen`, created [@xpen/moniflow](https://expo.dev/accounts/xpen/projects/moniflow), and returned verified project ID `3d986249-f72b-494b-9ceb-eef8335a5ae0`. EAS accepted **one** iOS Simulator [build request `aee7b52f-2ae1-431a-9e02-bef7d012ebd4`](https://expo.dev/accounts/xpen/projects/moniflow/builds/aee7b52f-2ae1-431a-9e02-bef7d012ebd4). **Final EAS compilation status is not confirmed** because the Expo build page is authenticated and the GitHub runner used `--no-wait`. The `expo.owner` and `extra.eas.projectId` are now permanently saved in `apps/mobile/app.json`. Future GitHub build workflow checks exact owner and project ID, reads project info and explicitly does not auto-create/relink Expo projects. Still no Apple Developer signing, physical-iPhone native build, BMONI wallet proof, KYC, real transfers or Vercel latest-code release. Refer to `docs/PHASE26_EXPO_CLOUD_IOS_SIMULATOR.md`.
