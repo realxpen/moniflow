@@ -42,6 +42,14 @@ test("cloud workflow is manual, branch-bound, simulator-only, and blocks missing
 
 test("no privileged or secret Expo environment variables enter bundled JavaScript", () => {
   const environment = eas.build["ios-simulator"].env;
-  assert.deepEqual(Object.keys(environment).sort(), ["EAS_NO_FROZEN_LOCKFILE", "EXPO_PUBLIC_API_URL"]);
+  assert.deepEqual(Object.keys(environment).sort(), [
+    "EAS_NO_FROZEN_LOCKFILE", "EXPO_PUBLIC_API_URL",
+    "EXPO_PUBLIC_SUPABASE_ANON_KEY", "EXPO_PUBLIC_SUPABASE_URL"
+  ]);
+  assert.equal(environment.EXPO_PUBLIC_SUPABASE_URL, "https://rtcjismwbrvulccryyau.supabase.co");
+  // Modern sb_publishable_ keys are intentionally public in client bundles.
+  // NEVER embed Supabase service_role, sb_secret_, or actual auth JWTs.
+  assert.match(environment.EXPO_PUBLIC_SUPABASE_ANON_KEY, /^sb_publishable_[A-Za-z0-9_-]+$/);
+  assert.doesNotMatch(JSON.stringify(environment), /sb_secret_|service_role|refresh_token|BMONI_API_KEY/i);
   assert.equal(app.ios.infoPlist?.ITSAppUsesNonExemptEncryption, undefined);
 });
