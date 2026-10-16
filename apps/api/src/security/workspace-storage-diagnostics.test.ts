@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyWorkspaceStorageFailure } from "./workspace-storage-diagnostics";
+import { classifyWorkspaceStorageFailure } from "./workspace-storage-diagnostics.js";
 
 describe("workspace storage diagnostic is safe and bounded", () => {
   it.each([
