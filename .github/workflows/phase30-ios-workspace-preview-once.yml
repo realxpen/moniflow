@@ -1,0 +1,146 @@
+name: MONIFlow Phase 30 — One-Time Authenticated iOS Simulator Preview
+
+# Explicitly approved by project owner, never auto-runs on a later commit.
+# This path trigger is limited to FIRST creation of a single dated approval ticket.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/PHASE30_IOS_WORKSPACE_PREVIEW_ONE_SHOT_20261016.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moniflow-eas-ios-simulator-only
+  cancel-in-progress: false
+
+jobs:
+  phase30-ios-workspace-preview:
+    if: github.repository == 'realxpen/moniflow' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      BEFORE_SHA: ${{ github.event.before }}
+      CI: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Require first-time, explicitly approved release ticket and Expo secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          TICKET="docs/PHASE30_IOS_WORKSPACE_PREVIEW_ONE_SHOT_20261016.md"
+          if [[ "$GITHUB_RUN_ATTEMPT" != "1" || -z "$EXPO_TOKEN" ]]; then
+            echo "::error::First-run approval or existing Expo token missing. No iOS build submitted."
+            exit 1
+          fi
+          if ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null ||
+             git cat-file -e "${BEFORE_SHA}:${TICKET}" 2>/dev/null ||
+             ! git cat-file -e "HEAD:${TICKET}" 2>/dev/null ||
+             ! grep -Fxq "Approval: REQUEST_ONE_PHASE30_MONIFLOW_WORKSPACE_IOS_SIMULATOR_BUILD_20261016" "$TICKET"; then
+            echo "::error::Phase 30 owner approval ticket is not a new valid one-time main commit."
+            exit 1
+          fi
+          echo "One-time Phase 30 approved. iOS Simulator only; no Apple signing or financial operations."
+      - name: Enable Corepack
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install MONIFlow workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Verify workspace preview source and TypeScript
+        run: |
+          pnpm typecheck
+          node --test scripts/phase26-eas-simulator.nodecheck.mjs
+          node --test scripts/phase30-authenticated-workspace.nodecheck.mjs
+      - name: Verify deployed API private session endpoint denies unauthenticated requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://moniflow-api-silk.vercel.app"
+          STATUS="$(curl --silent --show-error --max-time 12 --output "$RUNNER_TEMP/moniflow-auth-check.json" --write-out '%{http_code}' "$URL/api/auth/session")"
+          if [[ "$STATUS" != "401" ]]; then
+            echo "::error::Expected 401 from production private session endpoint; got HTTP $STATUS. No build submitted."
+            exit 1
+          fi
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const payload = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/moniflow-auth-check.json", "utf8"));
+          if (payload.code !== "AUTH_REQUIRED") {
+            throw new Error("Expected Fastify JWT authorization denial from live MONIFlow API.");
+          }
+          NODE
+          STATUS="$(curl --silent --show-error --max-time 12 --output "$RUNNER_TEMP/moniflow-provider-check.json" --write-out '%{http_code}' "$URL/health/provider")"
+          if [[ "$STATUS" != "200" ]]; then
+            echo "::error::Provider read-only health unexpectedly unavailable: HTTP $STATUS."
+            exit 1
+          fi
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const p = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/moniflow-provider-check.json", "utf8"));
+          if (p.provider !== "bmoni" || p.partnerRegistrationEnabled !== false ||
+              p.authenticatedSandboxDemoEnabled !== false) {
+            throw new Error("Financial provider release gate differs from approved disabled configuration.");
+          }
+          NODE
+          echo "PASS: live API denies unsigned auth and preserves both disabled financial flags."
+      - name: Verify owner-scoped workspace endpoint denies anonymous access
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://moniflow-api-silk.vercel.app"
+          STATUS="$(curl --silent --show-error --max-time 12 --output "$RUNNER_TEMP/moniflow-workspace-check.json" --write-out '%{http_code}' "$URL/api/workspace/overview")"
+          if [[ "$STATUS" != "401" ]]; then
+            echo "::error::Expected HTTP 401 for unsigned workspace GET; got HTTP $STATUS. No Expo build submitted."
+            exit 1
+          fi
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const p = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/moniflow-workspace-check.json", "utf8"));
+          if (p.code !== "AUTH_REQUIRED") throw new Error("Production API did not reject unsigned workspace requests.");
+          NODE
+          echo "PASS: Phase 30 workspace GET rejects unsigned identities."
+      - name: Authenticate to Expo EAS with private GitHub token
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Verify existing Expo project; never initialize another
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const app = require("./app.json").expo;
+          if (app.owner !== "xpen" || app.slug !== "moniflow" ||
+              app.extra?.eas?.projectId !== "3d986249-f72b-494b-9ceb-eef8335a5ae0") {
+            throw new Error("EAS_PROJECT_MISMATCH: no build submitted.");
+          }
+          const profile = require("./eas.json").build["ios-simulator"];
+          if (profile.ios.simulator !== true ||
+              profile.env.EXPO_PUBLIC_SUPABASE_URL !== "https://rtcjismwbrvulccryyau.supabase.co" ||
+              !/^sb_publishable_[A-Za-z0-9_-]+$/.test(profile.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)) {
+            throw new Error("PHASE30_WORKSPACE_PREVIEW_MISMATCH: missing public Supabase client configuration.");
+          }
+          NODE
+          eas project:info
+      - name: Request exactly one iOS Simulator workspace preview build
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          eas build --platform ios --profile ios-simulator --non-interactive --no-wait
+          {
+            echo "## MONIFlow Phase 30 iOS Simulator preview"
+            printf '%s\n' "- Commit: $GITHUB_SHA"
+            echo "- Target: @xpen/moniflow (existing Expo project)"
+            echo "- Expo builds: https://expo.dev/accounts/xpen/projects/moniflow/builds"
+            echo "- One iOS Simulator build REQUESTED, not yet verified as FINISHED."
+            echo "- No iPhone IPA, Appetize upload, production wallet, KYC, transfers or financial activation."
+          } >> "$GITHUB_STEP_SUMMARY"
