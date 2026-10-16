@@ -1,3 +1,4 @@
+import { AuthenticatedWorkspace } from "@/components/AuthenticatedWorkspace";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -14,7 +15,15 @@ import { colors, layout, radius, spacing, typography } from "@/theme";
 
 const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
 
+/**
+ * Production builds always use the JWT-owned workspace overview.
+ * The historical tab implementation is retained for isolated __DEV__ only.
+ */
 export default function ProfileScreen() {
+  return __DEV__ ? <LegacyProfileScreen /> : <AuthenticatedWorkspace tab="profile" />;
+}
+
+function LegacyProfileScreen() {
   const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
   const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
   const savedLocalUserId = useDemoSession((state) => state.localUserId);
