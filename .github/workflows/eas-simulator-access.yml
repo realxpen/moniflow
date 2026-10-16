@@ -30,10 +30,15 @@ jobs:
             exit 1
           fi
       - uses: actions/checkout@v4
+      - name: Enable Corepack for pnpm workspaces
+        run: corepack enable
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: pnpm
+      - name: Install MONIFlow workspace dependencies before resolving Expo config
+        run: pnpm install --no-frozen-lockfile
       - name: Validate MONIFlow project and access-only workflow
         run: node --test scripts/phase27-eas-simulator-access.nodecheck.mjs
       - name: Check EAS Simulator eligibility without starting a session
