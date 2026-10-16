@@ -17,7 +17,9 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://moniflow-api-silk.vercel.app",
-        "EAS_NO_FROZEN_LOCKFILE": "1"
+        "EAS_NO_FROZEN_LOCKFILE": "1",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://rtcjismwbrvulccryyau.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_SM3_8xbrUe2S1H5FSctY5w_xova1cwj"
       }
     }
   }

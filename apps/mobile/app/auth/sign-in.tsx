@@ -36,7 +36,7 @@ export default function SignInScreen() {
         await signInWithPassword(email, password);
       }
       clearWorkspace();
-      router.replace("/onboarding/welcome");
+      router.replace("/auth/session");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not authenticate this session.");
     } finally {

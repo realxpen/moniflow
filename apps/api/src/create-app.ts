@@ -16,6 +16,7 @@ import { assertSandboxReleaseReady } from "./services/sandbox-demo/release-gate.
 import type { MoneyPlanRepository } from "./repositories/money-plan.js";
 import type { PocketRepository } from "./repositories/pocket.js";
 import type { WalletOwnershipRepository } from "./repositories/wallet-ownership.js";
+import { authenticatedSessionRoutes } from "./routes/authenticated-session.js";
 import { activityRoutes } from "./routes/activity.js";
 import { bankingRoutes } from "./routes/banking.js";
 import { devBootstrapRoutes } from "./routes/dev-bootstrap.js";
@@ -208,6 +209,7 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   };
 
   app.register(healthRoutes, { getBmoniGateway: dependencies.getBmoniGateway });
+  app.register(authenticatedSessionRoutes, { prefix: "/api/auth" });
   // Test fixtures are explicitly injected, and may only bypass the pending
   // partner gate inside Vitest. Runtime API construction gets no bypass.
   const onboardingOptions = {
