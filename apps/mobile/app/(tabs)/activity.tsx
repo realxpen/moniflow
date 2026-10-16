@@ -1,3 +1,4 @@
+import { AuthenticatedWorkspace } from "@/components/AuthenticatedWorkspace";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -12,7 +13,15 @@ import { colors, layout, radius, spacing, typography } from "@/theme";
 
 const configuredLocalUserId = process.env.EXPO_PUBLIC_DEV_LOCAL_USER_ID ?? "";
 
+/**
+ * Production builds always use the JWT-owned workspace overview.
+ * The historical tab implementation is retained for isolated __DEV__ only.
+ */
 export default function ActivityScreen() {
+  return __DEV__ ? <LegacyActivityScreen /> : <AuthenticatedWorkspace tab="activity" />;
+}
+
+function LegacyActivityScreen() {
   const savedLocalUserId = useDemoSession((state) => state.localUserId);
   const signedIn = useAuthSession();
   const localUserId = workspaceIdentity({

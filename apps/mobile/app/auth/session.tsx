@@ -84,6 +84,11 @@ export default function VerifiedAccountScreen() {
         <Text style={styles.copy}>BMONI account mapping, device-owned wallet, identity verification and real transfers each require separate provider evidence and approval. Our public synthetic test user is not linked to this account.</Text>
       </SoftCard>
 
+      {verification ? (
+        <PrimaryButton onPress={() => router.replace("/(tabs)/home")}>
+          Open your read-only workspace
+        </PrimaryButton>
+      ) : null}
       <SecondaryButton onPress={() => router.replace("/onboarding/welcome")}>Return to welcome</SecondaryButton>
       {signedIn ? <SecondaryButton onPress={leave}>Sign out and clear workspace</SecondaryButton> :
         <PrimaryButton onPress={() => router.replace("/auth/sign-in")}>Go to sign in</PrimaryButton>}
