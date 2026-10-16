@@ -1,0 +1,106 @@
+name: MONIFlow Phase 28 — One-Time iOS Simulator Build
+
+# Intentionally one-shot, approved for the Phase 28 native UX release only.
+# The dedicated ticket file MUST be newly created on main. Updating it or
+# rerunning a job must not submit another EAS build.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/PHASE28_IOS_SIMULATOR_ONE_SHOT_20261016.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moniflow-eas-ios-simulator-only
+  cancel-in-progress: false
+
+jobs:
+  phase28-ios-simulator:
+    if: github.repository == 'realxpen/moniflow' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_OWNER: xpen
+      BEFORE_SHA: ${{ github.event.before }}
+      CI: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Confirm one-time owner-approved release ticket and credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          TICKET="docs/PHASE28_IOS_SIMULATOR_ONE_SHOT_20261016.md"
+          if [[ "$GITHUB_RUN_ATTEMPT" != "1" ]]; then
+            echo "::error::Re-running this build is forbidden. Use the regular manual workflow for another approved build."
+            exit 1
+          fi
+          if [[ -z "$EXPO_TOKEN" ]]; then
+            echo "::error::GitHub EXPO_TOKEN repository secret is unavailable; no build submitted."
+            exit 1
+          fi
+          if ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            echo "::error::Previous main commit not found; cannot prove first-time release ticket."
+            exit 1
+          fi
+          if git cat-file -e "${BEFORE_SHA}:${TICKET}" 2>/dev/null; then
+            echo "::error::Release ticket already existed before this push; no duplicate build."
+            exit 1
+          fi
+          if ! git cat-file -e "HEAD:${TICKET}" 2>/dev/null || \
+             ! grep -Fxq "Approval: REQUEST_ONE_PHASE28_MONIFLOW_IOS_SIMULATOR_BUILD_20261016" "$TICKET"; then
+            echo "::error::Expected owner-approved Phase 28 ticket is missing."
+            exit 1
+          fi
+          echo "One-time Phase 28 build approved; iOS Simulator only. No Apple signing."
+      - name: Enable Corepack
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install monorepo dependencies using validated CI policy
+        run: pnpm install --no-frozen-lockfile
+      - name: Validate Phase 28 source and existing simulator configuration
+        run: |
+          pnpm typecheck
+          node --test scripts/phase26-eas-simulator.nodecheck.mjs
+          node --test scripts/phase28-native-experience.nodecheck.mjs
+      - name: Authenticate to Expo EAS without exposing token
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Verify pinned existing Expo project (never create another)
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const app = require("./app.json").expo;
+          if (app.owner !== "xpen" || app.slug !== "moniflow" ||
+              app.extra?.eas?.projectId !== "3d986249-f72b-494b-9ceb-eef8335a5ae0") {
+            throw new Error("EXPO_PROJECT_MISMATCH: no build started.");
+          }
+          NODE
+          eas project:info
+      - name: Submit ONE standalone iOS Simulator build — no wait or auto-submit
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          eas build --platform ios --profile ios-simulator --non-interactive --no-wait
+          {
+            echo "## Phase 28 MONIFlow iOS Simulator build submitted"
+            echo "- Source: `$GITHUB_SHA`"
+            echo "- Expo project: [@xpen/moniflow](https://expo.dev/accounts/xpen/projects/moniflow)"
+            echo "- View new [Expo build history](https://expo.dev/accounts/xpen/projects/moniflow/builds)"
+            echo "- Submitted exactly one iOS Simulator build; final compilation status must be verified on Expo."
+            echo "- Not installable on a physical iPhone; no Apple signing, wallet, KYC, real funds or provider write."
+            echo "- No automatic Appetize upload or Vercel deployment was performed."
+          } >> "$GITHUB_STEP_SUMMARY"
