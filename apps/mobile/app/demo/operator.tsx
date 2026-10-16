@@ -1,6 +1,6 @@
 import { router } from "expo-router";
-import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { FlowHeader, PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { demoFinancialSnapshot, demoGuardChecks, demoOperatorTransition, initialDemoOperatorState,
@@ -17,6 +17,20 @@ export default function DemoOperatorScreen() {
   const [checked, setChecked] = useState(false);
   const [error, setError] = useState("");
   const stage = state.stage;
+  const scrollRef = useRef<ScrollView>(null);
+  const previousStageRef = useRef(stage);
+
+  useEffect(() => {
+    if (previousStageRef.current === stage) return;
+    previousStageRef.current = stage;
+    // Native ScrollView preserves its offset when React swaps step content.
+    // Scroll once immediately and after native layout so the new heading stays visible.
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    const frame = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [stage]);
   const snapshot = demoFinancialSnapshot(state);
   const nums = walkthroughNumbers();
   const act = (a: DemoOperatorAction) => { setState(s => demoOperatorTransition(s, a)); setError(""); };
@@ -35,12 +49,19 @@ export default function DemoOperatorScreen() {
     cancelled: "This example was stopped."
   };
   return (
-    <Screen contentContainerStyle={styles.page}>
+    <Screen contentContainerStyle={styles.page} scrollRef={scrollRef}
+      scrollProps={{ keyboardDismissMode: "on-drag", keyboardShouldPersistTaps: "handled" }}>
       <FlowHeader eyebrow="MONIFLOW OPERATOR · INTERACTIVE DEMO" title={titles[stage]}
         description="A temporary, offline illustration of Intent → Plan → Guard → Human Review → Result. No live financial system is connected to this screen." />
       <StatusPill label="SIMULATION · NO ACTUAL FUNDS" tone="warning" />
       <Text style={styles.disclosure}>No BMONI API request, bank verification, financial approval, wallet signing, transfer, or saved Financial Memory occurs in this demonstration.</Text>
-      <View style={styles.progress}>
+      <Text accessibilityRole="text" style={styles.stageCounter}>
+        {stage === "cancelled" ? "EXAMPLE CANCELLED" : `STEP ${order.indexOf(stage) + 1} OF ${order.length}`}
+      </Text>
+      <View accessibilityRole="progressbar"
+        accessibilityLabel="Illustrative Operator progress"
+        accessibilityValue={{ min: 0, max: order.length, now: Math.max(0, order.indexOf(stage) + 1) }}
+        style={styles.progress}>
         {order.map((key, i) => <View key={key} style={[styles.bar, key === stage && styles.now, i < order.indexOf(stage) && styles.past]} />)}
       </View>
 
@@ -151,15 +172,16 @@ function MoneyRow({ name, amount, strong = false }: { name: string; amount: stri
 
 const styles = StyleSheet.create({
   page: { gap: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.xxxl },
-  disclosure: { ...typography.caption, color: colors.statusWarning },
+  disclosure: { ...typography.caption, color: colors.statusWarning, fontSize: 14, lineHeight: 20 },
+  stageCounter: { ...typography.caption, color: colors.textSecondary, fontWeight: "600" },
   progress: { flexDirection: "row", gap: spacing.xs },
   bar: { flex: 1, height: 5, backgroundColor: colors.borderSoft, borderRadius: radius.pill },
   now: { backgroundColor: colors.accentPrimary },
   past: { backgroundColor: colors.statusSuccess },
   card: { gap: spacing.lg },
-  micro: { ...typography.technical, color: colors.statusProcessing },
+  micro: { ...typography.technical, color: colors.statusProcessing, fontSize: 12, lineHeight: 18 },
   copy: { ...typography.body, color: colors.textSecondary },
-  caption: { ...typography.caption, color: colors.textSecondary },
+  caption: { ...typography.caption, color: colors.textSecondary, fontSize: 14, lineHeight: 20 },
   command: { ...typography.body, backgroundColor: colors.backgroundPrimary, borderWidth: 1,
     borderColor: colors.borderSoft, borderRadius: radius.lg, minHeight: 104,
     padding: spacing.md, color: colors.textPrimary, textAlignVertical: "top" },
@@ -168,7 +190,7 @@ const styles = StyleSheet.create({
   item: { ...typography.body, fontWeight: "600", color: colors.textPrimary },
   moneyRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center", justifyContent: "space-between" },
   moneyName: { ...typography.body, flex: 1, color: colors.textSecondary },
-  moneyValue: { ...typography.section, color: colors.textPrimary },
+  moneyValue: { ...typography.section, color: colors.textPrimary, flexShrink: 1, textAlign: "right" },
   moneyStrong: { color: colors.statusSuccess, fontWeight: "700" },
   checkboxRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
   checkbox: { height: 24, width: 24, borderWidth: 1, borderRadius: radius.sm, borderColor: colors.borderSoft },

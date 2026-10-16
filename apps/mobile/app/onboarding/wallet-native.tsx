@@ -6,6 +6,8 @@ import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import { PrimaryButton, Screen, StatusPill } from "@/components/ui";
 import { bmoniDevice } from "@/services/bmoni-device";
+import { useAuthSession } from "@/services/auth-session";
+import { workspaceIdentity } from "@/services/flow-recovery";
 import { assertDeviceOwnerAddress, assertOwnerProofChallenge, assertOwnerProofSignature } from "@/services/bmoni-owner-proof-policy";
 import { colors, radius, spacing, typography } from "@/theme";
 
@@ -39,7 +41,16 @@ function resolveApiUrl() {
 export default function NativeWalletSetupScreen() {
   const params = useLocalSearchParams<{ localUserId?: string | string[] }>();
   const routedLocalUserId = Array.isArray(params.localUserId) ? params.localUserId[0] : params.localUserId;
-  const localUserId = routedLocalUserId?.trim() || defaultLocalUserId;
+  const signedIn = useAuthSession();
+  // A deep link may NEVER select another account's wallet in an installable build.
+  // The public synthetic BMONI cloud fixture is not an authenticated user mapping.
+  const localUserId = workspaceIdentity({
+    routedId: routedLocalUserId,
+    savedId: "",
+    devId: defaultLocalUserId,
+    authUserId: signedIn?.userId ?? null,
+    development: __DEV__
+  });
 
   const [pin, setPin] = useState("");
   const [ownerAddress, setOwnerAddress] = useState<string | null>(null);
@@ -137,6 +148,10 @@ export default function NativeWalletSetupScreen() {
   }, [localUserId]);
 
   const provision = async () => {
+    if (!__DEV__ && !signedIn) {
+      setError("Sign in to your MONIFlow account and complete approved BMONI onboarding before accessing wallet signing.");
+      return;
+    }
     if (!bmoniDevice.available) {
       setError("BMONI device signing is unavailable in this build.");
       return;
@@ -239,6 +254,16 @@ export default function NativeWalletSetupScreen() {
           {steps.map((step) => <ProvisionStep key={step.label} {...step} />)}
         </View>
 
+        {!__DEV__ && !localUserId ? (
+          <View style={styles.identityWarning}>
+            <StatusPill label="ACCOUNT MAPPING REQUIRED" tone="warning" />
+            <Text style={styles.subtitle}>
+              Sign in and complete authorized BMONI user mapping before any device key,
+              PIN or owner-proof action. The public GitHub sandbox fixture cannot be used here.
+            </Text>
+          </View>
+        ) : null}
+
         {!persisted ? (
           <View style={styles.fields}>
             <Text style={styles.identityLinked}>MONIFlow identity linked automatically</Text>
@@ -305,6 +330,7 @@ const styles = StyleSheet.create({
   stepLabel: { ...typography.body, color: colors.textPrimary, flex: 1 },
   symbol: { ...typography.body, color: colors.textSecondary, minWidth: 28, textAlign: "right" },
   symbolDone: { color: colors.statusSuccess, fontWeight: "700" },
+  identityWarning: { gap: spacing.sm },
   fields: { gap: spacing.sm },
   identityLinked: { ...typography.caption, color: colors.statusSuccess },
   input: { ...typography.body, minHeight: 52, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.surfaceGlass, color: colors.textPrimary, paddingHorizontal: spacing.md },

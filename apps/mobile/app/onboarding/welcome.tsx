@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
-import { useAuthSession } from "@/services/auth-session";
+import { authIsConfigured, useAuthSession } from "@/services/auth-session";
+import { evaluateNativeLaunchReadiness } from "@/services/native-launch-readiness";
 import {
   loadFinancialProvider,
   providerBadge,
@@ -62,6 +63,12 @@ export default function WelcomeScreen() {
   const sandboxDemo = provider?.provider === "moniflow-sandbox";
   const ready = provider?.status === "ok";
   const partnerPending = provider?.provider === "bmoni" && !provider.partnerRegistrationEnabled;
+  const launchReadiness = evaluateNativeLaunchReadiness({
+    authConfigured: authIsConfigured(),
+    provider: provider?.provider ?? null,
+    providerConnected: ready,
+    partnerRegistrationEnabled: provider?.partnerRegistrationEnabled === true
+  });
   const canResume = Boolean(
     hydrated &&
     savedLocalUserId &&
@@ -112,6 +119,18 @@ export default function WelcomeScreen() {
           </SoftCard>
         ) : null}
 
+        {!__DEV__ && !launchReadiness.signInConfigured ? (
+          <SoftCard style={styles.resumeCard}>
+            <StatusPill label="SIGN-IN SETUP REQUIRED" tone="warning" />
+            <Text style={styles.resumeTitle}>Account access is not configured in this build.</Text>
+            <Text style={styles.providerCopy}>
+              The iOS simulator connects to the public API, but its Expo build is missing the public Supabase
+              authentication URL and publishable key. Signing in and reading a private workspace are unavailable.
+              The offline Operator remains safe to explore.
+            </Text>
+          </SoftCard>
+        ) : null}
+
         {canResume ? (
           <SoftCard style={styles.resumeCard}>
             <View style={styles.resumeCopy}>
@@ -132,13 +151,18 @@ export default function WelcomeScreen() {
         ) : null}
 
         {!__DEV__ && !auth ? (
-          <PrimaryButton onPress={() => router.push("/auth/sign-in")}>Sign in to continue</PrimaryButton>
+          <PrimaryButton
+            disabled={!launchReadiness.canOfferSignIn}
+            onPress={() => router.push("/auth/sign-in")}
+          >
+            {launchReadiness.canOfferSignIn ? "Sign in to continue" : "Sign-in unavailable in this build"}
+          </PrimaryButton>
         ) : sandboxDemo ? (
           <SecondaryButton disabled={preparing || checking || !ready || !__DEV__} onPress={() => void startCleanDemo()}>
             {preparing ? "Preparing clean demo…" : canResume ? "Restart with a clean sandbox demo" : "Start clean sandbox demo"}
           </SecondaryButton>
         ) : (
-<PrimaryButton disabled={checking || !ready || partnerPending} onPress={() => router.push("/onboarding/identity")}>
+          <PrimaryButton disabled={checking || !ready || partnerPending} onPress={() => router.push("/onboarding/identity")}>
             Begin secure setup
           </PrimaryButton>
         )}
