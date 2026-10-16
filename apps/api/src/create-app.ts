@@ -214,7 +214,8 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
   app.register(authenticatedWorkspaceRoutes, {
     prefix: "/api/workspace",
     getBmoniUserService: dependencies.getBmoniUserService,
-    getWalletOwnershipRepository
+    getWalletOwnershipRepository,
+    getRepositoryReady: async () => { await dependencies.ready; }
   });
   // Test fixtures are explicitly injected, and may only bypass the pending
   // partner gate inside Vitest. Runtime API construction gets no bypass.

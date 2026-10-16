@@ -103,6 +103,54 @@ describe("Phase 30 authenticated owner-scoped workspace status", () => {
     }
   });
 
+  it("awaits database schema readiness before the first account SELECT", async () => {
+    const app = Fastify();
+    let markReady!: () => void;
+    const ready = new Promise<void>(resolve => { markReady = resolve; });
+    const mappingRead = vi.fn(async () => null);
+    attachUserAuthorization(app, { audience: "authenticated" }, async () => ({ userId: me }));
+    await app.register(authenticatedWorkspaceRoutes, {
+      prefix: "/api/workspace",
+      getRepositoryReady: () => ready,
+      getBmoniUserService: () => ({ getMapping: mappingRead }) as never,
+      getWalletOwnershipRepository: () => ({ findByLocalUserId: vi.fn() }) as never
+    });
+    try {
+      const pending = app.inject({
+        method: "GET", url: "/api/workspace/overview",
+        headers: { authorization: "Bearer verified-me" }
+      });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(mappingRead).not.toHaveBeenCalled();
+      markReady();
+      const response = await pending;
+      expect(response.statusCode).toBe(200);
+      expect(mappingRead).toHaveBeenCalledExactlyOnceWith(me);
+    } finally { await app.close(); }
+  });
+
+  it("fails shut with 503 if schema initialization fails before a query", async () => {
+    const app = Fastify();
+    const mappingRead = vi.fn();
+    attachUserAuthorization(app, { audience: "authenticated" }, async () => ({ userId: me }));
+    await app.register(authenticatedWorkspaceRoutes, {
+      prefix: "/api/workspace",
+      getRepositoryReady: async () => { throw Object.assign(new Error("DO NOT LOG CONNECTION STRING"), { code: "28P01" }); },
+      getBmoniUserService: () => ({ getMapping: mappingRead }) as never,
+      getWalletOwnershipRepository: () => ({ findByLocalUserId: vi.fn() }) as never
+    });
+    try {
+      const response = await app.inject({
+        method: "GET", url: "/api/workspace/overview",
+        headers: { authorization: "Bearer verified-me" }
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ code: "WORKSPACE_READ_UNAVAILABLE" });
+      expect(mappingRead).not.toHaveBeenCalled();
+      expect(response.body).not.toMatch(/CONNECTION STRING|DATABASE_AUTHENTICATION/);
+    } finally { await app.close(); }
+  });
+
   it("does not turn a database outage into a fictional empty account", async () => {
     const { app } = await fixture({ failure: true });
     try {

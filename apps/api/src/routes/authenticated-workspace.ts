@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import type { WalletOwnershipRepository } from "../repositories/wallet-ownership.js";
 import { getAuthenticatedUserId } from "../security/user-authorization.js";
+import { classifyWorkspaceStorageFailure } from "../security/workspace-storage-diagnostics.js";
 import type { BmoniUserService } from "../services/bmoni/user-service.js";
 
 export type WorkspaceOverview = {
@@ -18,6 +19,8 @@ export type WorkspaceOverview = {
 
 type WorkspaceRouteOptions = {
   getBmoniUserService: () => Pick<BmoniUserService, "getMapping">;
+  /** Await schema readiness before the first serverless SELECT. */
+  getRepositoryReady?: () => Promise<void>;
   getWalletOwnershipRepository: () => Pick<WalletOwnershipRepository, "findByLocalUserId">;
 };
 
@@ -32,13 +35,17 @@ export const authenticatedWorkspaceRoutes: FastifyPluginAsync<WorkspaceRouteOpti
     if (!userId) return reply.code(401).send({ code: "AUTH_REQUIRED" });
 
     reply.header("Cache-Control", "private, no-store");
+    let phase: "schema_ready" | "mapping_read" | "wallet_read" = "schema_ready";
     try {
+      await options.getRepositoryReady?.();
+      phase = "mapping_read";
       const mapping = await options.getBmoniUserService().getMapping(userId);
       // A mapping for another subject must never make the current subject ready.
       if (mapping && mapping.localUserId.toLowerCase() !== userId.toLowerCase()) {
         return reply.code(403).send({ code: "WORKSPACE_ACCESS_DENIED" });
       }
       // Do not read the wallet repository until a local provider mapping exists.
+      phase = "wallet_read";
       const wallet = mapping ? await options.getWalletOwnershipRepository().findByLocalUserId(userId) : null;
       if (wallet && wallet.localUserId.toLowerCase() !== userId.toLowerCase()) {
         return reply.code(403).send({ code: "WORKSPACE_ACCESS_DENIED" });
@@ -54,8 +61,15 @@ export const authenticatedWorkspaceRoutes: FastifyPluginAsync<WorkspaceRouteOpti
         accountData: "withheld_until_verified"
       };
       return reply.send(overview);
-    } catch {
-      // A database error is not evidence that no account exists. Fail shut.
+    } catch (error) {
+      // Only an allowlisted category and non-sensitive stage enter private runtime logs.
+      // Never log raw postgres Errors (they may contain SQL, connection details or PII).
+      request.log.warn({
+        event: "workspace_storage_read_failed",
+        stage: phase,
+        kind: classifyWorkspaceStorageFailure(error)
+      }, "Account readiness lookup unavailable");
+      // A database error is never evidence that the account has no wallet. Fail shut.
       return reply.code(503).send({ code: "WORKSPACE_READ_UNAVAILABLE" });
     }
   });
