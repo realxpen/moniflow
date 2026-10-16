@@ -20,8 +20,9 @@ test("one-time Phase 30 auth build requires owner ticket first-created on main",
   assert.doesNotMatch(workflow, /workflow_dispatch:|\n\s+schedule:|\n\s+pull_request:/);
 });
 
-test("an unsigned live API session request must return 401 before EAS is called", () => {
+test("unsigned session and workspace GETs must return 401 before EAS is called", () => {
   assert.match(workflow, /api\/auth\/session/);
+  assert.match(workflow, /api\/workspace\/overview/);
   assert.match(workflow, /STATUS" != "401"/);
   assert.match(workflow, /payload\.code !== "AUTH_REQUIRED"/);
   assert.match(workflow, /partnerRegistrationEnabled !== false/);
@@ -38,5 +39,5 @@ test("build uses only existing Expo project, one simulator job, and never publis
   assert.doesNotMatch(workflow, /eas init|eas project:init|eas submit|--auto-submit|eas simulator:start|vercel deploy/);
   const command = "eas build --platform ios --profile ios-simulator --non-interactive --no-wait";
   assert.equal(workflow.split(command).length - 1, 1);
-  assert.match(ticket, /No real person should enter sensitive data/);
+  assert.match(ticket, /No Apple Developer paid membership/);
 });
