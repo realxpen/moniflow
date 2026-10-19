@@ -1,0 +1,94 @@
+name: MONIFlow Android APK - One-Time Preview
+
+on:
+  push:
+    branches: [main]
+    paths: [docs/ANDROID_APK_PREVIEW_ONE_SHOT_20261019.md]
+
+permissions:
+  contents: read
+concurrency:
+  group: moniflow-eas-android-apk-once-20261019
+  cancel-in-progress: false
+
+jobs:
+  android-apk-one-shot:
+    if: github.repository == 'realxpen/moniflow' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      BEFORE_SHA: ${{ github.event.before }}
+      CI: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Enforce one-time explicit approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          TICKET="docs/ANDROID_APK_PREVIEW_ONE_SHOT_20261019.md"
+          if [[ "$GITHUB_RUN_ATTEMPT" != "1" || -z "$EXPO_TOKEN" ]]; then
+            echo "::error::Missing token or new approval"; exit 1
+          fi
+          if ! git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null ||
+             ! git cat-file -e "HEAD:$TICKET" 2>/dev/null ||
+             git cat-file -e "$BEFORE_SHA:$TICKET" 2>/dev/null ||
+             ! grep -Fxq "Approval: REQUEST_ONE_MONIFLOW_ANDROID_APK_BUILD_20261019" "$TICKET"; then
+            echo "::error::Approval ticket must be first created on main"; exit 1
+          fi
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install workspace and validate Android configuration
+        run: |
+          pnpm install --no-frozen-lockfile
+          node --test scripts/android-apk-preview.nodecheck.mjs
+          pnpm typecheck
+      - name: Reject unsigned API access and check disabled financial flags
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://moniflow-api-silk.vercel.app"
+          for ROUTE in /api/auth/session /api/workspace/overview; do
+            STATUS="$(curl --silent --show-error --max-time 15 --output "$RUNNER_TEMP/auth.json" --write-out '%{http_code}' "$URL$ROUTE")"
+            if [[ "$STATUS" != "401" ]]; then echo "::error::Unexpected $ROUTE status $STATUS"; exit 1; fi
+            node -e 'const p=require(process.env.RUNNER_TEMP+"/auth.json");if(p.code!=="AUTH_REQUIRED")process.exit(1)'
+          done
+          STATUS="$(curl --silent --show-error --max-time 15 --output "$RUNNER_TEMP/provider.json" --write-out '%{http_code}' "$URL/health/provider")"
+          if [[ "$STATUS" != "200" ]]; then echo "::error::Provider health unavailable"; exit 1; fi
+          node -e 'const p=require(process.env.RUNNER_TEMP+"/provider.json");if(p.provider!=="bmoni"||p.partnerRegistrationEnabled!==false||p.authenticatedSandboxDemoEnabled!==false)process.exit(1)'
+      - name: Authenticate to Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Confirm Expo app identity
+        working-directory: apps/mobile
+        run: |
+          node -e 'const a=require("./app.json").expo,p=require("./eas.json").build["android-apk"];if(a.owner!=="xpen"||a.slug!=="moniflow"||a.extra?.eas?.projectId!=="3d986249-f72b-494b-9ceb-eef8335a5ae0"||a.android?.package!=="com.realxpen.moniflow"||p.android?.buildType!=="apk"||p.extends!=="preview"||p.developmentClient!==false)process.exit(1)'
+          eas project:info
+      - name: Submit exactly one Android APK build
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          eas build --platform android --profile android-apk --non-interactive --no-wait --json > "$RUNNER_TEMP/android-build.json"
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const raw = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/android-build.json", "utf8"));
+          const build = Array.isArray(raw) ? raw[0] : raw;
+          if (typeof build?.id !== "string" || !/^[0-9a-f-]{36}$/i.test(build.id)) {
+            throw new Error("EAS submission returned no valid Android build ID.");
+          }
+          const link = "https://expo.dev/accounts/xpen/projects/moniflow/builds/" + build.id;
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            "## MONIFlow Android APK submitted\n\n- Build: " + link +
+            "\n- Profile: android-apk (internal, APK)\n- Status: submission only; final compilation not yet verified\n" +
+            "- Production financial operations unchanged and disabled\n");
+          process.stdout.write("Android APK build: " + link + "\n");
+          NODE

@@ -1,3 +1,7 @@
+## Physical Android APK preview — one-time build preparation (2026-10-19)
+
+An owner-requested physical-device Android preview is configured on branch `build/android-apk-one-shot-20261019`. The `android-apk` internal EAS profile uses the same public Supabase and production API configuration as the iOS simulator, explicitly builds `.apk`, and the new one-time workflow is gated by a new approval ticket on `main`. PR CI, workflow release and Expo Gradle compilation/installation are separate gates; no APK exists merely because source config was added. Financial/provider activation remains disabled. See `docs/ANDROID_APK_BUILD_GUIDE.md`.
+
 ## Phase 32 — Owner-scoped identity reconciliation preview (2026-10-19)
 
 Branch `feat/phase32-owner-reconciliation-readiness-20261019` adds read-only `GET /api/workspace/reconciliation` using a verified JWT subject and local reservation holds, with no automatic identity linking or financial permissions. Pending/uncertain BMONI provisioning outcomes are held for manual review; persisted mapping never counts as provider ownership proof. An unmatched legacy hold cannot be inferred from a public fixture or user-submitted email. Includes security/unit tests and the checklist in `docs/PHASE32_IDENTITY_RECONCILIATION_READINESS.md`. Phase30 production database 503 remains unverified pending a new signed-in Appetize refresh; Phase31 code is merged but not yet production deployed. This branch is NOT released; no schema changes, external BMONI requests or financial writes occurred.
