@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { FastifyPluginAsync } from "fastify";
 
 import type { WalletOwnershipRepository } from "../repositories/wallet-ownership.js";
@@ -64,13 +66,17 @@ export const authenticatedWorkspaceRoutes: FastifyPluginAsync<WorkspaceRouteOpti
     } catch (error) {
       // Only an allowlisted category and non-sensitive stage enter private runtime logs.
       // Never log raw postgres Errors (they may contain SQL, connection details or PII).
+      // This random reference carries no account or provider identity. It is
+      // safe for a tester to share, and correlates the response to private logs.
+      const reference = randomUUID();
       request.log.warn({
         event: "workspace_storage_read_failed",
+        reference,
         stage: phase,
         kind: classifyWorkspaceStorageFailure(error)
       }, "Account readiness lookup unavailable");
       // A database error is never evidence that the account has no wallet. Fail shut.
-      return reply.code(503).send({ code: "WORKSPACE_READ_UNAVAILABLE" });
+      return reply.code(503).send({ code: "WORKSPACE_READ_UNAVAILABLE", reference });
     }
   });
 };
