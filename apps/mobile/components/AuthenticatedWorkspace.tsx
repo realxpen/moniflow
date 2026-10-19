@@ -6,6 +6,7 @@ import { Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { signOut, useAuthSession } from "@/services/auth-session";
 import { loadAccountWorkspace, type AccountWorkspaceOverview } from "@/services/account-workspace";
+import { loadAccountReconciliation, type AccountReconciliationReadiness } from "@/services/account-reconciliation";
 import { useDemoSession } from "@/store/demo-session";
 import { colors, layout, radius, spacing, typography } from "@/theme";
 
@@ -22,6 +23,8 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
   const auth = useAuthSession();
   const clearDemo = useDemoSession(state => state.clearSession);
   const [overview, setOverview] = useState<AccountWorkspaceOverview | null>(null);
+  const [reconciliation, setReconciliation] = useState<AccountReconciliationReadiness | null>(null);
+  const [reconciliationError, setReconciliationError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestSequence = useRef(0);
@@ -30,6 +33,8 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
   const refresh = useCallback(async () => {
     const sequence = ++requestSequence.current;
     setOverview(null);
+    setReconciliation(null);
+    setReconciliationError(null);
     setError(null);
     if (!auth?.userId) {
       setBusy(false);
@@ -41,6 +46,18 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
       const next = await loadAccountWorkspace();
       if (requestSequence.current === sequence && next.userId.toLowerCase() === auth.userId.toLowerCase()) {
         setOverview(next);
+        // The reconciliation API is read-only and checked only on Profile.
+        // An unavailable release/response must not hide a valid workspace.
+        if (tab === "profile") {
+          try {
+            const status = await loadAccountReconciliation(next);
+            if (requestSequence.current === sequence) setReconciliation(status);
+          } catch (cause) {
+            if (requestSequence.current === sequence) {
+              setReconciliationError(cause instanceof Error ? cause.message : "Identity review unavailable.");
+            }
+          }
+        }
       }
     } catch (cause) {
       if (requestSequence.current === sequence) {
@@ -49,10 +66,11 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
     } finally {
       if (requestSequence.current === sequence) setBusy(false);
     }
-  }, [auth?.userId]);
+  }, [auth?.userId, tab]);
 
   useEffect(() => {
     setOverview(null);
+    setReconciliation(null);
     void refresh();
     return () => { requestSequence.current += 1; };
   }, [refresh]);
@@ -61,6 +79,8 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
   const leave = () => {
     requestSequence.current += 1;
     setOverview(null);
+    setReconciliation(null);
+    setReconciliationError(null);
     signOut();
     clearDemo();
     router.replace("/auth/sign-in");
@@ -68,6 +88,17 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
 
   const recorded = overview?.mapping === "recorded";
   const ownerWallet = overview?.wallet === "recorded_not_reverified";
+  const reviewState = reconciliation?.reconciliation;
+  const reviewLabel = !reviewState ? "NOT VERIFIED"
+    : reviewState === "manual_review_required" ? "MANUAL REVIEW"
+    : reviewState === "unverified_mapping" ? "UNVERIFIED" : "EVIDENCE NEEDED";
+  const reviewDetail = reviewState === "manual_review_required"
+    ? "An unresolved local BMONI provisioning record requires independent manual review. Do not retry or link this identity automatically."
+    : reviewState === "unverified_mapping"
+      ? "A mapping exists locally, but BMONI account ownership and identity evidence have not been verified."
+      : reviewState === "identity_evidence_required"
+        ? "No BMONI identity is linked to this account. Provider-approved ownership evidence is required before any account linking."
+        : "Identity reconciliation has not been confirmed for this signed-in account.";
 
   return (
     <Screen contentContainerStyle={styles.page}>
@@ -134,6 +165,18 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
 
       {tab === "profile" ? (
         <SoftCard style={styles.card}>
+          <Text style={styles.label}>BMONI IDENTITY RECONCILIATION</Text>
+          <Readiness label="Account linking review" detail={reviewDetail} pill={reviewLabel} />
+          <Text style={styles.copy}>
+            This status checks local records only. It does not confirm provider identity, wallet ownership or KYC.
+            No automatic account linking or money movement is enabled.
+          </Text>
+          {reconciliationError ? <Text style={styles.error}>{reconciliationError}</Text> : null}
+        </SoftCard>
+      ) : null}
+
+      {tab === "profile" ? (
+        <SoftCard style={styles.card}>
           <Text style={styles.label}>SESSION CONTROLS</Text>
           <Text style={styles.copy}>Check the separate signed-session proof or sign out to clear this device's in-memory authentication and example workspace state.</Text>
           <SecondaryButton onPress={() => router.push("/auth/session")}>Check API session</SecondaryButton>
@@ -142,7 +185,7 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
       ) : null}
 
       <View style={styles.footer}>
-        <Text style={styles.disclosure}>READ-ONLY · NO PROVIDER MONEY MOVEMENT · NO WALLET KEYS ON THIS SIMULATOR</Text>
+        <Text style={styles.disclosure}>READ-ONLY · NO PROVIDER MONEY MOVEMENT · NO WALLET KEYS ACCESSED</Text>
         <Pressable accessibilityRole="button" onPress={() => router.push("/onboarding/welcome")}>
           <Text style={styles.link}>Back to MONIFlow welcome</Text>
         </Pressable>
