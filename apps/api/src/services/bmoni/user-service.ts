@@ -43,6 +43,15 @@ export class BmoniUserService {
     return { bmoniUserId: mapping.bmoniUserId, email: mapping.email, localUserId: mapping.localUserId };
   }
 
+  /** Returns no email, phone, provider ID or fingerprint to the workspace route. */
+  async getReconciliationHold(localUserId: string): Promise<{
+    localUserId: string | null;
+    state: "PROVIDER_USER_EXISTS" | "PROVIDER_OUTCOME_UNKNOWN";
+  } | null> {
+    const hold = await this.mappings.findHoldByLocalUserId(localUserId);
+    return hold ? { localUserId: hold.localUserId, state: hold.state } : null;
+  }
+
   async createOrFindMapping(input: CreateMoniflowUserInput): Promise<ProvisionBmoniUserResult> {
     // Check durable key continuity before any local identity is returned or
     // any BMONI user-create is even considered. Missing/rotated keys fail shut.

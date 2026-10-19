@@ -298,6 +298,21 @@ export class PostgresUserMappingRepository implements UserMappingRepository {
     }
   }
 
+  async findHoldByLocalUserId(localUserId:string):Promise<UserProvisioningHold|null> {
+    const rows=await this.sql`
+      SELECT email,local_user_id,state,created_at,phone_fingerprint
+      FROM moniflow_private.bmoni_user_provisioning_holds_v1
+      WHERE local_user_id=${localUserId}::uuid LIMIT 1
+    `;
+    const row=rows[0];
+    return row ? {
+      email:String(row.email),localUserId:row.local_user_id===null?null:String(row.local_user_id),
+      phoneFingerprint:row.phone_fingerprint===null?null:String(row.phone_fingerprint),
+      state:String(row.state) as UserProvisioningHold["state"],
+      createdAt:new Date(String(row.created_at)).toISOString()
+    } : null;
+  }
+
   async findHoldByEmail(email:string):Promise<UserProvisioningHold|null> {
     const rows=await this.sql`
       SELECT email,local_user_id,state,created_at,phone_fingerprint

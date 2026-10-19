@@ -18,6 +18,7 @@ import type { PocketRepository } from "./repositories/pocket.js";
 import type { WalletOwnershipRepository } from "./repositories/wallet-ownership.js";
 import { authenticatedSessionRoutes } from "./routes/authenticated-session.js";
 import { authenticatedWorkspaceRoutes } from "./routes/authenticated-workspace.js";
+import { identityReconciliationRoutes } from "./routes/identity-reconciliation.js";
 import { activityRoutes } from "./routes/activity.js";
 import { bankingRoutes } from "./routes/banking.js";
 import { devBootstrapRoutes } from "./routes/dev-bootstrap.js";
@@ -215,6 +216,11 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
     prefix: "/api/workspace",
     getBmoniUserService: dependencies.getBmoniUserService,
     getWalletOwnershipRepository,
+    getRepositoryReady: async () => { await dependencies.ready; }
+  });
+  app.register(identityReconciliationRoutes, {
+    prefix: "/api/workspace",
+    getBmoniUserService: dependencies.getBmoniUserService,
     getRepositoryReady: async () => { await dependencies.ready; }
   });
   // Test fixtures are explicitly injected, and may only bypass the pending

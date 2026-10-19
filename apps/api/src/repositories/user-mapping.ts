@@ -47,6 +47,8 @@ export interface UserMappingRepository {
   findByEmail(email: string): Promise<UserMapping | null>;
   findByLocalUserId(localUserId: string): Promise<UserMapping | null>;
   save(mapping: UserMapping): Promise<UserMapping>;
+  /** Owner-scoped, read-only pending provisioning lookup; never matches on a caller-provided email. */
+  findHoldByLocalUserId(localUserId: string): Promise<UserProvisioningHold | null>;
   findHoldByEmail(email: string): Promise<UserProvisioningHold | null>;
   findHoldByPhoneFingerprint(fingerprint: string): Promise<UserProvisioningHold | null>;
   createHold(hold: UserProvisioningHold): Promise<UserProvisioningHold>;
