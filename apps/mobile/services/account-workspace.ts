@@ -22,6 +22,19 @@ export async function loadAccountWorkspace(): Promise<AccountWorkspaceOverview> 
   if (!active) throw new Error("Sign in again to load your personal workspace.");
   const response = await apiFetch(resolveApiUrl() + "/api/workspace/overview", { method: "GET" });
   if (response.status === 404) throw new Error("The updated workspace API is not deployed yet.");
+  if (response.status === 503) {
+    // Display only a server-generated, opaque UUID. Never render provider
+    // errors or raw database diagnostics received over the network.
+    let reference: unknown;
+    try {
+      const failure = await response.json() as { code?: unknown; reference?: unknown };
+      if (failure.code === "WORKSPACE_READ_UNAVAILABLE") reference = failure.reference;
+    } catch { /* An HTML/invalid error body must remain a generic failure. */ }
+    const safeReference = typeof reference === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reference);
+    throw new Error("Your account workspace could not be verified. No financial data was loaded." +
+      (safeReference ? " Support reference: " + reference + "." : ""));
+  }
   if (!response.ok) throw new Error("Your account workspace could not be verified. No financial data was loaded.");
   if (!(response.headers.get("content-type") ?? "").includes("application/json")) {
     throw new Error("Unexpected workspace response from MONIFlow.");
