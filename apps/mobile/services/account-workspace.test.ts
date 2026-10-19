@@ -64,6 +64,20 @@ describe("Phase 30 authenticated read-only account view", () => {
     await expect(loadAccountWorkspace()).rejects.toThrow("account changed");
   });
 
+  it("displays only an opaque support reference for database failure, never raw error data", async () => {
+    mocks.sessionForApiRequest.mockResolvedValue({ userId });
+    const reference = "8bddde83-2aab-435e-9317-808888880001";
+    mocks.apiFetch.mockResolvedValueOnce(reply({
+      code: "WORKSPACE_READ_UNAVAILABLE", reference, databaseUrl: "TOP_SECRET"
+    }, 503));
+    await expect(loadAccountWorkspace()).rejects.toThrow("Support reference: " + reference);
+    mocks.apiFetch.mockResolvedValueOnce(reply({
+      code: "WORKSPACE_READ_UNAVAILABLE", reference: "SQL secret: TOP_SECRET"
+    }, 503));
+    await expect(loadAccountWorkspace()).rejects.toThrow("No financial data was loaded.");
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(2);
+  });
+
   it("does not retry or fall back to demo data when the API is old or fails", async () => {
     mocks.sessionForApiRequest.mockResolvedValue({ userId });
     mocks.apiFetch.mockResolvedValueOnce(reply({}, 404));

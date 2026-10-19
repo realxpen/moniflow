@@ -145,7 +145,9 @@ describe("Phase 30 authenticated owner-scoped workspace status", () => {
         headers: { authorization: "Bearer verified-me" }
       });
       expect(response.statusCode).toBe(503);
-      expect(response.json()).toEqual({ code: "WORKSPACE_READ_UNAVAILABLE" });
+      expect(response.json()).toMatchObject({ code: "WORKSPACE_READ_UNAVAILABLE" });
+      expect(response.json().reference).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      expect(response.body).not.toMatch(/DO NOT LOG CONNECTION STRING|DATABASE_AUTHENTICATION/);
       expect(mappingRead).not.toHaveBeenCalled();
       expect(response.body).not.toMatch(/CONNECTION STRING|DATABASE_AUTHENTICATION/);
     } finally { await app.close(); }
@@ -159,7 +161,8 @@ describe("Phase 30 authenticated owner-scoped workspace status", () => {
         headers: { authorization: "Bearer verified-me" }
       });
       expect(result.statusCode).toBe(503);
-      expect(result.json()).toEqual({ code: "WORKSPACE_READ_UNAVAILABLE" });
+      expect(result.json()).toMatchObject({ code: "WORKSPACE_READ_UNAVAILABLE" });
+      expect(result.json().reference).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     } finally { await app.close(); }
   });
 

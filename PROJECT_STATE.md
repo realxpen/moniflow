@@ -1,3 +1,7 @@
+## Phase 31 — Traceable account-readiness failure handling (2026-10-19)
+
+Branch `feat/phase31-workspace-recovery-20261019` adds per-failure random support references to the authenticated workspace 503 response and corresponding sanitized private Vercel logs, plus strict mobile handling and regression tests. Phase 30 PR #33 is merged and production API READY at `9e55f61`, but a successful post-patch authenticated workspace request is **not verified**; prior log category is outside current Hobby retention. No database permissions, account mappings, provider records, or financial operations change. Phase 31 PR CI, merge, release, native rebuild and Appetize validation are distinct gates. See `docs/PHASE31_WORKSPACE_RECOVERY.md` for test/release checklist and scoped Phase 32–35 milestones.
+
 # MONIFlow Project State
 
 ## Phase 30 iOS workspace HTTP 503 — API readiness diagnostics (2026-10-16)
