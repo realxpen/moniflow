@@ -18,6 +18,7 @@ import type { PocketRepository } from "./repositories/pocket.js";
 import type { WalletOwnershipRepository } from "./repositories/wallet-ownership.js";
 import { authenticatedSessionRoutes } from "./routes/authenticated-session.js";
 import { authenticatedWorkspaceRoutes } from "./routes/authenticated-workspace.js";
+import { identityReconciliationRoutes } from "./routes/identity-reconciliation.js";
 import { activityRoutes } from "./routes/activity.js";
 import { bankingRoutes } from "./routes/banking.js";
 import { devBootstrapRoutes } from "./routes/dev-bootstrap.js";
