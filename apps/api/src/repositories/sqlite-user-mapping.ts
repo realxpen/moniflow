@@ -176,6 +176,19 @@ export class SqliteUserMappingRepository implements UserMappingRepository {
     }
   }
 
+  async findHoldByLocalUserId(localUserId: string): Promise<UserProvisioningHold | null> {
+    const row = this.database.prepare(
+      "SELECT email,local_user_id,state,created_at,phone_fingerprint FROM bmoni_user_provisioning_holds_v1 WHERE local_user_id=? LIMIT 1"
+    ).get(localUserId) as Record<string, unknown> | undefined;
+    return row ? {
+      email: String(row.email),
+      localUserId: row.local_user_id === null ? null : String(row.local_user_id),
+      phoneFingerprint: row.phone_fingerprint === null ? null : String(row.phone_fingerprint),
+      state: String(row.state) as UserProvisioningHold["state"],
+      createdAt: String(row.created_at)
+    } : null;
+  }
+
   async findHoldByEmail(email: string): Promise<UserProvisioningHold | null> {
     const row=this.database.prepare(
       "SELECT email,local_user_id,state,created_at,phone_fingerprint FROM bmoni_user_provisioning_holds_v1 WHERE email=? COLLATE NOCASE LIMIT 1"
