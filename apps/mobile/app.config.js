@@ -8,6 +8,7 @@ module.exports = ({ config }) => {
   return {
     ...config,
     name: "MONIFlow Waydroid",
+    scheme: "moniflow-waydroid",
     android: {
       ...config.android,
       package: "com.realxpen.moniflow.waydroid"
