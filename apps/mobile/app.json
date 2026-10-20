@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "MONIFlow",
+    "name": "MONIFlow Waydroid",
     "slug": "moniflow",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -9,14 +9,14 @@
     "newArchEnabled": true,
     "plugins": [
       "expo-router",
-      "./plugins/with-bmoni-sdk.js"
+      "./plugins/with-waydroid-x86.js"
     ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.realxpen.moniflow"
     },
     "android": {
-      "package": "com.realxpen.moniflow"
+      "package": "com.realxpen.moniflow.waydroid"
     },
     "experiments": {
       "typedRoutes": true
@@ -25,7 +25,9 @@
     "extra": {
       "eas": {
         "projectId": "3d986249-f72b-494b-9ceb-eef8335a5ae0"
-      }
+      },
+      "buildVariant": "waydroid-x86-ui-only",
+      "nativeWalletFeaturesEnabled": false
     }
   }
 }
