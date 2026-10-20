@@ -12,6 +12,12 @@ export async function apiFetch(url: string, init?: RequestInit, timeoutMs = defa
     const apiOrigin = expectedApi ? new URL(expectedApi).origin : null;
     const target = new URL(url);
     const isOurApi = !!apiOrigin && target.origin === apiOrigin;
+    // The Waydroid variant is for authenticated reads and navigation only.
+    // Block workspace mutations before any HTTP request is sent.
+    if (process.env.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW === "1" && isOurApi &&
+        !["GET", "HEAD"].includes((init?.method ?? "GET").toUpperCase())) {
+      throw new Error("This MONIFlow Waydroid preview is read-only. Use the physical Android app for financial workflows.");
+    }
     // Health is public; authentication trouble must not make provider health look offline.
     const isHealth = target.pathname.startsWith("/health");
     let tokenUsed: string | null = null;

@@ -98,6 +98,14 @@ export default function WelcomeScreen() {
       </View>
 
       <View style={styles.bottom}>
+        {process.env.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW === "1" ? (
+          <SoftCard style={styles.resumeCard}>
+            <StatusPill label="WAYDROID · READ-ONLY PREVIEW" tone="warning" />
+            <Text style={styles.providerCopy}>
+              UI and signed-in workspace reads only. Device wallets, PINs, signatures, approvals and financial API writes are disabled on this x86_64 test build.
+            </Text>
+          </SoftCard>
+        ) : null}
         <SoftCard style={styles.principleCard}>
           <Text style={styles.principleLabel}>THE OPERATING PRINCIPLE</Text>
           <Text style={styles.principle}>Intent → Plan → Guard → Human approval</Text>
