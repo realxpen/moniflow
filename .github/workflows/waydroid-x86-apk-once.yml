@@ -3,7 +3,7 @@ name: MONIFlow Waydroid x86_64 APK - One-Time Owner-Approved Preview
 on:
   push:
     branches: [main]
-    paths: [docs/WAYDROID_X86_APK_ONE_SHOT_20261020.md]
+    paths: [docs/WAYDROID_X86_APK_ONE_SHOT_20261020_RETRY1.md]
 
 permissions:
   contents: read
@@ -26,17 +26,18 @@ jobs:
       - name: Checkout at approved main revision
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Verify new one-time approval ticket only
         shell: bash
         run: |
           set -euo pipefail
-          TICKET="docs/WAYDROID_X86_APK_ONE_SHOT_20261020.md"
+          TICKET="docs/WAYDROID_X86_APK_ONE_SHOT_20261020_RETRY1.md"
           if [[ "$GITHUB_RUN_ATTEMPT" != "1" || -z "$EXPO_TOKEN" ]]; then
             echo "::error::Missing Expo token or new build approval"; exit 1
           fi
           git merge-base --is-ancestor 9966a86a0575dc721d126a5a80556cc86da2e1ea HEAD
+          test -f docs/WAYDROID_X86_APK_ONE_SHOT_20261020.md
           if ! git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null ||
              ! git cat-file -e "HEAD:$TICKET" 2>/dev/null ||
              git cat-file -e "$BEFORE_SHA:$TICKET" 2>/dev/null ||
