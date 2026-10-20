@@ -42,6 +42,7 @@ test("Waydroid opt-in uses a distinct package and leaves BMONI plugin out", () =
     assert.equal(preview.extra.nativeWalletFeaturesEnabled, false);
     assert.ok(preview.plugins.includes("./plugins/with-waydroid-x86.js"));
     assert.ok(!preview.plugins.includes("./plugins/with-bmoni-sdk.js"));
+    assert.ok(preview.autolinking.android.exclude.includes("@bkey-inc/bmoni_embedded_sdk"));
   });
 });
 
