@@ -1,6 +1,6 @@
 # MONIFlow Waydroid x86_64 — Read-only APK proposal
 
-Status: **configuration and PR review only**. This document is not approval to submit an Expo EAS build, deploy, merge, or activate BMONI financial capabilities.
+Status: **PR #39 merged and exactly one Waydroid EAS build submitted** ([Expo build d45c9566-bb4e-45c0-9221-765299666500](https://expo.dev/accounts/xpen/projects/moniflow/builds/d45c9566-bb4e-45c0-9221-765299666500)). Submission succeeded; APK Finished status, library ABI and cold-start are still unverified. The one-time build approval is spent. No further builds, deployments or BMONI financial capabilities are approved.
 
 ## Why
 
