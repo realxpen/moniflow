@@ -17,6 +17,18 @@ module.exports = ({ config }) => {
       ...(config.plugins ?? []).filter((plugin) => plugin !== "./plugins/with-bmoni-sdk.js"),
       "./plugins/with-waydroid-x86.js"
     ],
+    // Expo SDK 57 may ignore a project react-native.config.js android:null
+    // when the package supplies its own config. Explicit autolinking
+    // exclusion is enforced before React Native module resolution.
+    autolinking: {
+      ...config.autolinking,
+      android: {
+        ...config.autolinking?.android,
+        exclude: [
+          ...new Set([...(config.autolinking?.android?.exclude ?? []), "@bkey-inc/bmoni_embedded_sdk"])
+        ]
+      }
+    },
     extra: {
       ...config.extra,
       buildVariant: "waydroid-x86-ui-only",
