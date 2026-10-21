@@ -1,7 +1,8 @@
 import type { Sql } from "postgres";
 import { z } from "zod";
 
-import type { ExecutionRepository, ProviderExecution, PreparationHold, PreparationHoldInput, PreparationHoldState } from "./execution.js";
+import type { ExecutionRepository, ProviderExecution, PreparationHold, PreparationHoldInput, PreparationHoldState, SpendablePreparationInput, SpendableClaimResult } from "./execution.js";
+import { moneyInCents } from "./execution.js";
 
 const rowSchema = z.object({
   plan_id: z.string(), local_user_id: z.string(), provider_proposal_id: z.string(), provider_bank_account_id: z.string(),
@@ -50,6 +51,8 @@ export async function ensureExecutionSchema(sql: Sql) {
   `;
   await sql`create index if not exists provider_preparation_holds_owner_v1
     on moniflow_private.provider_preparation_holds_v1(local_user_id, created_at desc)`;
+  await sql`alter table moniflow_private.provider_preparation_holds_v1
+    add column if not exists reserved_amount numeric(20,2)`;
 }
 
 export class PostgresExecutionRepository implements ExecutionRepository {
@@ -107,6 +110,41 @@ export class PostgresExecutionRepository implements ExecutionRepository {
       returning plan_id
     `;
     return rows.length === 1;
+  }
+
+  async claimSpendablePreparation(input: SpendablePreparationInput): Promise<SpendableClaimResult> {
+    const requestedCents = moneyInCents(input.reservedAmount);
+    const ceilingCents = moneyInCents(input.spendableCeiling);
+    if (requestedCents === 0 || input.reservedAmount < input.amount) {
+      throw new Error("The plan must reserve its entire positive commitment.");
+    }
+    return this.sql.begin(async (tx): Promise<SpendableClaimResult> => {
+      // Deterministic owner lock serializes independent app instances and
+      // distinct plan IDs under the SAME wallet spending capacity.
+      await tx`select pg_advisory_xact_lock(hashtextextended(${input.localUserId}::text, 324801))`;
+      const rows = await tx`
+        select count(*) filter (where reserved_amount is null)::integer as legacy_count,
+               coalesce(sum(reserved_amount), 0)::text as reserved_total
+        from moniflow_private.provider_preparation_holds_v1
+        where local_user_id = ${input.localUserId}::uuid
+      `;
+      if (Number(rows[0]?.legacy_count ?? 0) > 0) return "UNRECONCILED_LEGACY";
+      if (moneyInCents(Number(rows[0]?.reserved_total ?? "0")) + requestedCents > ceilingCents) {
+        return "INSUFFICIENT_CAPACITY";
+      }
+      const inserted = await tx`
+        insert into moniflow_private.provider_preparation_holds_v1 (
+          plan_id, local_user_id, approved_plan_hash, provider_bank_account_id,
+          amount, reserved_amount, state, provider_proposal_id
+        ) values (
+          ${input.planId}::uuid, ${input.localUserId}::uuid,
+          ${input.approvedPlanHash}, ${input.providerBankAccountId},
+          ${input.amount}, ${input.reservedAmount}, 'RESERVED', null
+        )
+        on conflict (plan_id) do nothing returning plan_id
+      `;
+      return inserted.length === 1 ? "CLAIMED" : "CONFLICT";
+    });
   }
 
   async findPreparationHold(planId: string, localUserId: string): Promise<PreparationHold | null> {

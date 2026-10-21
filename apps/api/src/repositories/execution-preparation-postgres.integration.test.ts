@@ -48,7 +48,7 @@ suite("Disposable PostgreSQL cross-instance financial preparation fence", () => 
     await Promise.all([primarySql.end({ timeout: 5 }), secondarySql.end({ timeout: 5 })]);
   });
 
-  async function newPlan() {
+  async function newPlan(ownerId = userId) {
     const intent = {
       intent: "BANK_WITHDRAWAL" as const,
       currency: "NGN" as const,
@@ -58,9 +58,9 @@ suite("Disposable PostgreSQL cross-instance financial preparation fence", () => 
     };
     const plan = buildMoneyPlan(intent, 300000);
     const hash = fingerprintMoneyPlan(plan);
-    const record = await plans.create({ localUserId: userId, intent, plan, planHash: hash, originalInstruction: "Disposable financial hold fixture" });
+    const record = await plans.create({ localUserId: ownerId, intent, plan, planHash: hash, originalInstruction: "Disposable financial hold fixture" });
     return {
-      planId: record.id, localUserId: userId, approvedPlanHash: hash,
+      planId: record.id, localUserId: ownerId, approvedPlanHash: hash,
       providerBankAccountId: "disposable-bank-fixture", amount: 40000
     };
   }
@@ -112,6 +112,55 @@ suite("Disposable PostgreSQL cross-instance financial preparation fence", () => 
     expect(await first.claimPreparation(data)).toBe(false);
     expect(await second.claimPreparation(data)).toBe(false);
     expect(await second.findPreparationHold(data.planId, foreignUserId)).toBeNull();
+  });
+
+  it("serializes distinct-plan reservations across two PostgreSQL clients without overspending", async () => {
+    const owner = randomUUID();
+    await primarySql`
+      insert into moniflow_private.bmoni_user_mappings(local_user_id, email, bmoni_user_id)
+      values (${owner}::uuid, ${"spend-" + owner + "@example.invalid"}, ${"spend-" + owner})
+    `;
+    try {
+      const a = await newPlan(owner);
+      const b = await newPlan(owner);
+      const claim = (value: typeof a, amount: number) => ({
+        ...value, amount: 40000, reservedAmount: amount, spendableCeiling: 100000
+      });
+      const results = await Promise.all([
+        first.claimSpendablePreparation(claim(a, 70000)),
+        second.claimSpendablePreparation(claim(b, 60000))
+      ]);
+      expect(results).toContain("CLAIMED");
+      expect(results).toContain("INSUFFICIENT_CAPACITY");
+      const winner = results[0] === "CLAIMED" ? a : b;
+      const loser = results[0] === "CLAIMED" ? b : a;
+      expect((await first.findPreparationHold(winner.planId, owner))?.state).toBe("RESERVED");
+      expect(await first.findPreparationHold(loser.planId, owner)).toBeNull();
+      await first.recordPreparationOutcome(winner.planId, owner, "PROVIDER_OUTCOME_UNKNOWN");
+      expect(await second.claimSpendablePreparation(claim(loser, 60000)))
+        .toBe("INSUFFICIENT_CAPACITY");
+    } finally {
+      await primarySql`delete from moniflow_private.bmoni_user_mappings where local_user_id = ${owner}::uuid`;
+    }
+  });
+
+  it("requires reconciliation of legacy unknown-budget holds before allocating other plans", async () => {
+    const owner = randomUUID();
+    await primarySql`
+      insert into moniflow_private.bmoni_user_mappings(local_user_id, email, bmoni_user_id)
+      values (${owner}::uuid, ${"old-" + owner + "@example.invalid"}, ${"old-" + owner})
+    `;
+    try {
+      const old = await newPlan(owner);
+      const newer = await newPlan(owner);
+      expect(await first.claimPreparation(old)).toBe(true);
+      expect(await second.claimSpendablePreparation({
+        ...newer, reservedAmount: 40000, spendableCeiling: 300000
+      })).toBe("UNRECONCILED_LEGACY");
+      expect(await first.findPreparationHold(newer.planId, owner)).toBeNull();
+    } finally {
+      await primarySql`delete from moniflow_private.bmoni_user_mappings where local_user_id = ${owner}::uuid`;
+    }
   });
 
   it("records a confirmed proposal for observation but never releases the plan claim", async () => {
