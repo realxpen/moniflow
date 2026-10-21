@@ -85,6 +85,26 @@ describe("Durable SQLite provider preparation holds", () => {
     expect(await db.claimPreparation(input)).toBe(false);
   });
 
+  it("lists only owner-scoped local holds with reserved amount and legacy uncertainty", async () => {
+    const db = new SqliteExecutionRepository(":memory:");
+    openRepositories.push(db);
+    expect(await db.claimPreparation(input)).toBe(true);
+    expect(await db.claimSpendablePreparation({
+      ...input, planId: "44444444-4444-4444-8444-444444444444",
+      localUserId: otherUserId, reservedAmount: 40000, spendableCeiling: 300000
+    })).toBe("CLAIMED");
+    const own = await db.listPreparationHolds(userId, 26);
+    expect(own).toHaveLength(1);
+    expect(own[0]).toMatchObject({ planId, localUserId: userId, reservedAmount: null });
+    const foreign = await db.listPreparationHolds(otherUserId, 26);
+    expect(foreign).toHaveLength(1);
+    expect(foreign[0]).toMatchObject({
+      localUserId: otherUserId, reservedAmount: 40000
+    });
+    expect(await db.listPreparationHolds("55555555-5555-4555-8555-555555555555", 26))
+      .toHaveLength(0);
+  });
+
   it("distinct plans receive independent durable holds", async () => {
     const db = new SqliteExecutionRepository(":memory:");
     openRepositories.push(db);
