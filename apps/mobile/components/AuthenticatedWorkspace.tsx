@@ -4,7 +4,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
-import { signOut, useAuthSession } from "@/services/auth-session";
+import { currentAuthSession, signOut, useAuthSession } from "@/services/auth-session";
+import { canApplyOwnerRequest, selectVisibleOwnerSnapshot, type OwnerWorkspaceSnapshot } from "@/services/owner-workspace-snapshot";
 import { loadAccountWorkspace, type AccountWorkspaceOverview } from "@/services/account-workspace";
 import { loadAccountReconciliation, type AccountReconciliationReadiness } from "@/services/account-reconciliation";
 import { buildReadinessJourney } from "@/services/account-readiness-journey";
@@ -23,55 +24,68 @@ const copy = {
 export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
   const auth = useAuthSession();
   const clearDemo = useDemoSession(state => state.clearSession);
-  const [overview, setOverview] = useState<AccountWorkspaceOverview | null>(null);
-  const [reconciliation, setReconciliation] = useState<AccountReconciliationReadiness | null>(null);
-  const [reconciliationError, setReconciliationError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<OwnerWorkspaceSnapshot | null>(null);
   const requestSequence = useRef(0);
   const title = copy[tab];
 
   const refresh = useCallback(async () => {
     const sequence = ++requestSequence.current;
-    setOverview(null);
-    setReconciliation(null);
-    setReconciliationError(null);
-    setError(null);
-    if (!auth?.userId) {
-      setBusy(false);
-      setError("Sign in to load your own workspace.");
+    const subjectId = auth?.userId;
+    if (!subjectId) {
+      setSnapshot(null);
       return;
     }
-    setBusy(true);
+    const isCurrent = () => canApplyOwnerRequest(
+      subjectId, currentAuthSession()?.userId, sequence, requestSequence.current
+    );
+    setSnapshot({
+      subjectId, busy: true, overview: null, reconciliation: null,
+      error: null, reconciliationError: null
+    });
+
     try {
       const next = await loadAccountWorkspace();
-      if (requestSequence.current === sequence && next.userId.toLowerCase() === auth.userId.toLowerCase()) {
-        setOverview(next);
-        // The reconciliation API is read-only and checked only on Profile.
-        // An unavailable release/response must not hide a valid workspace.
-        if (tab === "profile") {
-          try {
-            const status = await loadAccountReconciliation(next);
-            if (requestSequence.current === sequence) setReconciliation(status);
-          } catch (cause) {
-            if (requestSequence.current === sequence) {
-              setReconciliationError(cause instanceof Error ? cause.message : "Identity review unavailable.");
-            }
+      if (!isCurrent() || next.userId.toLowerCase() !== subjectId.toLowerCase()) return;
+      setSnapshot(previous => previous?.subjectId === subjectId
+        ? { ...previous, overview: next }
+        : previous);
+
+      // Identity review remains a separate owner-bound GET, Profile only.
+      if (tab === "profile") {
+        try {
+          const status = await loadAccountReconciliation(next);
+          if (isCurrent()) {
+            setSnapshot(previous => previous?.subjectId === subjectId
+              ? { ...previous, reconciliation: status }
+              : previous);
+          }
+        } catch (cause) {
+          if (isCurrent()) {
+            setSnapshot(previous => previous?.subjectId === subjectId
+              ? {
+                  ...previous,
+                  reconciliationError: cause instanceof Error ? cause.message : "Identity review unavailable."
+                }
+              : previous);
           }
         }
       }
     } catch (cause) {
-      if (requestSequence.current === sequence) {
-        setError(cause instanceof Error ? cause.message : "Unable to verify your workspace.");
+      if (isCurrent()) {
+        setSnapshot(previous => previous?.subjectId === subjectId
+          ? { ...previous, error: cause instanceof Error ? cause.message : "Unable to verify your workspace." }
+          : previous);
       }
     } finally {
-      if (requestSequence.current === sequence) setBusy(false);
+      if (isCurrent()) {
+        setSnapshot(previous => previous?.subjectId === subjectId
+          ? { ...previous, busy: false }
+          : previous);
+      }
     }
   }, [auth?.userId, tab]);
 
   useEffect(() => {
-    setOverview(null);
-    setReconciliation(null);
     void refresh();
     return () => { requestSequence.current += 1; };
   }, [refresh]);
@@ -79,13 +93,20 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
 
   const leave = () => {
     requestSequence.current += 1;
-    setOverview(null);
-    setReconciliation(null);
-    setReconciliationError(null);
+    setSnapshot(null);
     signOut();
     clearDemo();
     router.replace("/auth/sign-in");
   };
+
+  // The previous account's state must never be rendered while React is
+  // transitioning between sessions or invalidating an in-flight request.
+  const visible = selectVisibleOwnerSnapshot(auth?.userId, snapshot);
+  const overview = visible?.overview ?? null;
+  const reconciliation = visible?.reconciliation ?? null;
+  const error = visible?.error ?? null;
+  const reconciliationError = visible?.reconciliationError ?? null;
+  const busy = visible?.busy ?? Boolean(auth?.userId);
 
   const recorded = overview?.mapping === "recorded";
   const ownerWallet = overview?.wallet === "recorded_not_reverified";
