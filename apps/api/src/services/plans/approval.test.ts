@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { GuardCheck } from "@moniflow/moniguard";
+import { evaluateMoniGuard, type GuardCheck } from "@moniflow/moniguard";
 
 import type {
   CreatePersistedMoneyPlanInput,
@@ -107,6 +107,17 @@ describe("Phase 11 human approval", () => {
     expect(reordered.actions[0]?.index).toBe(2);
     expect(reordered.totals).toEqual(original.totals);
     expect(fingerprintMoneyPlan(reordered)).not.toBe(fingerprintMoneyPlan(original));
+  });
+
+  it("requires a new MONI Guard evaluation when action ordering changes", () => {
+    const plan = fixturePlan();
+    plan.actions.reverse();
+    const verdict = evaluateMoniGuard({ intent: fixtureIntent(), plan });
+    expect(verdict.verdict).toBe("BLOCK");
+    expect(verdict.checks.find((check) => check.rule === "PLAN_INTEGRITY"))
+      .toMatchObject({ passed: false, severity: "critical" });
+    expect(verdict.checks.find((check) => check.rule === "AMOUNT_INTEGRITY")?.passed)
+      .toBe(false);
   });
 
   it("revokes previously approved plans after an action sequence is reordered", async () => {
