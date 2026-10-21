@@ -7,6 +7,7 @@ import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { signOut, useAuthSession } from "@/services/auth-session";
 import { loadAccountWorkspace, type AccountWorkspaceOverview } from "@/services/account-workspace";
 import { loadAccountReconciliation, type AccountReconciliationReadiness } from "@/services/account-reconciliation";
+import { buildReadinessJourney } from "@/services/account-readiness-journey";
 import { useDemoSession } from "@/store/demo-session";
 import { colors, layout, radius, spacing, typography } from "@/theme";
 
@@ -88,6 +89,7 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
 
   const recorded = overview?.mapping === "recorded";
   const ownerWallet = overview?.wallet === "recorded_not_reverified";
+  const journey = tab === "profile" ? buildReadinessJourney(overview, reconciliation) : null;
   const reviewState = reconciliation?.reconciliation;
   const reviewLabel = !reviewState ? "NOT VERIFIED"
     : reviewState === "manual_review_required" ? "MANUAL REVIEW"
@@ -175,6 +177,34 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
         </SoftCard>
       ) : null}
 
+      {tab === "profile" && journey ? (
+        <SoftCard style={styles.card}>
+          <Text style={styles.label}>YOUR VERIFICATION JOURNEY</Text>
+          <Text style={styles.headline}>One verified step at a time.</Text>
+          <Text style={styles.copy}>
+            Account access, BMONI identity, device ownership, Nigeria verification, and financial access are separate checks.
+            A recorded mapping never unlocks wallet signing or balances.
+          </Text>
+          {journey.steps.map((step, index) => (
+            <View key={step.id} style={styles.journeyStep}>
+              <View style={styles.journeyIndex}>
+                <Text style={styles.journeyNumber}>{String(index + 1).padStart(2, "0")}</Text>
+              </View>
+              <View style={styles.journeyContent}>
+                <Readiness label={step.title} detail={step.detail} pill={step.status} />
+              </View>
+            </View>
+          ))}
+          <View style={styles.divider} />
+          <Text style={styles.label}>WHAT HAPPENS NEXT</Text>
+          <Text style={styles.headline}>{journey.nextActionTitle}</Text>
+          <Text style={styles.copy}>{journey.nextActionDetail}</Text>
+          <Text style={styles.disclosure}>
+            READ-ONLY STATUS · NO AUTOMATIC LINKING · NO FINANCIAL OPERATIONS
+          </Text>
+        </SoftCard>
+      ) : null}
+
       {tab === "profile" ? (
         <SoftCard style={styles.card}>
           <Text style={styles.label}>SESSION CONTROLS</Text>
@@ -220,6 +250,11 @@ const styles = StyleSheet.create({
   readinessLabel: { ...typography.body, fontWeight: "600", color: colors.textPrimary, flex: 1 },
   pill: { ...typography.technical, color: colors.statusWarning, fontSize: 11, flexShrink: 1 },
   divider: { height: 1, backgroundColor: colors.borderSoft },
+  journeyStep: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start", paddingVertical: spacing.sm },
+  journeyIndex: { borderColor: colors.borderSoft, borderWidth: 1, backgroundColor: colors.backgroundPrimary,
+    borderRadius: radius.pill, minWidth: 36, minHeight: 36, alignItems: "center", justifyContent: "center" },
+  journeyNumber: { ...typography.technical, color: colors.statusProcessing },
+  journeyContent: { flex: 1, minWidth: 0 },
   error: { ...typography.caption, color: colors.statusError },
   footer: { gap: spacing.md, alignItems: "center" },
   disclosure: { ...typography.technical, textAlign: "center", color: colors.textSecondary },
