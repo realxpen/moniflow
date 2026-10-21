@@ -398,7 +398,7 @@ export class PostgresMoneyPlanRepository implements MoneyPlanRepository {
         ${input.localUserId}::uuid, ${input.originalInstruction}, ${input.plan.sourceIntent}, ${input.plan.currency}, ${input.plan.currentAvailable},
         ${input.plan.totals.externalMovement}, ${input.plan.totals.internalAllocation}, ${input.plan.totals.totalCommitted},
         ${input.plan.totals.availableAfter}, ${input.plan.requiresApproval}, 'VALIDATING', null, ${input.planHash},
-        ${JSON.stringify(input.intent)}::jsonb, ${JSON.stringify(input.plan)}::jsonb, null, null
+        ${this.sql.json(input.intent)}::jsonb, ${this.sql.json(input.plan)}::jsonb, null, null
       ) returning id
     `;
     const id = String(rows[0]?.id ?? "");
@@ -472,14 +472,28 @@ export class PostgresMoneyPlanRepository implements MoneyPlanRepository {
   async close() {}
 }
 
+/**
+ * Older PostgresJS writes encoded a JSON-string scalar rather than a JSONB
+ * object. Decode at most twice for backward-compatible reads, then validate
+ * against the strict intent / plan Zod schemas. New writes are true JSONB.
+ */
+function decodeMoneyPlanJson(value: unknown): unknown {
+  let current = value;
+  for (let i = 0; i < 2 && typeof current === "string"; i++) {
+    try { current = JSON.parse(current); }
+    catch { return current; }
+  }
+  return current;
+}
+
 function mapMoneyPlanRow(row: z.infer<typeof moneyPlanRowSchema>): PersistedMoneyPlan {
   return {
     id: row.id,
     localUserId: row.local_user_id,
     originalInstruction: row.original_instruction,
     status: row.status as PersistedMoneyPlan["status"],
-    intent: moniflowIntentSchema.parse(row.intent_payload),
-    plan: moneyPlanSchema.parse(row.plan_payload),
+    intent: moniflowIntentSchema.parse(decodeMoneyPlanJson(row.intent_payload)),
+    plan: moneyPlanSchema.parse(decodeMoneyPlanJson(row.plan_payload)),
     guardVerdict: row.guard_verdict as PersistedMoneyPlan["guardVerdict"],
     planHash: row.plan_hash,
     approvedPlanHash: row.approved_plan_hash,
