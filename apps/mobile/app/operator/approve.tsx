@@ -140,7 +140,7 @@ export default function ApprovalScreen() {
           <StatusPill label="UNRECOGNIZED APPROVAL STATE" tone="warning" />
           <Text style={styles.noticeCopy}>This authorization status cannot enable signing. Return to MONI Guard and review again.</Text>
         </SoftCard>
-      )
+      )}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Text style={styles.disclosure}>Approval does not move money and does not create a provider proposal or signature. If the amount or destination changes, this approval becomes invalid.</Text>
