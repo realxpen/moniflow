@@ -1,13 +1,19 @@
 import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 
-import type { ExecutionRepository, ProviderExecution } from "./execution.js";
+import type { ExecutionRepository, ProviderExecution, PreparationHold, PreparationHoldInput, PreparationHoldState } from "./execution.js";
 
 const rowSchema = z.object({
   plan_id: z.string(), local_user_id: z.string(), provider_proposal_id: z.string(), provider_bank_account_id: z.string(),
   amount: z.number(), currency: z.literal("NGN"), sign_hash: z.string().nullable(), provider_status: z.string().nullable(),
   state: z.enum(["PREPARING", "AWAITING_DEVICE_SIGNATURE", "PROCESSING", "COMPLETED", "FAILED"]),
   created_at: z.string(), updated_at: z.string()
+});
+const holdRowSchema = z.object({
+  plan_id: z.string(), local_user_id: z.string(), approved_plan_hash: z.string(),
+  provider_bank_account_id: z.string(), amount: z.number(),
+  state: z.enum(["RESERVED", "PROVIDER_OUTCOME_UNKNOWN", "PROPOSAL_RECORDED"]),
+  provider_proposal_id: z.string().nullable(), created_at: z.string(), updated_at: z.string()
 });
 
 function databaseFilename(databaseUrl: string) {
@@ -33,7 +39,20 @@ export class SqliteExecutionRepository implements ExecutionRepository {
         state TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
-      ) STRICT
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS provider_preparation_holds_v1 (
+        plan_id TEXT PRIMARY KEY,
+        local_user_id TEXT NOT NULL,
+        approved_plan_hash TEXT NOT NULL CHECK (length(approved_plan_hash) = 64),
+        provider_bank_account_id TEXT NOT NULL,
+        amount REAL NOT NULL CHECK (amount > 0),
+        state TEXT NOT NULL CHECK (state IN ('RESERVED', 'PROVIDER_OUTCOME_UNKNOWN', 'PROPOSAL_RECORDED')),
+        provider_proposal_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS provider_preparation_holds_owner_v1
+      ON provider_preparation_holds_v1(local_user_id, created_at);
     `);
   }
 
@@ -59,6 +78,46 @@ export class SqliteExecutionRepository implements ExecutionRepository {
       WHERE plan_id = ? AND local_user_id = ? AND provider_proposal_id = ?
     `).run(value.providerBankAccountId, value.amount, value.currency, value.signHash, value.providerStatus, value.state, value.updatedAt, value.planId, value.localUserId, value.providerProposalId);
     return value;
+  }
+
+  async claimPreparation(value: PreparationHoldInput): Promise<boolean> {
+    const now = new Date().toISOString();
+    const claimed = this.database.prepare(`
+      INSERT INTO provider_preparation_holds_v1
+      (plan_id, local_user_id, approved_plan_hash, provider_bank_account_id, amount, state,
+       provider_proposal_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'RESERVED', NULL, ?, ?)
+      ON CONFLICT (plan_id) DO NOTHING
+    `).run(value.planId, value.localUserId, value.approvedPlanHash,
+      value.providerBankAccountId, value.amount, now, now);
+    return claimed.changes === 1;
+  }
+
+  async findPreparationHold(planId: string, localUserId: string): Promise<PreparationHold | null> {
+    const raw = this.database.prepare(`
+      SELECT * FROM provider_preparation_holds_v1
+      WHERE plan_id = ? AND local_user_id = ? LIMIT 1
+    `).get(planId, localUserId);
+    if (!raw) return null;
+    const row = holdRowSchema.parse(raw);
+    return {
+      planId: row.plan_id, localUserId: row.local_user_id,
+      approvedPlanHash: row.approved_plan_hash, providerBankAccountId: row.provider_bank_account_id,
+      amount: row.amount, state: row.state, providerProposalId: row.provider_proposal_id,
+      createdAt: row.created_at, updatedAt: row.updated_at
+    };
+  }
+
+  async recordPreparationOutcome(
+    planId: string, localUserId: string,
+    state: Exclude<PreparationHoldState, "RESERVED">, providerProposalId: string | null = null
+  ): Promise<void> {
+    // Terminal for replay purposes. Never releases the unique plan claim.
+    this.database.prepare(`
+      UPDATE provider_preparation_holds_v1
+      SET state = ?, provider_proposal_id = ?, updated_at = ?
+      WHERE plan_id = ? AND local_user_id = ? AND state = 'RESERVED'
+    `).run(state, providerProposalId, new Date().toISOString(), planId, localUserId);
   }
 
   async close() { this.database.close(); }
