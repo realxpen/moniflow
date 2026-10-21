@@ -15,9 +15,10 @@ export function fingerprintMoneyPlan(input: MoneyPlan): string {
   const sensitiveSnapshot = {
     currency: plan.currency,
     currentAvailable: plan.currentAvailable,
-    actions: [...plan.actions]
-      .sort((a, b) => a.index - b.index)
-      .map((action) => ({
+    // Preserve the exact reviewed action sequence. Sorting would allow
+    // an attacker or stale writer to swap actions (keeping their old indexes)
+    // without changing the approved fingerprint.
+    actions: plan.actions.map((action) => ({
         index: action.index,
         kind: action.kind,
         label: action.label,
