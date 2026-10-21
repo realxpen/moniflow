@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
+import { ReadOnlyHomeHero } from "@/components/workspace/ReadOnlyHomeHero";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { currentAuthSession, signOut, useAuthSession } from "@/services/auth-session";
 import { canApplyOwnerRequest, selectVisibleOwnerSnapshot, type OwnerWorkspaceSnapshot } from "@/services/owner-workspace-snapshot";
@@ -14,7 +15,7 @@ import { colors, layout, radius, spacing, typography } from "@/theme";
 
 type Tab = "home" | "pockets" | "activity" | "profile";
 const copy = {
-  home: { title: "Your money, when ready.", eyebrow: "PERSONAL HOME", description: "Your signed-in MONIFlow workspace. Provider balances and controls remain unavailable until ownership is confirmed." },
+  home: { title: "Your money, in focus.", eyebrow: "PERSONAL HOME", description: "Your signed-in workspace. Balances and financial controls remain unavailable until account, wallet ownership and provider readiness are independently confirmed." },
   pockets: { title: "Your money spaces.", eyebrow: "POCKETS", description: "Savings goals are internal bookkeeping, not separate provider-held funds. Your private allocations are withheld until account readiness is verified." },
   activity: { title: "Your financial memory.", eyebrow: "ACTIVITY", description: "Real transactions must be confirmed by the provider. No historical financial records are inferred from the offline demonstration." },
   profile: { title: "Account and readiness.", eyebrow: "PROFILE", description: "A secure view of what MONIFlow knows and what it still needs to verify." }
@@ -130,10 +131,14 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
         <Text style={styles.title}>{title.title}</Text>
         <Text style={styles.copy}>{title.description}</Text>
         <StatusPill
-          label={busy ? "CHECKING YOUR ACCOUNT" : overview ? "SIGNED-IN ACCOUNT VERIFIED" : "READINESS UNAVAILABLE"}
-          tone={busy ? "processing" : overview ? "success" : "warning"}
+          label={busy ? "CHECKING YOUR ACCOUNT" : overview ? "MONIFLOW SESSION CHECKED" : "READINESS UNAVAILABLE"}
+          tone={busy || overview ? "processing" : "warning"}
         />
       </View>
+
+      {tab === "home" ? (
+        <ReadOnlyHomeHero checking={busy} onOpenPractice={() => router.push("/learn")} />
+      ) : null}
 
       <SoftCard style={styles.card}>
         <Text style={styles.label}>SIGNED-IN IDENTITY</Text>
@@ -165,30 +170,6 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
           detail="Withheld until account linkage, wallet ownership and provider read permissions are independently confirmed."
           pill="WITHHELD" />
       </SoftCard>
-
-      {tab === "home" ? (
-        <SoftCard style={styles.card}>
-          <Text style={styles.label}>YOUR WORKSPACE</Text>
-          <Text style={styles.headline}>A secure starting point.</Text>
-          <Text style={styles.copy}>You can explore account readiness now. Pockets and Activity will show real account-linked data only when MONIFlow has the required evidence. No simulated ₦300,000 balance is used here.</Text>
-          <SecondaryButton onPress={() => router.push("/(tabs)/pockets")}>View money spaces</SecondaryButton>
-          <SecondaryButton onPress={() => router.push("/(tabs)/activity")}>View activity readiness</SecondaryButton>
-        </SoftCard>
-      ) : null}
-
-      {tab === "home" ? (
-        <SoftCard style={styles.card}>
-          <Text style={styles.label}>LEARN & PRACTICE</Text>
-          <Text style={styles.headline}>Try MONIFlow without moving money.</Text>
-          <Text style={styles.copy}>
-            Explore an interactive sample instruction, see a hypothetical Money Plan, and learn why
-            MONI Guard and human approval matter. This separate learning mode uses no real balance,
-            bank credentials, device PIN, or live BMONI transaction.
-          </Text>
-          <StatusPill label="OFFLINE EXAMPLE · NO ACTUAL FUNDS" tone="warning" />
-          <SecondaryButton onPress={() => router.push("/learn")}>Open Learning & Practice</SecondaryButton>
-        </SoftCard>
-      ) : null}
 
       {tab === "pockets" || tab === "activity" ? (
         <SoftCard style={styles.card}>
