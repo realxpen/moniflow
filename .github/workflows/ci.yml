@@ -76,3 +76,5 @@ jobs:
         run: pnpm exec vitest run apps/api/src/repositories/bmoni-identity-postgres.integration.test.ts --reporter=verbose
       - name: Isolated authenticated demo PostgreSQL ledger
         run: pnpm exec vitest run apps/api/src/services/sandbox-demo/workspace-store.postgres.integration.test.ts --reporter=verbose
+      - name: Isolated PostgreSQL cross-instance financial preparation fence
+        run: pnpm exec vitest run apps/api/src/repositories/execution-preparation-postgres.integration.test.ts --reporter=verbose
