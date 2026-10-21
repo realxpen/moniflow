@@ -8,6 +8,7 @@ import type { PocketRepository } from "../repositories/pocket.js";
 import type { WalletOwnershipRepository } from "../repositories/wallet-ownership.js";
 import { BmoniProviderError, type BmoniGateway } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
+import { realFinancialExecutionReleased, REAL_EXECUTION_RELEASE_CODE } from "../services/plans/execution-release-gate.js";
 import { fingerprintMoneyPlan, requireApprovedPlanForExecution } from "../services/plans/approval.js";
 import { computeAvailableToSpend } from "../services/plans/spendable.js";
 import { readCngnAvailableBalance } from "../services/plans/provider-balance.js";
@@ -35,6 +36,9 @@ type JsonRecord = Record<string, unknown>;
 
 export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async (app, options) => {
   app.post<{ Params: unknown; Body: unknown }>("/plans/:planId/execution/prepare", async (request, reply) => {
+    if (!realFinancialExecutionReleased()) {
+      return reply.status(503).send({ code: REAL_EXECUTION_RELEASE_CODE, message: "Real BMONI money execution is not released." });
+    }
     const params = paramsSchema.safeParse(request.params);
     const body = userBodySchema.safeParse(request.body);
     if (!params.success || !body.success) {
@@ -114,6 +118,9 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
   });
 
   app.post<{ Params: unknown; Body: unknown }>("/plans/:planId/execution/sign", async (request, reply) => {
+    if (!realFinancialExecutionReleased()) {
+      return reply.status(503).send({ code: REAL_EXECUTION_RELEASE_CODE, message: "Real BMONI money execution is not released." });
+    }
     const params = paramsSchema.safeParse(request.params);
     const body = signBodySchema.safeParse(request.body);
     if (!params.success || !body.success) {
