@@ -12,13 +12,15 @@ const BANK_ALIASES: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\b(?:firstbank|first bank)\b/i, label: "FirstBank" }
 ];
 
-const MONEY_PATTERN = /(?:₦|ngn\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)\s*([km])?/i;
-
 export function parseIntent(rawInput: string): MoniflowIntent {
-  const input = normalizeWhitespace(rawInput);
+  const input = normalizeWhitespace(rawInput).replace(/[.!?]$/, "").trim();
+  if (input.length > 500) return validated({ intent: "UNSUPPORTED", requiresApproval: false, reason: "AMBIGUOUS" });
   if (!input) return validated({ intent: "UNSUPPORTED", requiresApproval: false, reason: "EMPTY" });
 
   const clauses = splitActionClauses(input);
+  if (clauses.length > 5 || clauses.some((clause) => !clause)) {
+    return validated({ intent: "UNSUPPORTED", requiresApproval: false, reason: "AMBIGUOUS" });
+  }
   if (clauses.length > 1) {
     const actions: AtomicIntent[] = [];
     for (const clause of clauses) {
@@ -37,6 +39,10 @@ export function parseIntent(rawInput: string): MoniflowIntent {
     }
   }
 
+  // A dangling connector is an incomplete compound command, not an atomic one.
+  if (/\b(?:and then|and|then)$/i.test(input)) {
+    return validated({ intent: "UNSUPPORTED", requiresApproval: false, reason: "AMBIGUOUS" });
+  }
   const atomic = parseAtomic(input);
   if (atomic) return validated(atomic);
 
@@ -69,11 +75,13 @@ function parseBalance(input: string): AtomicIntent | null {
 }
 
 function parseWithdrawal(input: string): AtomicIntent | null {
-  if (!/^withdraw\b/i.test(input)) return null;
-  const amount = parseAmount(input);
-  const bank = parseSavedBank(input);
-  if (!amount || !bank) return null;
-  if (!/\bto\b/i.test(input)) return null;
+  const match = input.match(/^withdraw\s+(.+?)\s+to\s+(?:my\s+)?(.+)$/i);
+  if (!match?.[1] || !match[2]) return null;
+
+  // Match the entire command: never silently ignore trailing instructions.
+  const amount = parseAmount(match[1]);
+  const bank = parseSavedBank(match[2]);
+  if (amount === null || !bank) return null;
 
   return {
     intent: "BANK_WITHDRAWAL",
@@ -101,29 +109,22 @@ function parseCreatePocket(input: string): AtomicIntent | null {
 }
 
 function parseAllocatePocket(input: string): AtomicIntent | null {
-  if (!/^(?:save|allocate|put)\b/i.test(input)) return null;
-  const amount = parseAmount(input);
-  if (!amount) return null;
-
-  const patterns = [
-    /\b(?:for|towards)\s+(.+?)(?:\s+(?:pocket|money space))?$/i,
-    /\b(?:into|in|to)\s+(?:my\s+)?(.+?)\s+(?:pocket|money space)$/i
-  ];
-  for (const pattern of patterns) {
-    const match = input.match(pattern);
-    const capturedName = match?.[1];
-    if (!capturedName) continue;
-    const name = normalizePocketName(capturedName);
-    if (!name) return null;
-    return {
-      intent: "ALLOCATE_POCKET",
-      currency: "NGN",
-      amount,
-      pocket: { name },
-      requiresApproval: false
-    };
-  }
-  return null;
+  const match = input.match(
+    /^(?:save|allocate|put)\s+(.+?)\s+(?:(?:for|towards)\s+(.+)|(?:into|in|to)\s+(?:my\s+)?(.+?)\s+(?:pocket|money space))$/i
+  );
+  if (!match?.[1]) return null;
+  const amount = parseAmount(match[1]);
+  const capturedName = match[2] ?? match[3];
+  if (amount === null || !capturedName) return null;
+  const name = normalizePocketName(capturedName);
+  if (!name) return null;
+  return {
+    intent: "ALLOCATE_POCKET",
+    currency: "NGN",
+    amount,
+    pocket: { name },
+    requiresApproval: false
+  };
 }
 
 function parseActivity(input: string): AtomicIntent | null {
@@ -136,33 +137,36 @@ function parseActivity(input: string): AtomicIntent | null {
   return null;
 }
 
-function parseAmount(input: string): number | null {
-  const currencyAware = input.match(/(?:₦|ngn\s*)[0-9][0-9,]*(?:\.\d{1,2})?\s*[km]?/i);
-  const compactNaira = input.match(/\b[0-9][0-9,]*(?:\.\d{1,2})?\s*[km]\b/i);
-  const candidate = currencyAware?.[0] ?? compactNaira?.[0];
-  if (!candidate) return null;
-  const match = candidate.match(MONEY_PATTERN);
-  const numericPart = match?.[1];
-  if (!numericPart) return null;
-
-  const base = Number.parseFloat(numericPart.replace(/,/g, ""));
-  if (!Number.isFinite(base) || base <= 0) return null;
-  const multiplier = match?.[2]?.toLowerCase() === "k" ? 1_000 : match?.[2]?.toLowerCase() === "m" ? 1_000_000 : 1;
+function parseAmount(value: string): number | null {
+  // Supported syntax: ₦40,000, NGN 40000, ₦40k, 40k, 1.5m.
+  // Currency prefix or compact k/m suffix is required. No sub-naira amounts.
+  const match = value.match(
+    /^(₦|ngn\s*)?((?:[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)(?:\.[0-9]{1,2})?)\s*([km])?$/i
+  );
+  if (!match?.[2] || (!match[1] && !match[3])) return null;
+  if (match[2].includes(",") && match[2].includes(".")) return null;
+  const base = Number(match[2].replace(/,/g, ""));
+  const multiplier = match[3]?.toLowerCase() === "k" ? 1_000 :
+    match[3]?.toLowerCase() === "m" ? 1_000_000 : 1;
   const amount = base * multiplier;
-  return Number.isSafeInteger(amount) ? amount : null;
+  return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
 }
 
-function parseSavedBank(input: string): string | null {
-  const matches = BANK_ALIASES.filter(({ pattern }) => pattern.test(input));
-  return matches.length === 1 ? matches[0]?.label ?? null : null;
+function parseSavedBank(value: string): string | null {
+  // Bank names must occupy the complete beneficiary label, not merely occur
+  // somewhere inside an unsupported instruction.
+  const normalized = value.trim().replace(/\s+account$/i, "");
+  const matching = BANK_ALIASES.filter(({ pattern }) => {
+    const match = normalized.match(pattern);
+    return match !== null && match[0].length === normalized.length;
+  });
+  return matching.length === 1 ? matching[0]?.label ?? null : null;
 }
 
 function splitActionClauses(input: string): string[] {
-  const clauses = input
-    .split(/\s+(?:and then|then|and)\s+/i)
-    .map((clause) => clause.trim())
-    .filter(Boolean);
-  return clauses.length > 5 ? [input] : clauses;
+  // Retain empty clauses and counts, so a trailing or excessive action does
+  // not quietly degrade to a plausible single action.
+  return input.split(/\s+(?:and then|then|and)\s+/i).map((clause) => clause.trim());
 }
 
 function normalizePocketName(value: string): string | null {
@@ -172,6 +176,8 @@ function normalizePocketName(value: string): string | null {
     .replace(/[?.!,]+$/g, "")
     .trim();
   if (!name || name.length > 48) return null;
+  // Names cannot smuggle a second operation or ambiguous imperative.
+  if (/\b(?:or|but|otherwise|send|transfer|withdraw|pay|purchase|buy|move|approve|execute|now|immediately)\b/i.test(name)) return null;
   if (!/^[a-z0-9][a-z0-9 &'_-]*$/i.test(name)) return null;
   return name.replace(/\b\w/g, (character) => character.toUpperCase());
 }
