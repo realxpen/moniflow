@@ -8,6 +8,7 @@ import type { MoneyPlanRepository } from "../repositories/money-plan.js";
 import type { PocketRepository } from "../repositories/pocket.js";
 import type { BmoniGateway } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
+import { realFinancialExecutionReleased, REAL_EXECUTION_RELEASE_CODE } from "../services/plans/execution-release-gate.js";
 import { fingerprintMoneyPlan } from "../services/plans/approval.js";
 import { getReviewedDestination } from "../services/plans/beneficiary-binding.js";
 
@@ -27,6 +28,9 @@ type FinalizationRouteOptions = {
 
 export const executionFinalizationRoutes: FastifyPluginAsync<FinalizationRouteOptions> = async (app, options) => {
   app.post<{ Params: unknown; Body: unknown }>("/plans/:planId/execution/finalize", async (request, reply) => {
+    if (!realFinancialExecutionReleased()) {
+      return reply.status(503).send({ code: REAL_EXECUTION_RELEASE_CODE, message: "Real BMONI money execution is not released." });
+    }
     const params = paramsSchema.safeParse(request.params);
     const body = bodySchema.safeParse(request.body);
     if (!params.success || !body.success) return reply.status(400).send({ message: "Valid planId and localUserId are required." });
