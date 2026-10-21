@@ -12,6 +12,8 @@
 5. **Shared strict provider balance parser:** planning and execution preparation share one conservative CNGN available balance validator. No malformed comma grouping, exponent notation, ambiguous multiple CNGN records, negative or fractional sub-kobo amount is interpreted as spendable funds.
 6. **Regression suites:** pure bank-binding tests, financial fingerprint mutation tests, complete guarded authorization tests, tampered execution signing/finalization scenarios, provider balance decoding tests and the existing PostgreSQL/SQLite suites.
 
+7. **Release gate on actual financial routes:** Real BMONI execution preparation, device-signature forwarding and provider completion finalization are **hard-blocked with HTTP 503 / `BMONI_FINANCIAL_EXECUTION_NOT_RELEASED`** in development and production. Only isolated test injection and the explicitly simulated `moniflow-sandbox` provider can exercise these routes. This prevents any live BMONI monetary side effect before verified cross-instance idempotency, provider authorization and supported-device evidence. A new code review and explicit release decision are required to change this condition.
+
 ## Deliberate compatibility behavior
 
 - The new `destinationBinding` field on bank-withdrawal actions is **optional in storage schema only** so older Money Plans remain decodable. Old plans with no seal **must be rebuilt and reapproved** before they can pass Guard, approval, execution or financial finalization. Existing approved hashes of canonical unbound legacy plans are not sufficient to move money.
