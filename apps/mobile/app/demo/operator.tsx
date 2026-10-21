@@ -158,8 +158,8 @@ export default function DemoOperatorScreen() {
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {["intent", "plan", "guard"].includes(stage) ? <SecondaryButton onPress={() => act({ type: "CANCEL" })}>Stop example</SecondaryButton> : null}
-      <Pressable accessibilityRole="button" onPress={() => router.replace("/onboarding/welcome")} style={styles.leave}>
-        <Text style={styles.caption}>Return to MONIFlow</Text>
+      <Pressable accessibilityRole="button" onPress={() => router.replace("/learn")} style={styles.leave}>
+        <Text style={styles.caption}>Return to Learning & Practice</Text>
       </Pressable>
     </Screen>
   );

@@ -176,6 +176,20 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
         </SoftCard>
       ) : null}
 
+      {tab === "home" ? (
+        <SoftCard style={styles.card}>
+          <Text style={styles.label}>LEARN & PRACTICE</Text>
+          <Text style={styles.headline}>Try MONIFlow without moving money.</Text>
+          <Text style={styles.copy}>
+            Explore an interactive sample instruction, see a hypothetical Money Plan, and learn why
+            MONI Guard and human approval matter. This separate learning mode uses no real balance,
+            bank credentials, device PIN, or live BMONI transaction.
+          </Text>
+          <StatusPill label="OFFLINE EXAMPLE · NO ACTUAL FUNDS" tone="warning" />
+          <SecondaryButton onPress={() => router.push("/learn")}>Open Learning & Practice</SecondaryButton>
+        </SoftCard>
+      ) : null}
+
       {tab === "pockets" || tab === "activity" ? (
         <SoftCard style={styles.card}>
           <Text style={styles.label}>{tab === "pockets" ? "INTERNAL ALLOCATIONS" : "PROVIDER-CONFIRMED HISTORY"}</Text>
