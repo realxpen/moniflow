@@ -122,6 +122,7 @@ export default function SigningScreen() {
   const waitingForProvider = execution?.state === "PREPARING";
   const readyToSign = execution?.state === "AWAITING_DEVICE_SIGNATURE" && Boolean(execution.hashToSign);
   const simulated = provider?.provider === "moniflow-sandbox";
+  const proposalReady = execution?.state === "AWAITING_DEVICE_SIGNATURE" || execution?.state === "PROCESSING" || execution?.state === "COMPLETED";
 
   return (
     <Screen contentContainerStyle={styles.screen}>
@@ -135,12 +136,12 @@ export default function SigningScreen() {
 
       <SoftCard style={styles.card}>
         <View style={styles.providerRow}>
-          <StatusPill label={providerBadge(provider)} tone={simulated ? "processing" : "success"} />
+          <StatusPill label={providerBadge(provider)} tone={simulated ? "processing" : "neutral"} />
           <Text style={styles.micro}>{provider ? `${provider.label} · ${provider.environment}` : "Provider loading"}</Text>
         </View>
         <StatusPill
           label={loading ? "PREPARING PROPOSAL" : waitingForProvider ? execution?.providerStatus ?? "WAITING FOR PROVIDER" : readyToSign ? "AWAITING SIGNATURE" : execution?.state ?? "BLOCKED"}
-          tone={loading || waitingForProvider ? "processing" : readyToSign ? "warning" : execution?.state === "COMPLETED" ? "success" : "processing"}
+          tone={loading || waitingForProvider ? "processing" : readyToSign ? "warning" : execution?.state === "COMPLETED" ? "success" : execution?.state === "FAILED" ? "warning" : "processing"}
         />
         <Text style={styles.cardTitle}>
           {readyToSign
@@ -162,8 +163,8 @@ export default function SigningScreen() {
 
       <View style={styles.steps}>
         <ProgressStep index={1} state="complete" title="MONI Guard + approval" detail="Persisted approved plan fingerprint verified" />
-        <ProgressStep index={2} state={execution ? "complete" : "active"} title="Provider proposal" detail={execution ? `Proposal ${shortId(execution.proposalId)}` : "Preparing proposal"} />
-        <ProgressStep index={3} state={waitingForProvider ? "active" : execution ? "complete" : "pending"} title="Provider readiness" detail={waitingForProvider ? execution?.providerStatus ?? "Waiting" : "Ready for signing"} />
+        <ProgressStep index={2} state={proposalReady ? "complete" : "active"} title="Provider proposal" detail={execution ? `Proposal ${shortId(execution.proposalId)}` : "Preparing proposal"} />
+        <ProgressStep index={3} state={waitingForProvider ? "active" : proposalReady ? "complete" : "pending"} title="Provider readiness" detail={waitingForProvider ? execution?.providerStatus ?? "Waiting" : proposalReady ? "Signature requirement available" : "Not confirmed"} />
         <ProgressStep index={4} state={readyToSign ? "active" : "pending"} title={simulated ? "Simulated signature" : "Secure device signature"} detail={simulated ? "Sandbox-only, explicitly simulated" : "Raw 32-byte digest"} />
         <ProgressStep index={5} state="pending" title="Provider processing" detail="Provider status drives the result" />
       </View>
@@ -217,10 +218,10 @@ function shortId(value: string) { return value.length > 12 ? `${value.slice(0, 6
 const styles = StyleSheet.create({
   screen: { gap: spacing.xxl, paddingBottom: spacing.xxl },
   card: { backgroundColor: colors.backgroundSecondary, gap: spacing.md },
+  steps: { backgroundColor: colors.surface, borderRadius: radius.card, gap: spacing.xs, padding: spacing.sm },
   providerRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   cardTitle: { ...typography.heading, color: colors.textPrimary },
   cardCopy: { ...typography.body, color: colors.textSecondary },
-  steps: { gap: spacing.xs },
   pinCard: { gap: spacing.md },
   sandboxCard: { gap: spacing.md },
   micro: { ...typography.technical, color: colors.textSecondary, letterSpacing: 1.2 },

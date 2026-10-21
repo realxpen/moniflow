@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { ProgressStep } from "@/components/operator";
 import { FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
+import { providerResultPresentation } from "@/services/provider-result-presentation";
 import { finalizeExecution, getExecutionStatus, type ExecutionSnapshot } from "@/services/execution";
 import { useDemoSession } from "@/store/demo-session";
 import { colors, spacing, typography } from "@/theme";
@@ -53,6 +54,7 @@ export default function ExecutionScreen() {
   useAppActiveRefresh(refresh);
 
   const terminal = execution?.state === "COMPLETED" || execution?.state === "FAILED";
+  const outcome = providerResultPresentation(execution?.state);
 
   useEffect(() => {
     if (!terminal) return;
@@ -67,13 +69,13 @@ export default function ExecutionScreen() {
     <Screen contentContainerStyle={styles.screen}>
       <FlowHeader
         eyebrow="EXECUTION"
-        title={execution?.state === "COMPLETED" ? "Provider completed the action." : execution?.state === "FAILED" ? "Provider did not complete the action." : "Provider is processing your approved action."}
-        description="MONIFlow only finalizes internal bookkeeping after provider completion is confirmed."
+        title={outcome.title}
+        description={outcome.description}
       />
-      <SoftCard style={styles.card}>
+      <SoftCard style={[styles.card, styles.stateCard]}>
         <StatusPill
-          label={refreshing && !execution ? "CHECKING PROVIDER" : execution?.providerStatus ?? execution?.state ?? "UNAVAILABLE"}
-          tone={execution?.state === "COMPLETED" ? "success" : execution?.state === "FAILED" ? "warning" : "processing"}
+          label={refreshing && !execution ? "CHECKING PROVIDER" : outcome.stateLabel}
+          tone={outcome.tone}
         />
         <Text style={styles.amount}>{execution ? formatNaira(execution.amount) : "—"}</Text>
         <Text style={styles.meta}>Proposal {execution ? shortId(execution.proposalId) : "—"}</Text>
@@ -109,6 +111,7 @@ function shortId(value: string) {
 const styles = StyleSheet.create({
   screen: { gap: spacing.xxl, paddingBottom: spacing.xxxl },
   card: { gap: spacing.md },
+  stateCard: { backgroundColor: colors.backgroundSecondary },
   amount: { ...typography.display, color: colors.textPrimary },
   meta: { ...typography.technical, color: colors.textSecondary },
   steps: { gap: spacing.xs },
