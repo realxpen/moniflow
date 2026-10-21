@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ProgressStep } from "@/components/operator";
-import { FlowHeader, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
+import { OperatorJourneyHeader } from "@/components/operator/OperatorJourneyHeader";
+import { PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
 import { parseOperatorIntent, type MoniflowIntent } from "@/services/intent-engine";
 import { colors, spacing, typography } from "@/theme";
 
@@ -48,7 +49,8 @@ export default function ProcessingScreen() {
 
   return (
     <Screen contentContainerStyle={styles.screen}>
-      <FlowHeader
+      <OperatorJourneyHeader
+        stage="understand"
         description="Deterministic rules only. MONIFlow does not use an LLM or invent missing financial details."
         eyebrow="INTENT ENGINE"
         title={unsupported ? "I won’t guess." : error && !intent ? "Instruction required." : "Understanding your instruction."}
@@ -102,10 +104,10 @@ export default function ProcessingScreen() {
 
 const styles = StyleSheet.create({
   screen: { gap: spacing.xxl, paddingBottom: spacing.xxl },
-  commandCard: { backgroundColor: colors.accentSoft, gap: spacing.sm },
+  commandCard: { backgroundColor: colors.backgroundSecondary, gap: spacing.md },
   label: { ...typography.technical, color: colors.statusProcessing },
   command: { ...typography.command, color: colors.textPrimary },
-  progressCard: { gap: spacing.xs },
+  progressCard: { backgroundColor: colors.surface, borderRadius: 22, gap: spacing.xs, padding: spacing.sm },
   resultCard: { gap: spacing.sm },
   intentName: { ...typography.heading, color: colors.textPrimary },
   json: { ...typography.caption, color: colors.textSecondary },
