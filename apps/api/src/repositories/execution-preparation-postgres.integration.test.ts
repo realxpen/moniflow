@@ -163,6 +163,18 @@ suite("Disposable PostgreSQL cross-instance financial preparation fence", () => 
     }
   });
 
+  it("shows only same-user preparation cases across SQL connections", async () => {
+    const data = await newPlan();
+    expect(await first.claimSpendablePreparation({
+      ...data, reservedAmount: 40000, spendableCeiling: 300000
+    })).toBe("CLAIMED");
+    const visible = await second.listPreparationHolds(userId, 51);
+    expect(visible.find(x => x.planId === data.planId)).toMatchObject({
+      localUserId: userId, reservedAmount: 40000, state: "RESERVED"
+    });
+    expect(await first.listPreparationHolds(foreignUserId, 51)).toEqual([]);
+  });
+
   it("records a confirmed proposal for observation but never releases the plan claim", async () => {
     const data = await newPlan();
     expect(await second.claimPreparation(data)).toBe(true);
