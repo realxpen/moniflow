@@ -95,17 +95,28 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     // Database uniqueness spans API workers, restarts and concurrent requests.
     // This hold is intentionally NEVER released automatically: a crash between
     // provider submission and our response leaves an UNKNOWN outcome.
-    const claimed = await executions.claimPreparation({
+    const claimed = await executions.claimSpendablePreparation({
       planId: params.data.planId,
       localUserId: body.data.localUserId,
       approvedPlanHash: fingerprintMoneyPlan(approved.plan),
       providerBankAccountId: bank.providerAccountId,
-      amount: withdrawal.amount
+      amount: withdrawal.amount,
+      // All financial commitments use the same owner's headroom, not only
+      // the external transfer amount. No in-memory counters or process locks.
+      reservedAmount: approved.plan.totals.totalCommitted,
+      spendableCeiling: freshSpendable
     });
-    if (!claimed) {
+    if (claimed !== "CLAIMED") {
+      const capacityConflict = claimed === "INSUFFICIENT_CAPACITY";
+      const legacyConflict = claimed === "UNRECONCILED_LEGACY";
       return reply.status(409).send({
-        code: "PROVIDER_PREPARATION_ALREADY_CLAIMED",
-        message: "This Money Plan already has a durable preparation hold. Do not resubmit automatically; use the read-only preparation status and manually reconcile an unknown outcome."
+        code: capacityConflict ? "SPENDABLE_CAPACITY_RESERVED" :
+          legacyConflict ? "UNRECONCILED_LEGACY_PREPARATION" : "PROVIDER_PREPARATION_ALREADY_CLAIMED",
+        message: capacityConflict
+          ? "Other Money Plans already reserve this spendable balance. No new provider proposal was submitted."
+          : legacyConflict
+            ? "Older financial attempts require manual reconciliation before new money can be committed."
+            : "This Money Plan already has a durable preparation hold. Never retry an unknown provider outcome automatically."
       });
     }
 
