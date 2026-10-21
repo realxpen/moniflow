@@ -31,8 +31,9 @@ export default function LearningHubScreen() {
         <Text style={styles.label}>CHOOSE A PRACTICE PATH</Text>
         <Text style={styles.heading}>Start with the journey, or try the Operator.</Text>
         <Text style={styles.copy}>
-          Both use a predefined educational example. They do not understand arbitrary money instructions,
-          check your personal balance, connect to BMONI, verify GTBank details or execute a transfer.
+          Choose a guided example, experiment with hypothetical amounts, or try a limited
+          offline instruction parser. None connects to BMONI, checks your real balance,
+          verifies GTBank details, or executes money movement.
         </Text>
         <PrimaryButton onPress={() => router.push("/demo/walkthrough")}>
           Learn the six steps
@@ -42,6 +43,9 @@ export default function LearningHubScreen() {
         </SecondaryButton>
         <SecondaryButton onPress={() => router.push("/learn/playground")}>
           Experiment with a Money Plan
+        </SecondaryButton>
+        <SecondaryButton onPress={() => router.push("/learn/intent")}>
+          Try the Offline Intent Lab
         </SecondaryButton>
       </SoftCard>
 
