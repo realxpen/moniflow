@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { ReadOnlyHomeHero } from "@/components/workspace/ReadOnlyHomeHero";
 import { ReadOnlyFinancialPanel } from "@/components/workspace/ReadOnlyFinancialPanel";
+import { ProfileReadinessPanel } from "@/components/workspace/ProfileReadinessPanel";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { currentAuthSession, signOut, useAuthSession } from "@/services/auth-session";
 import { canApplyOwnerRequest, selectVisibleOwnerSnapshot, type OwnerWorkspaceSnapshot } from "@/services/owner-workspace-snapshot";
@@ -19,7 +20,7 @@ const copy = {
   home: { title: "Your money, in focus.", eyebrow: "PERSONAL HOME", description: "Your signed-in workspace. Balances and financial controls remain unavailable until account, wallet ownership and provider readiness are independently confirmed." },
   pockets: { title: "Money pockets.", eyebrow: "POCKETS", description: "Give your money a purpose when ownership and account readiness are independently verified. Pockets are not separate bank deposits." },
   activity: { title: "Your activity.", eyebrow: "ACTIVITY", description: "Financial memory depends on actual provider-backed evidence. No past transactions are inferred from offline examples." },
-  profile: { title: "Account and readiness.", eyebrow: "PROFILE", description: "A secure view of what MONIFlow knows and what it still needs to verify." }
+  profile: { title: "Your workspace.", eyebrow: "PROFILE", description: "One place to understand your account, identity, and financial access." }
 };
 
 /** Production-only account workspace. No BMONI calls or monetary amount reads. */
@@ -113,17 +114,6 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
   const recorded = overview?.mapping === "recorded";
   const ownerWallet = overview?.wallet === "recorded_not_reverified";
   const journey = tab === "profile" ? buildReadinessJourney(overview, reconciliation) : null;
-  const reviewState = reconciliation?.reconciliation;
-  const reviewLabel = !reviewState ? "NOT VERIFIED"
-    : reviewState === "manual_review_required" ? "MANUAL REVIEW"
-    : reviewState === "unverified_mapping" ? "UNVERIFIED" : "EVIDENCE NEEDED";
-  const reviewDetail = reviewState === "manual_review_required"
-    ? "An unresolved local BMONI provisioning record requires independent manual review. Do not retry or link this identity automatically."
-    : reviewState === "unverified_mapping"
-      ? "A mapping exists locally, but BMONI account ownership and identity evidence have not been verified."
-      : reviewState === "identity_evidence_required"
-        ? "No BMONI identity is linked to this account. Provider-approved ownership evidence is required before any account linking."
-        : "Identity reconciliation has not been confirmed for this signed-in account.";
 
   return (
     <Screen contentContainerStyle={styles.page}>
@@ -141,6 +131,8 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
         <ReadOnlyHomeHero checking={busy} onOpenPractice={() => router.push("/learn")} />
       ) : null}
 
+      {tab !== "profile" ? (
+        <>
       <SoftCard style={styles.card}>
         <Text style={styles.label}>SIGNED-IN IDENTITY</Text>
         <Text style={styles.headline}>{auth?.email || "MONIFlow account"}</Text>
@@ -172,6 +164,9 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
           pill="WITHHELD" />
       </SoftCard>
 
+        </>
+      ) : null}
+
       {tab === "pockets" || tab === "activity" ? (
         <ReadOnlyFinancialPanel
           tab={tab}
@@ -182,53 +177,17 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
         />
       ) : null}
 
-      {tab === "profile" ? (
-        <SoftCard style={styles.card}>
-          <Text style={styles.label}>BMONI IDENTITY RECONCILIATION</Text>
-          <Readiness label="Account linking review" detail={reviewDetail} pill={reviewLabel} />
-          <Text style={styles.copy}>
-            This status checks local records only. It does not confirm provider identity, wallet ownership or KYC.
-            No automatic account linking or money movement is enabled.
-          </Text>
-          {reconciliationError ? <Text style={styles.error}>{reconciliationError}</Text> : null}
-        </SoftCard>
-      ) : null}
-
       {tab === "profile" && journey ? (
-        <SoftCard style={styles.card}>
-          <Text style={styles.label}>YOUR VERIFICATION JOURNEY</Text>
-          <Text style={styles.headline}>One verified step at a time.</Text>
-          <Text style={styles.copy}>
-            Account access, BMONI identity, device ownership, Nigeria verification, and financial access are separate checks.
-            A recorded mapping never unlocks wallet signing or balances.
-          </Text>
-          {journey.steps.map((step, index) => (
-            <View key={step.id} style={styles.journeyStep}>
-              <View style={styles.journeyIndex}>
-                <Text style={styles.journeyNumber}>{String(index + 1).padStart(2, "0")}</Text>
-              </View>
-              <View style={styles.journeyContent}>
-                <Readiness label={step.title} detail={step.detail} pill={step.status} />
-              </View>
-            </View>
-          ))}
-          <View style={styles.divider} />
-          <Text style={styles.label}>WHAT HAPPENS NEXT</Text>
-          <Text style={styles.headline}>{journey.nextActionTitle}</Text>
-          <Text style={styles.copy}>{journey.nextActionDetail}</Text>
-          <Text style={styles.disclosure}>
-            READ-ONLY STATUS · NO AUTOMATIC LINKING · NO FINANCIAL OPERATIONS
-          </Text>
-        </SoftCard>
-      ) : null}
-
-      {tab === "profile" ? (
-        <SoftCard style={styles.card}>
-          <Text style={styles.label}>SESSION CONTROLS</Text>
-          <Text style={styles.copy}>Check the separate signed-session proof or sign out to clear this device's in-memory authentication and example workspace state.</Text>
-          <SecondaryButton onPress={() => router.push("/auth/session")}>Check API session</SecondaryButton>
-          <SecondaryButton onPress={leave}>Sign out</SecondaryButton>
-        </SoftCard>
+        <ProfileReadinessPanel
+          email={auth?.email ?? null}
+          checking={busy}
+          journey={journey}
+          error={error}
+          reconciliationError={reconciliationError}
+          onRefresh={() => void refresh()}
+          onOpenSession={() => router.push("/auth/session")}
+          onSignOut={leave}
+        />
       ) : null}
 
       <View style={styles.footer}>
@@ -267,11 +226,6 @@ const styles = StyleSheet.create({
   readinessLabel: { ...typography.body, fontWeight: "600", color: colors.textPrimary, flex: 1 },
   pill: { ...typography.technical, color: colors.statusWarning, fontSize: 11, flexShrink: 1 },
   divider: { height: 1, backgroundColor: colors.borderSoft },
-  journeyStep: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start", paddingVertical: spacing.sm },
-  journeyIndex: { borderColor: colors.borderSoft, borderWidth: 1, backgroundColor: colors.backgroundPrimary,
-    borderRadius: radius.pill, minWidth: 36, minHeight: 36, alignItems: "center", justifyContent: "center" },
-  journeyNumber: { ...typography.technical, color: colors.statusProcessing },
-  journeyContent: { flex: 1, minWidth: 0 },
   error: { ...typography.caption, color: colors.statusError },
   footer: { gap: spacing.md, alignItems: "center" },
   disclosure: { ...typography.technical, textAlign: "center", color: colors.textSecondary },
