@@ -92,29 +92,96 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
       });
     }
 
-    const proposalPayload = await options.getBmoniGateway().offrampNigeria(
-      mapping.bmoniUserId,
-      wallet.bmoniSmartWalletId,
-      { bankAccountId: bank.providerAccountId, fromAmount: withdrawal.amount.toFixed(2) }
-    );
-    const proposalId = extractProposalId(proposalPayload);
-    if (!proposalId) return reply.status(502).send({ message: "Financial-provider offramp returned no proposal id." });
-
-    const now = new Date().toISOString();
-    const created = await executions.create({
+    // Database uniqueness spans API workers, restarts and concurrent requests.
+    // This hold is intentionally NEVER released automatically: a crash between
+    // provider submission and our response leaves an UNKNOWN outcome.
+    const claimed = await executions.claimPreparation({
       planId: params.data.planId,
       localUserId: body.data.localUserId,
-      providerProposalId: proposalId,
+      approvedPlanHash: fingerprintMoneyPlan(approved.plan),
       providerBankAccountId: bank.providerAccountId,
-      amount: withdrawal.amount,
-      currency: "NGN",
-      signHash: null,
-      providerStatus: extractProposalStatus(proposalPayload),
-      state: "PREPARING",
-      createdAt: now,
-      updatedAt: now
+      amount: withdrawal.amount
     });
+    if (!claimed) {
+      return reply.status(409).send({
+        code: "PROVIDER_PREPARATION_ALREADY_CLAIMED",
+        message: "This Money Plan already has a durable preparation hold. Do not resubmit automatically; use the read-only preparation status and manually reconcile an unknown outcome."
+      });
+    }
+
+    let proposalPayload: unknown;
+    try {
+      proposalPayload = await options.getBmoniGateway().offrampNigeria(
+        mapping.bmoniUserId,
+        wallet.bmoniSmartWalletId,
+        { bankAccountId: bank.providerAccountId, fromAmount: withdrawal.amount.toFixed(2) }
+      );
+    } catch (error) {
+      await executions.recordPreparationOutcome(
+        params.data.planId, body.data.localUserId, "PROVIDER_OUTCOME_UNKNOWN"
+      );
+      throw error;
+    }
+    const proposalId = extractProposalId(proposalPayload);
+    if (!proposalId) {
+      await executions.recordPreparationOutcome(
+        params.data.planId, body.data.localUserId, "PROVIDER_OUTCOME_UNKNOWN"
+      );
+      return reply.status(502).send({
+        code: "PROVIDER_OUTCOME_UNKNOWN",
+        message: "Provider preparation outcome could not be verified. Do not automatically retry."
+      });
+    }
+
+    const now = new Date().toISOString();
+    let created: ProviderExecution;
+    try {
+      created = await executions.create({
+        planId: params.data.planId,
+        localUserId: body.data.localUserId,
+        providerProposalId: proposalId,
+        providerBankAccountId: bank.providerAccountId,
+        amount: withdrawal.amount,
+        currency: "NGN",
+        signHash: null,
+        providerStatus: extractProposalStatus(proposalPayload),
+        state: "PREPARING",
+        createdAt: now,
+        updatedAt: now
+      });
+    } catch (error) {
+      await executions.recordPreparationOutcome(
+        params.data.planId, body.data.localUserId, "PROVIDER_OUTCOME_UNKNOWN", proposalId
+      );
+      throw error;
+    }
+    await executions.recordPreparationOutcome(
+      params.data.planId, body.data.localUserId, "PROPOSAL_RECORDED", proposalId
+    );
     return refreshPreparedProposal(created, options, reply);
+  });
+
+  // Read-only visibility even when financial operations remain release-gated.
+  // No provider call, retry, rollback, or automatic release of the hold.
+  app.get<{ Params: unknown; Querystring: unknown }>("/plans/:planId/execution/preparation", async (request, reply) => {
+    const params = paramsSchema.safeParse(request.params);
+    const query = userQuerySchema.safeParse(request.query);
+    if (!params.success || !query.success) {
+      return reply.status(400).send({ message: "Valid planId and localUserId are required." });
+    }
+    const hold = await options.getExecutionRepository().findPreparationHold(
+      params.data.planId, query.data.localUserId
+    );
+    if (!hold) return reply.status(404).send({ message: "No preparation attempt exists for this plan." });
+    return reply.send({
+      planId: hold.planId,
+      state: hold.state,
+      providerProposalRecorded: hold.state === "PROPOSAL_RECORDED",
+      requiresManualReconciliation: hold.state !== "PROPOSAL_RECORDED",
+      createdAt: hold.createdAt,
+      updatedAt: hold.updatedAt,
+      automaticRetryAllowed: false
+    });
   });
 
   app.post<{ Params: unknown; Body: unknown }>("/plans/:planId/execution/sign", async (request, reply) => {
