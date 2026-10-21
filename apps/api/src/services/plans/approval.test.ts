@@ -92,6 +92,53 @@ class FakeMoneyPlanRepository implements MoneyPlanRepository {
 }
 
 describe("Phase 11 human approval", () => {
+  it("uses a stable fingerprint for an unchanged review snapshot", () => {
+    const plan = fixturePlan();
+    const hash = fingerprintMoneyPlan(plan);
+    expect(hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(fingerprintMoneyPlan(structuredClone(plan))).toBe(hash);
+    expect(fingerprintMoneyPlan(plan)).toBe(hash);
+  });
+
+  it("detects reordered actions even if the original index, amount, bank and totals are preserved", () => {
+    const original = fixturePlan();
+    const reordered = structuredClone(original);
+    reordered.actions.reverse();
+    expect(reordered.actions[0]?.index).toBe(2);
+    expect(reordered.totals).toEqual(original.totals);
+    expect(fingerprintMoneyPlan(reordered)).not.toBe(fingerprintMoneyPlan(original));
+  });
+
+  it("revokes previously approved plans after an action sequence is reordered", async () => {
+    const repository = new FakeMoneyPlanRepository();
+    const initialHash = fingerprintMoneyPlan(repository.record.plan);
+    await approveMoneyPlan(repository, planId, localUserId, initialHash);
+
+    // A stale writer moves the existing action objects but preserves their
+    // original indexes, exact amounts, destinations and plan totals.
+    repository.record.plan.actions.reverse();
+    expect(repository.record.planHash).toBe(initialHash);
+    expect(fingerprintMoneyPlan(repository.record.plan)).not.toBe(initialHash);
+
+    await expect(requireApprovedPlanForExecution(repository, planId, localUserId))
+      .rejects.toMatchObject({ code: "NOT_APPROVED" });
+    expect(repository.record.status).toBe("VALIDATING");
+    expect(repository.record.approvedPlanHash).toBeNull();
+    expect(repository.record.guardVerdict).toBeNull();
+  });
+
+  it("rejects approval when actions were reordered after MONI Guard review", async () => {
+    const repository = new FakeMoneyPlanRepository();
+    const reviewedHash = repository.record.planHash;
+    repository.record.plan.actions.reverse();
+
+    await expect(approveMoneyPlan(repository, planId, localUserId, reviewedHash))
+      .rejects.toMatchObject({ code: "PLAN_CHANGED" });
+    expect(repository.record.status).toBe("VALIDATING");
+    expect(repository.record.approvedPlanHash).toBeNull();
+    expect(repository.record.guardVerdict).toBeNull();
+  });
+
   it("blocks execution while the plan is awaiting approval", async () => {
     const repository = new FakeMoneyPlanRepository();
     await expect(requireApprovedPlanForExecution(repository, planId, localUserId)).rejects.toMatchObject({ code: "NOT_APPROVED" });
