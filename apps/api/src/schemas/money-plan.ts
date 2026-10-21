@@ -3,6 +3,19 @@ import { z } from "zod";
 const moneySchema = z.number().finite();
 const nonnegativeMoneySchema = z.number().nonnegative().finite();
 
+/**
+ * A reviewed bank withdrawal binds the provider beneficiary identity, not
+ * merely a mutable or ambiguous saved-bank label. Optional only to read old
+ * records: a missing binding must fail CLOSED at every financial gate.
+ */
+export const verifiedDestinationBindingSchema = z.object({
+  providerAccountId: z.string().trim().min(1),
+  bankCode: z.string().trim().min(1),
+  bankName: z.string().trim().min(1),
+  maskedAccountNumber: z.string().trim().min(1),
+  accountHolderName: z.string().trim().min(1)
+}).strict();
+
 export const moneyPlanActionSchema = z.discriminatedUnion("kind", [
   z.object({
     index: z.number().int().positive(),
@@ -11,7 +24,8 @@ export const moneyPlanActionSchema = z.discriminatedUnion("kind", [
     description: z.literal("Withdrawal"),
     amount: z.number().positive().finite(),
     movement: z.literal("EXTERNAL"),
-    requiresApproval: z.literal(true)
+    requiresApproval: z.literal(true),
+    destinationBinding: verifiedDestinationBindingSchema.optional()
   }).strict(),
   z.object({
     index: z.number().int().positive(),
