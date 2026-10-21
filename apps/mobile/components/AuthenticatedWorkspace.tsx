@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { ReadOnlyHomeHero } from "@/components/workspace/ReadOnlyHomeHero";
+import { ReadOnlyFinancialPanel } from "@/components/workspace/ReadOnlyFinancialPanel";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { currentAuthSession, signOut, useAuthSession } from "@/services/auth-session";
 import { canApplyOwnerRequest, selectVisibleOwnerSnapshot, type OwnerWorkspaceSnapshot } from "@/services/owner-workspace-snapshot";
@@ -16,8 +17,8 @@ import { colors, layout, radius, spacing, typography } from "@/theme";
 type Tab = "home" | "pockets" | "activity" | "profile";
 const copy = {
   home: { title: "Your money, in focus.", eyebrow: "PERSONAL HOME", description: "Your signed-in workspace. Balances and financial controls remain unavailable until account, wallet ownership and provider readiness are independently confirmed." },
-  pockets: { title: "Your money spaces.", eyebrow: "POCKETS", description: "Savings goals are internal bookkeeping, not separate provider-held funds. Your private allocations are withheld until account readiness is verified." },
-  activity: { title: "Your financial memory.", eyebrow: "ACTIVITY", description: "Real transactions must be confirmed by the provider. No historical financial records are inferred from the offline demonstration." },
+  pockets: { title: "Money pockets.", eyebrow: "POCKETS", description: "Give your money a purpose when ownership and account readiness are independently verified. Pockets are not separate bank deposits." },
+  activity: { title: "Your activity.", eyebrow: "ACTIVITY", description: "Financial memory depends on actual provider-backed evidence. No past transactions are inferred from offline examples." },
   profile: { title: "Account and readiness.", eyebrow: "PROFILE", description: "A secure view of what MONIFlow knows and what it still needs to verify." }
 };
 
@@ -172,13 +173,13 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
       </SoftCard>
 
       {tab === "pockets" || tab === "activity" ? (
-        <SoftCard style={styles.card}>
-          <Text style={styles.label}>{tab === "pockets" ? "INTERNAL ALLOCATIONS" : "PROVIDER-CONFIRMED HISTORY"}</Text>
-          <Text style={styles.headline}>{tab === "pockets" ? "No account-linked spaces to display yet." : "No verified history to display yet."}</Text>
-          <Text style={styles.copy}>{tab === "pockets"
-            ? "MONIFlow is not loading financial allocations until your identity and financial workspace are independently linked. This does not mean your allocation balance is zero."
-            : "MONIFlow has not authorized a provider-backed activity read for this account. An unavailable history is not proof of zero transactions."}</Text>
-        </SoftCard>
+        <ReadOnlyFinancialPanel
+          tab={tab}
+          checking={busy}
+          onOpenPractice={() =>
+            router.push(tab === "pockets" ? "/learn/playground" : "/demo/walkthrough")
+          }
+        />
       ) : null}
 
       {tab === "profile" ? (
