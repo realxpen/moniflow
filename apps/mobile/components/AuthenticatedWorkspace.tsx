@@ -186,6 +186,7 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
           reconciliationError={reconciliationError}
           onRefresh={() => void refresh()}
           onOpenSession={() => router.push("/auth/session")}
+          onOpenFinancialRecovery={() => router.push("/recovery")}
           onSignOut={leave}
         />
       ) : null}
