@@ -14,7 +14,8 @@ const holdRowSchema = z.object({
   plan_id: z.string(), local_user_id: z.string(), approved_plan_hash: z.string(),
   provider_bank_account_id: z.string(), amount: z.coerce.number(),
   state: z.enum(["RESERVED", "PROVIDER_OUTCOME_UNKNOWN", "PROPOSAL_RECORDED"]),
-  provider_proposal_id: z.string().nullable(), created_at: z.coerce.string(), updated_at: z.coerce.string()
+  reserved_amount: z.coerce.number().nullable(),
+ provider_proposal_id: z.string().nullable(), created_at: z.coerce.string(), updated_at: z.coerce.string()
 });
 
 export async function ensureExecutionSchema(sql: Sql) {
@@ -150,7 +151,7 @@ export class PostgresExecutionRepository implements ExecutionRepository {
   async findPreparationHold(planId: string, localUserId: string): Promise<PreparationHold | null> {
     const rows = await this.sql`
       select plan_id, local_user_id, approved_plan_hash, provider_bank_account_id,
-             amount, state, provider_proposal_id, created_at, updated_at
+             amount, reserved_amount, state, provider_proposal_id, created_at, updated_at
       from moniflow_private.provider_preparation_holds_v1
       where plan_id = ${planId}::uuid and local_user_id = ${localUserId}::uuid
       limit 1
@@ -160,9 +161,30 @@ export class PostgresExecutionRepository implements ExecutionRepository {
     return {
       planId: row.plan_id, localUserId: row.local_user_id,
       approvedPlanHash: row.approved_plan_hash, providerBankAccountId: row.provider_bank_account_id,
-      amount: row.amount, state: row.state, providerProposalId: row.provider_proposal_id,
+      amount: row.amount, reservedAmount: row.reserved_amount, state: row.state, providerProposalId: row.provider_proposal_id,
       createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString()
     };
+  }
+
+  async listPreparationHolds(localUserId: string, limit: number): Promise<PreparationHold[]> {
+    const bounded = Math.max(1, Math.min(51, Math.floor(limit)));
+    const rows = await this.sql`
+      select plan_id, local_user_id, approved_plan_hash, provider_bank_account_id,
+             amount, reserved_amount, state, provider_proposal_id, created_at, updated_at
+      from moniflow_private.provider_preparation_holds_v1
+      where local_user_id = ${localUserId}::uuid
+      order by created_at desc, plan_id desc limit ${bounded}
+    `;
+    return rows.map(raw => {
+      const row = holdRowSchema.parse(raw);
+      return {
+        planId: row.plan_id, localUserId: row.local_user_id,
+        approvedPlanHash: row.approved_plan_hash, providerBankAccountId: row.provider_bank_account_id,
+        amount: row.amount, reservedAmount: row.reserved_amount,
+        state: row.state, providerProposalId: row.provider_proposal_id,
+        createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString()
+      };
+    });
   }
 
   async recordPreparationOutcome(
