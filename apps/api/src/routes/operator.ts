@@ -19,6 +19,7 @@ import {
 } from "../services/plans/approval.js";
 import { buildMoneyPlan, UnsupportedPlanIntentError } from "../services/plans/engine.js";
 import { computeAvailableToSpend } from "../services/plans/spendable.js";
+import { readCngnAvailableBalance } from "../services/plans/provider-balance.js";
 import { bindVerifiedPlanDestinations, getReviewedDestination } from "../services/plans/beneficiary-binding.js";
 
 const parseIntentBodySchema = z.object({ input: z.string().max(500) }).strict();
@@ -43,7 +44,6 @@ type OperatorRouteOptions = {
   getBankAccountRepository: () => BankAccountRepository;
   getPocketRepository: () => PocketRepository;
 };
-type JsonRecord = Record<string, unknown>;
 
 export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (app, options) => {
   app.post<{ Body: unknown }>("/intent", async (request, reply) => {
@@ -72,7 +72,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
 
     try {
       const balances = await options.getBmoniGateway().listAccountBalances(mapping.bmoniUserId);
-      const providerBalance = findCngnBalance(balances);
+      const providerBalance = readCngnAvailableBalance(balances);
       if (providerBalance === null) {
         return reply.status(502).send({ statusCode: 502, error: "Bad Gateway", message: "The financial provider returned an undocumented CNGN balance response." });
       }
@@ -266,41 +266,3 @@ function handleApprovalError(reply: FastifyReply, error: unknown) {
   throw error;
 }
 
-function findCngnBalance(payload: unknown): number | null {
-  const record = findRecord(payload, (candidate) => {
-    const code = stringValue(candidate, ["currency", "symbol", "asset", "token", "code"]);
-    return code?.toUpperCase() === "CNGN";
-  });
-  if (!record) return null;
-  const raw = stringValue(record, ["availableBalance", "available", "balance", "amount", "total"]);
-  if (raw === undefined) return null;
-  const amount = Number(raw.replace(/,/g, ""));
-  return Number.isFinite(amount) && amount >= 0 ? amount : null;
-}
-
-function findRecord(value: unknown, predicate: (record: JsonRecord) => boolean): JsonRecord | null {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findRecord(item, predicate);
-      if (found) return found;
-    }
-    return null;
-  }
-  if (value === null || typeof value !== "object") return null;
-  const record = value as JsonRecord;
-  if (predicate(record)) return record;
-  for (const child of Object.values(record)) {
-    const found = findRecord(child, predicate);
-    if (found) return found;
-  }
-  return null;
-}
-
-function stringValue(record: JsonRecord, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) return value;
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return undefined;
-}
