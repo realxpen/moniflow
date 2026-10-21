@@ -10,6 +10,7 @@ import { BmoniProviderError, type BmoniGateway } from "../services/bmoni/index.j
 import { BmoniUserService } from "../services/bmoni/user-service.js";
 import { fingerprintMoneyPlan, requireApprovedPlanForExecution } from "../services/plans/approval.js";
 import { computeAvailableToSpend } from "../services/plans/spendable.js";
+import { readCngnAvailableBalance } from "../services/plans/provider-balance.js";
 import { getReviewedDestination } from "../services/plans/beneficiary-binding.js";
 
 const paramsSchema = z.object({ planId: z.uuid() }).strict();
@@ -69,7 +70,7 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     if (!bank) return reply.status(409).send({ message: "Verified Nigerian withdrawal destination is missing." });
 
     const balances = await options.getBmoniGateway().listAccountBalances(mapping.bmoniUserId);
-    const providerBalance = findCngnBalance(balances);
+    const providerBalance = readCngnAvailableBalance(balances);
     if (providerBalance === null) {
       return reply.status(502).send({ message: "The financial provider returned an undocumented CNGN balance response." });
     }
@@ -323,45 +324,6 @@ function proposalRecord(payload: unknown): JsonRecord | null {
 
 function isProviderReadinessPending(error: unknown) {
   return error instanceof BmoniProviderError && (error.statusCode === 404 || error.statusCode === 409);
-}
-
-function findCngnBalance(payload: unknown): number | null {
-  const record = findRecord(payload, (candidate) => {
-    const code = stringValue(candidate, ["currency", "symbol", "asset", "token", "code"]);
-    return code?.toUpperCase() === "CNGN";
-  });
-  if (!record) return null;
-  const raw = stringValue(record, ["availableBalance", "available", "balance", "amount", "total"]);
-  if (raw === undefined) return null;
-  const amount = Number(raw.replace(/,/g, ""));
-  return Number.isFinite(amount) && amount >= 0 ? amount : null;
-}
-
-function findRecord(value: unknown, predicate: (record: JsonRecord) => boolean): JsonRecord | null {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findRecord(item, predicate);
-      if (found) return found;
-    }
-    return null;
-  }
-  const record = asRecord(value);
-  if (!record) return null;
-  if (predicate(record)) return record;
-  for (const child of Object.values(record)) {
-    const found = findRecord(child, predicate);
-    if (found) return found;
-  }
-  return null;
-}
-
-function stringValue(record: JsonRecord, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) return value;
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return undefined;
 }
 
 function text(value: unknown): string | null {
