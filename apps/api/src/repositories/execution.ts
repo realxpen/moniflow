@@ -28,6 +28,8 @@ export interface ExecutionRepository {
    */
   claimSpendablePreparation(input: SpendablePreparationInput): Promise<SpendableClaimResult>;
   findPreparationHold(planId: string, localUserId: string): Promise<PreparationHold | null>;
+  /** Owner-filtered, newest-first read of local preparation holds only. */
+  listPreparationHolds(localUserId: string, limit: number): Promise<PreparationHold[]>;
   recordPreparationOutcome(planId: string, localUserId: string, state: Exclude<PreparationHoldState, "RESERVED">, proposalId?: string | null): Promise<void>;
   close(): Promise<void>;
 }
@@ -44,6 +46,8 @@ export type PreparationHold = {
   approvedPlanHash: string;
   providerBankAccountId: string;
   amount: number;
+  /** Missing on historical pre-Phase 36 holds; never guess its value. */
+  reservedAmount: number | null;
   state: PreparationHoldState;
   providerProposalId: string | null;
   createdAt: string;

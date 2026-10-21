@@ -163,6 +163,29 @@ suite("Disposable PostgreSQL cross-instance financial preparation fence", () => 
     }
   });
 
+  it("shows only same-user preparation cases across SQL connections", async () => {
+    const owner = randomUUID();
+    await primarySql`
+      insert into moniflow_private.bmoni_user_mappings(local_user_id, email, bmoni_user_id)
+      values (${owner}::uuid, ${"recovery-" + owner + "@example.invalid"}, ${"recovery-" + owner})
+    `;
+    try {
+      const data = await newPlan(owner);
+      expect(await first.claimSpendablePreparation({
+        ...data, reservedAmount: 40000, spendableCeiling: 300000
+      })).toBe("CLAIMED");
+      const visible = await second.listPreparationHolds(owner, 51);
+      expect(visible.find(x => x.planId === data.planId)).toMatchObject({
+        localUserId: owner, reservedAmount: 40000, state: "RESERVED"
+      });
+      expect(await first.listPreparationHolds(foreignUserId, 51)).toEqual([]);
+    } finally {
+      await primarySql`
+        delete from moniflow_private.bmoni_user_mappings where local_user_id = ${owner}::uuid
+      `;
+    }
+  });
+
   it("records a confirmed proposal for observation but never releases the plan claim", async () => {
     const data = await newPlan();
     expect(await second.claimPreparation(data)).toBe(true);
