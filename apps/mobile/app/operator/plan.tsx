@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { MoneyText, PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
+import { OperatorJourneyHeader } from "@/components/operator/OperatorJourneyHeader";
 import type { MoniflowIntent } from "@/services/intent-engine";
 import { prepareMoneyPlan, type PreparedMoneyPlan } from "@/services/money-plan";
 import { useDemoSession } from "@/store/demo-session";
@@ -56,10 +57,12 @@ export default function PlanScreen() {
 
   return (
     <Screen contentContainerStyle={styles.screen}>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>YOUR MONEY PLAN</Text>
-        <Text style={styles.heroTitle}>See the consequence before anything moves.</Text>
-      </View>
+      <OperatorJourneyHeader
+        stage="plan"
+        eyebrow="YOUR MONEY PLAN"
+        title="See the consequence before anything moves."
+        description="Review the persisted amounts and remaining balance before MONI Guard evaluates this plan."
+      />
 
       {loading ? (
         <SoftCard style={styles.stateCard}>
@@ -154,9 +157,9 @@ const styles = StyleSheet.create({
   hero: { gap: spacing.sm },
   eyebrow: { ...typography.technical, color: colors.textSecondary, letterSpacing: 1.5 },
   heroTitle: { ...typography.display, color: colors.textPrimary, maxWidth: 520 },
-  currentBlock: { gap: spacing.xxs, paddingVertical: spacing.md },
+  currentBlock: { backgroundColor: colors.backgroundSecondary, borderRadius: radius.card, gap: spacing.sm, padding: spacing.xl },
   metaLabel: { ...typography.technical, color: colors.textSecondary, letterSpacing: 1.1 },
-  currentMoney: { fontSize: 54, lineHeight: 60 },
+  currentMoney: { fontSize: 44, lineHeight: 52 },
   availableWord: { ...typography.body, color: colors.textSecondary },
   actionGrid: { gap: spacing.md },
   actionCard: { gap: spacing.sm, minHeight: 190 },
@@ -168,7 +171,7 @@ const styles = StyleSheet.create({
   summaryGrid: { flexDirection: "row", gap: spacing.sm },
   summaryCard: { flex: 1, gap: spacing.sm, minHeight: 130 },
   summaryMoney: { fontSize: 27, lineHeight: 32 },
-  afterCard: { backgroundColor: colors.textPrimary, borderRadius: radius.card, gap: spacing.sm, padding: spacing.xl },
+  afterCard: { backgroundColor: colors.surfaceStrong, borderRadius: radius.card, gap: spacing.md, padding: spacing.xl },
   afterLabel: { ...typography.technical, color: colors.backgroundPrimary, opacity: 0.7, letterSpacing: 1.2 },
   afterMoney: { color: colors.backgroundPrimary, fontSize: 50, lineHeight: 56 },
   formula: { ...typography.technical, color: colors.backgroundPrimary, opacity: 0.72 },

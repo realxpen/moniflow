@@ -3,8 +3,10 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { GuardCheck } from "@/components/guard";
+import { OperatorJourneyHeader } from "@/components/operator/OperatorJourneyHeader";
 import { PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { runMoniGuard, type GuardResult } from "@/services/moniguard";
+import { guardDecisionPresentation } from "@/services/operator-journey-presentation";
 import { useDemoSession } from "@/store/demo-session";
 import { colors, radius, spacing, typography } from "@/theme";
 
@@ -25,6 +27,7 @@ export default function MoniGuardScreen() {
     }
     setLoading(true);
     setError(null);
+    setResult(null);
     try {
       setResult(await runMoniGuard(planId, localUserId));
     } catch (cause) {
@@ -41,6 +44,7 @@ export default function MoniGuardScreen() {
 
   const humanApproval = result?.checks.find((check) => check.rule === "HUMAN_APPROVAL");
   const destinationBlocked = Boolean(result?.checks.find((check) => check.rule === "DESTINATION" && !check.passed));
+  const verdictView = guardDecisionPresentation(result?.verdict, loading);
 
   const openApproval = () => {
     setFlowStage("approve", { planId });
@@ -54,10 +58,12 @@ export default function MoniGuardScreen() {
 
   return (
     <Screen contentContainerStyle={styles.screen}>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>MONI GUARD</Text>
-        <Text style={styles.title}>Nothing moves until the persisted plan survives every check.</Text>
-      </View>
+      <OperatorJourneyHeader
+        stage="guard"
+        eyebrow="MONI GUARD"
+        title="Nothing moves until the persisted plan survives every check."
+        description="Deterministic rules check the stored plan. REVIEW is not financial approval or execution."
+      />
 
       <View style={styles.glassPanel}>
         <View style={styles.panelHeader}>
@@ -66,13 +72,13 @@ export default function MoniGuardScreen() {
             <Text style={styles.panelTitle}>Server plan verification</Text>
           </View>
           <StatusPill
-            label={loading ? "CHECKING" : result?.verdict ?? "UNAVAILABLE"}
-            tone={loading ? "processing" : result?.verdict === "BLOCK" || result?.verdict === "REVIEW" ? "warning" : "success"}
+            label={verdictView.label}
+            tone={verdictView.tone}
           />
         </View>
 
         {loading ? <Text style={styles.loadingCopy}>Running explicit rules against the stored plan…</Text> : null}
-        {result?.checks.map((check, index) => (
+        {!loading && result?.checks.map((check, index) => (
           <GuardCheck
             key={check.rule}
             delay={index * 75}
@@ -83,8 +89,8 @@ export default function MoniGuardScreen() {
         ))}
       </View>
 
-      {result ? (
-        <SoftCard style={styles.verdictCard}>
+      {result && !loading ? (
+        <SoftCard style={[styles.verdictCard, result.verdict === "BLOCK" && styles.blockedVerdict, result.verdict === "REVIEW" && styles.reviewVerdict]}>
           <Text style={styles.micro}>PLAN STATE</Text>
           <Text style={styles.verdictTitle}>{result.status.replaceAll("_", " ")}</Text>
           <Text style={styles.verdictCopy}>
@@ -97,7 +103,7 @@ export default function MoniGuardScreen() {
                 : "No external human authorization is required for this plan."}
           </Text>
           <View style={styles.safeBand}>
-            <Text style={styles.safeBandText}>{result.verdict === "BLOCK" ? "BLOCKED" : "GUARD COMPLETE"}</Text>
+            <Text style={styles.safeBandText}>{verdictView.completionLabel}</Text>
           </View>
         </SoftCard>
       ) : null}
@@ -110,15 +116,15 @@ export default function MoniGuardScreen() {
         </SoftCard>
       ) : null}
 
-      {result?.status === "AWAITING_USER_APPROVAL" ? (
+      {!loading && result?.status === "AWAITING_USER_APPROVAL" ? (
         <PrimaryButton onPress={openApproval}>Continue to human authorization</PrimaryButton>
-      ) : result?.status === "APPROVED" ? (
+      ) : !loading && result?.status === "APPROVED" ? (
         <PrimaryButton onPress={openSigning}>Continue to secure execution</PrimaryButton>
-      ) : result?.status === "BLOCKED" && destinationBlocked ? (
+      ) : !loading && result?.status === "BLOCKED" && destinationBlocked ? (
         <PrimaryButton onPress={() => router.push({ pathname: "/banking/nigeria", params: { localUserId, planId, desiredLabel: "GTBank" } })}>
           Resolve bank destination
         </PrimaryButton>
-      ) : result?.status === "BLOCKED" ? (
+      ) : !loading && result?.status === "BLOCKED" ? (
         <PrimaryButton onPress={() => router.back()}>Return to plan</PrimaryButton>
       ) : null}
 
@@ -148,12 +154,14 @@ const styles = StyleSheet.create({
   hero: { gap: spacing.sm },
   eyebrow: { ...typography.technical, color: colors.textSecondary, letterSpacing: 1.6 },
   title: { ...typography.display, color: colors.textPrimary, maxWidth: 560 },
-  glassPanel: { backgroundColor: colors.backgroundSecondary, borderColor: colors.borderSoft, borderRadius: radius.card, borderWidth: 1, gap: spacing.xs, padding: spacing.lg },
+  glassPanel: { backgroundColor: colors.backgroundSecondary, borderColor: colors.borderSoft, borderRadius: radius.card, borderWidth: 1, gap: spacing.md, padding: spacing.lg },
   panelHeader: { alignItems: "flex-start", flexDirection: "row", justifyContent: "space-between", gap: spacing.md, marginBottom: spacing.sm },
   micro: { ...typography.technical, color: colors.textSecondary, letterSpacing: 1.2 },
   panelTitle: { ...typography.heading, color: colors.textPrimary, marginTop: spacing.xxs },
   loadingCopy: { ...typography.body, color: colors.textSecondary, paddingVertical: spacing.lg },
   verdictCard: { gap: spacing.md },
+  reviewVerdict: { backgroundColor: colors.statusWarningSoft },
+  blockedVerdict: { backgroundColor: colors.statusErrorSoft },
   verdictTitle: { ...typography.display, color: colors.textPrimary },
   verdictCopy: { ...typography.body, color: colors.textSecondary },
   safeBand: { backgroundColor: colors.textPrimary, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
