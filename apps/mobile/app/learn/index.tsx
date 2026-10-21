@@ -40,6 +40,9 @@ export default function LearningHubScreen() {
         <SecondaryButton onPress={() => router.push("/demo/operator")}>
           Try interactive Operator practice
         </SecondaryButton>
+        <SecondaryButton onPress={() => router.push("/learn/playground")}>
+          Experiment with a Money Plan
+        </SecondaryButton>
       </SoftCard>
 
       <SoftCard style={styles.card}>
