@@ -36,18 +36,15 @@ const recognized = new Set<FinancialRecoveryState>([
 ]);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export async function loadFinancialRecovery(): Promise<FinancialRecoverySnapshot> {
-  const active = await sessionForApiRequest();
-  if (!active) throw new Error("Sign in before opening your financial recovery review.");
-  const response = await apiFetch(resolveApiUrl() + "/api/workspace/financial-recovery", { method: "GET" });
-  if (response.status === 404) throw new Error("The financial recovery API is not available on this release.");
-  if (!response.ok || !(response.headers.get("content-type") ?? "").includes("application/json")) {
-    throw new Error("Your local financial recovery evidence is unavailable. No payment action was taken.");
+/** Reject owner switches and any server flags suggesting funds are free or verified. */
+export function validateFinancialRecoveryPayload(payload: unknown, expectedSubject: string): FinancialRecoverySnapshot {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Invalid local recovery response.");
   }
-  const data = await response.json() as Partial<FinancialRecoverySnapshot>;
+  const data = payload as Partial<FinancialRecoverySnapshot>;
   const items = data.cases;
   if (data.authenticated !== true || typeof data.userId !== "string" ||
-      data.userId.toLowerCase() !== active.userId.toLowerCase() ||
+      data.userId.toLowerCase() !== expectedSubject.toLowerCase() ||
       data.evidenceSource !== "LOCAL_RECORDS_ONLY" ||
       data.providerEvidenceChecked !== false || data.financialOperationsEnabled !== false ||
       data.automaticReleaseAllowed !== false || data.automaticRetryAllowed !== false ||
@@ -60,6 +57,18 @@ export async function loadFinancialRecovery(): Promise<FinancialRecoverySnapshot
         item.automaticRetryAllowed !== false || item.automaticReleaseAllowed !== false)) {
     throw new Error("Recovery records did not match this authenticated account or the read-only safety contract.");
   }
+  return data as FinancialRecoverySnapshot;
+}
+
+export async function loadFinancialRecovery(): Promise<FinancialRecoverySnapshot> {
+  const active = await sessionForApiRequest();
+  if (!active) throw new Error("Sign in before opening your financial recovery review.");
+  const response = await apiFetch(resolveApiUrl() + "/api/workspace/financial-recovery", { method: "GET" });
+  if (response.status === 404) throw new Error("The financial recovery API is not available on this release.");
+  if (!response.ok || !(response.headers.get("content-type") ?? "").includes("application/json")) {
+    throw new Error("Your local financial recovery evidence is unavailable. No payment action was taken.");
+  }
+  const data = validateFinancialRecoveryPayload(await response.json(), active.userId);
   const latest = await sessionForApiRequest();
   if (!latest || latest.userId.toLowerCase() !== active.userId.toLowerCase()) {
     throw new Error("Your account changed during the recovery check. Reload your signed-in workspace.");
