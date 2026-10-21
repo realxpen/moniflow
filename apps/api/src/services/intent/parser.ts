@@ -144,6 +144,7 @@ function parseAmount(value: string): number | null {
     /^(₦|ngn\s*)?((?:[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)(?:\.[0-9]{1,2})?)\s*([km])?$/i
   );
   if (!match?.[2] || (!match[1] && !match[3])) return null;
+  if (match[2].includes(",") && match[2].includes(".")) return null;
   const base = Number(match[2].replace(/,/g, ""));
   const multiplier = match[3]?.toLowerCase() === "k" ? 1_000 :
     match[3]?.toLowerCase() === "m" ? 1_000_000 : 1;
@@ -175,6 +176,8 @@ function normalizePocketName(value: string): string | null {
     .replace(/[?.!,]+$/g, "")
     .trim();
   if (!name || name.length > 48) return null;
+  // Names cannot smuggle a second operation or ambiguous imperative.
+  if (/\b(?:or|but|otherwise|send|transfer|withdraw|pay|purchase|buy|move|approve|execute|now|immediately)\b/i.test(name)) return null;
   if (!/^[a-z0-9][a-z0-9 &'_-]*$/i.test(name)) return null;
   return name.replace(/\b\w/g, (character) => character.toUpperCase());
 }
