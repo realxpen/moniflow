@@ -71,7 +71,7 @@ export function interpretOfflineExample(input: string): OfflineIntentLabResult {
   if (typeof input !== "string" || input.length > max) {
     return result("UNSUPPORTED", "Only short educational instructions are accepted. Nothing was submitted.");
   }
-  const clean = input.replace(/\\s+/g, " ").trim().replace(/[.!?]$/, "").trim();
+  const clean = input.replace(/\s+/g, " ").trim().replace(/[.!?]$/, "").trim();
   if (!clean) return result("UNSUPPORTED", "Enter a sample financial instruction to practice.");
 
   if (/^(?:check|show) my balance$/i.test(clean) ||
@@ -80,7 +80,7 @@ export function interpretOfflineExample(input: string): OfflineIntentLabResult {
       "MONIFlow recognizes the read request, but this offline lab never reads a personal balance or transaction history.");
   }
 
-  const clauses = clean.split(/\\s+and\\s+/i);
+  const clauses = clean.split(/\s+and\s+/i);
   if (clauses.length < 1 || clauses.length > 2) {
     return result("UNSUPPORTED", "The learning lab supports at most one withdrawal and one Laptop allocation.");
   }
