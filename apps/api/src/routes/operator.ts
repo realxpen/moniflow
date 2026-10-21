@@ -126,8 +126,13 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
 
     const currentHash = fingerprintMoneyPlan(stored.plan);
     let result: GuardResult = evaluateMoniGuard({ intent: stored.intent, plan: stored.plan });
-    const withdrawal = stored.plan.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
-    if (withdrawal) {
+    const withdrawals = stored.plan.actions.filter((action) => action.kind === "BANK_WITHDRAWAL");
+    if (withdrawals.length > 1) {
+      // The execution engine can sign exactly one withdrawal proposal per plan.
+      // Never promote a multi-withdrawal guard using only the first beneficiary.
+      result = withVerifiedDestination(result, null, "A plan with multiple bank withdrawals is unsupported. Split into separately reviewed plans.");
+    } else if (withdrawals.length === 1) {
+      const withdrawal = withdrawals[0]!;
       const destination = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawal.label);
       result = withVerifiedDestination(result, destination ? `${destination.bankName} ${destination.maskedAccountNumber}` : null);
     }
@@ -149,10 +154,11 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
       if (stored.status !== "AWAITING_USER_APPROVAL" && stored.status !== "APPROVED") {
         return reply.status(409).send({ statusCode: 409, error: "Conflict", message: `Plan is ${stored.status}; human authorization is not available.` });
       }
-      const withdrawal = stored.plan.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
-      if (!withdrawal) {
-        return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "This plan has no external bank withdrawal to authorize." });
+      const withdrawals = stored.plan.actions.filter((action) => action.kind === "BANK_WITHDRAWAL");
+      if (withdrawals.length !== 1) {
+        return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Authorization requires exactly one bank withdrawal per plan." });
       }
+      const withdrawal = withdrawals[0]!;
       const destination = await options.getBankAccountRepository().findVerifiedByLabel(query.data.localUserId, withdrawal.label);
       if (!destination) {
         return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "The bank destination is no longer verified. Run MONI Guard again." });
@@ -189,9 +195,12 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
 
     try {
       const stored = await loadAuthorizationPlan(options.getMoneyPlanRepository(), params.data.planId, body.data.localUserId);
-      const withdrawal = stored.plan.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
-      if (withdrawal) {
-        const destination = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawal.label);
+      const withdrawals = stored.plan.actions.filter((action) => action.kind === "BANK_WITHDRAWAL");
+      if (withdrawals.length > 1) {
+        return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Multiple bank withdrawals cannot share a single human approval or device signature." });
+      }
+      if (withdrawals.length === 1) {
+        const destination = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawals[0]!.label);
         if (!destination) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Verified bank destination required before approval." });
       }
       const approved = await approveMoneyPlan(
@@ -214,12 +223,13 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
     }
     try {
       const approved = await requireApprovedPlanForExecution(options.getMoneyPlanRepository(), params.data.planId, query.data.localUserId);
-      const withdrawal = approved.plan.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
-      if (withdrawal) {
-        const destination = await options.getBankAccountRepository().findVerifiedByLabel(query.data.localUserId, withdrawal.label);
-        if (!destination) {
-          return reply.status(409).send({ planId: approved.id, canExecute: false, approvalHashMatches: true, error: "DESTINATION_NOT_VERIFIED", message: "Verified bank destination required before execution." });
-        }
+      const withdrawals = approved.plan.actions.filter((action) => action.kind === "BANK_WITHDRAWAL");
+      if (withdrawals.length !== 1) {
+        return reply.status(409).send({ planId: approved.id, canExecute: false, approvalHashMatches: true, error: "UNSUPPORTED_WITHDRAWAL_COUNT", message: "Execution supports exactly one bank withdrawal per approved plan." });
+      }
+      const destination = await options.getBankAccountRepository().findVerifiedByLabel(query.data.localUserId, withdrawals[0]!.label);
+      if (!destination) {
+        return reply.status(409).send({ planId: approved.id, canExecute: false, approvalHashMatches: true, error: "DESTINATION_NOT_VERIFIED", message: "Verified bank destination required before execution." });
       }
       return reply.send({ planId: approved.id, status: approved.status, canExecute: true, approvalHashMatches: true });
     } catch (error) {
@@ -231,12 +241,12 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
   });
 };
 
-function withVerifiedDestination(result: GuardResult, verifiedDestination: string | null): GuardResult {
+function withVerifiedDestination(result: GuardResult, verifiedDestination: string | null, blockedMessage?: string): GuardResult {
   const checks = result.checks.map((check): GuardCheck => {
     if (check.rule !== "DESTINATION") return check;
     return verifiedDestination
       ? { ...check, passed: true, severity: "info", message: `${verifiedDestination} is a verified withdrawal destination.` }
-      : { ...check, passed: false, severity: "critical", message: "A verified Nigerian bank destination is required." };
+      : { ...check, passed: false, severity: "critical", message: blockedMessage ?? "A verified Nigerian bank destination is required." };
   });
   const blocked = checks.some((check) => !check.passed && check.severity === "critical");
   const needsApproval = checks.some((check) => check.rule === "HUMAN_APPROVAL" && check.passed && check.severity === "warning");
