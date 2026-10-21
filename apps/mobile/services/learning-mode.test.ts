@@ -44,8 +44,14 @@ describe("Phase 33D Learning & Practice - educational-only boundaries", () => {
 
   it("exposes practice to signed-in Home and anonymous welcome without financial authorization", () => {
     const home = read("apps/mobile/components/AuthenticatedWorkspace.tsx");
+    const homeHero = read("apps/mobile/components/workspace/ReadOnlyHomeHero.tsx");
     const welcome = read("apps/mobile/app/onboarding/welcome.tsx");
-    expect(home).toMatch(/tab === "home"[\s\S]*?LEARN & PRACTICE[\s\S]*?router\.push\("\/learn"\)/);
+
+    expect(home).toMatch(/tab === "home"[\s\S]*?<ReadOnlyHomeHero[\s\S]*?onOpenPractice=\{\(\) => router\.push\("\/learn"\)\}/);
+    expect(homeHero).toContain("OFFLINE PRACTICE");
+    expect(homeHero).toContain("No balance is assumed or estimated");
+    expect(homeHero).toContain("NO MONEY MOVEMENT");
+    expect(homeHero).not.toMatch(/from ["']@\/services\/(?:api-fetch|bmoni-device|banking|execution|money-plan|approval|wallet-dashboard)["']/);
     expect(welcome).toContain('router.push("/learn")');
   });
 
