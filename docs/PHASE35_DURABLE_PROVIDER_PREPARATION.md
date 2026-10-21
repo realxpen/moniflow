@@ -19,6 +19,10 @@ The prior Phase 34 consolidation deliberately blocked real BMONI execution. That
 6. A separate owner-scoped `GET /api/operator/plans/:planId/execution/preparation?localUserId=...` reads the hold, reports state, timestamps, `automaticRetryAllowed:false` and `requiresManualReconciliation`. It performs **no provider call**, reveals no bank identity/transaction signing material, and is accessible even while the real BMONI mutation release gate remains disabled.
 7. A genuinely missing hold returns 404. An ambiguous preparation returns 409 `PROVIDER_PREPARATION_ALREADY_CLAIMED`; missing provider proposal ID returns 502 `PROVIDER_OUTCOME_UNKNOWN`. These are manual reconciliation paths, not proof that a transfer completed.
 
+## Additional PostgreSQL compatibility fix
+
+The new real-PostgreSQL integration tests exposed a previously untested issue in the Money Plan repository: `intent_payload` and `plan_payload` could be stored as JSONB **string scalars**, rather than JSONB objects, causing Zod validation to fail when a persisted plan was loaded. The repository now uses PostgresJS `sql.json(...)` for typed JSONB writes, and reads both proper objects and legacy string-wrapped JSON (validated with the same strict schemas). Disposable PostgreSQL tests assert the newly written `jsonb_typeof(...)=object` and exercise old string-scalar compatibility. No existing stored values were rewritten or invented.
+
 ## Data compatibility
 
 The SQLite and PostgreSQL repositories create a **new** private holds table via additive, idempotent schema initialization. Existing execution rows and historical activity are not deleted or modified. No secret, provider user or bank registration is changed. A new record may only be created once per `plan_id`; cross-user reads are filtered by both plan and authenticated owner.
