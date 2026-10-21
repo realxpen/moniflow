@@ -84,6 +84,44 @@ async function fixture() {
   return { app, repository, gateway, offrampNigeria, prepare, status, reached, providerResponse, planId: saved.id };
 }
 
+describe("Cross-plan spendable pre-submission protection", () => {
+  it("never calls the provider for a second plan whose combined withdrawal and pocket commitments exceed available funds", async () => {
+    const f = await fixture();
+    const first = f.prepare();
+    await f.reached.promise;
+    const otherIntent = {
+      intent: "MULTI_ACTION" as const, requiresApproval: true,
+      actions: [
+        { intent: "BANK_WITHDRAWAL" as const, currency: "NGN" as const, amount: 260000,
+          destination: { kind: "SAVED_BANK" as const, label: "GTBank" },
+          requiresApproval: true as const },
+        { intent: "ALLOCATE_POCKET" as const, currency: "NGN" as const, amount: 20000,
+          pocket: { name: "Laptop" }, requiresApproval: false as const }
+      ]
+    };
+    const otherPlan = await bindVerifiedPlanDestinations(
+      buildMoneyPlan(otherIntent, 300000), userId, f.repository.banks
+    );
+    const hash = fingerprintMoneyPlan(otherPlan);
+    const stored = await f.repository.plans.create({
+      localUserId: userId, originalInstruction: "Other plan, too large combined",
+      intent: otherIntent, plan: otherPlan, planHash: hash
+    });
+    await f.repository.plans.recordGuard(stored.id, userId, "REVIEW", [], hash);
+    await f.repository.plans.approve(stored.id, userId, hash);
+    const competing = await f.app.inject({
+      method: "POST", url: `/api/operator/plans/${stored.id}/execution/prepare`,
+      payload: { localUserId: userId }
+    });
+    expect(competing.statusCode).toBe(409);
+    expect(competing.json().code).toBe("SPENDABLE_CAPACITY_RESERVED");
+    expect(f.offrampNigeria).toHaveBeenCalledTimes(1);
+    expect(await f.repository.executions.findPreparationHold(stored.id, userId)).toBeNull();
+    f.providerResponse.release({ proposalId: "provider-proposal-1", status: "PENDING_SIGNATURES" });
+    expect((await first).statusCode).toBe(200);
+  });
+});
+
 describe("Durable provider proposal preparation through Fastify", () => {
   it("allows only one provider submission during a concurrent request race", async () => {
     const f = await fixture();

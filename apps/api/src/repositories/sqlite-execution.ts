@@ -1,7 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 
-import type { ExecutionRepository, ProviderExecution, PreparationHold, PreparationHoldInput, PreparationHoldState } from "./execution.js";
+import type { ExecutionRepository, ProviderExecution, PreparationHold, PreparationHoldInput, PreparationHoldState, SpendablePreparationInput, SpendableClaimResult } from "./execution.js";
+import { moneyInCents } from "./execution.js";
 
 const rowSchema = z.object({
   plan_id: z.string(), local_user_id: z.string(), provider_proposal_id: z.string(), provider_bank_account_id: z.string(),
@@ -54,6 +55,11 @@ export class SqliteExecutionRepository implements ExecutionRepository {
       CREATE INDEX IF NOT EXISTS provider_preparation_holds_owner_v1
       ON provider_preparation_holds_v1(local_user_id, created_at);
     `);
+    // Existing Phase 35 databases may lack this added capacity column.
+    const columns = this.database.prepare("PRAGMA table_info(provider_preparation_holds_v1)").all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "reserved_amount")) {
+      this.database.exec("ALTER TABLE provider_preparation_holds_v1 ADD COLUMN reserved_amount REAL");
+    }
   }
 
   async findByPlanId(planId: string, localUserId: string): Promise<ProviderExecution | null> {
@@ -91,6 +97,48 @@ export class SqliteExecutionRepository implements ExecutionRepository {
     `).run(value.planId, value.localUserId, value.approvedPlanHash,
       value.providerBankAccountId, value.amount, now, now);
     return claimed.changes === 1;
+  }
+
+  async claimSpendablePreparation(input: SpendablePreparationInput): Promise<SpendableClaimResult> {
+    const requestedCents = moneyInCents(input.reservedAmount);
+    const ceilingCents = moneyInCents(input.spendableCeiling);
+    if (requestedCents === 0 || input.reservedAmount < input.amount) {
+      throw new Error("A provider withdrawal must reserve the entire positive Money Plan commitment.");
+    }
+    // BEGIN IMMEDIATE serializes writers across separate SQLite connections.
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const old = this.database.prepare(`
+        SELECT COUNT(*) AS count FROM provider_preparation_holds_v1
+        WHERE local_user_id = ? AND reserved_amount IS NULL
+      `).get(input.localUserId) as { count: number };
+      if (old.count > 0) {
+        this.database.exec("COMMIT");
+        return "UNRECONCILED_LEGACY";
+      }
+      const row = this.database.prepare(`
+        SELECT COALESCE(SUM(reserved_amount), 0) AS amount FROM provider_preparation_holds_v1
+        WHERE local_user_id = ?
+      `).get(input.localUserId) as { amount: number };
+      if (moneyInCents(row.amount) + requestedCents > ceilingCents) {
+        this.database.exec("COMMIT");
+        return "INSUFFICIENT_CAPACITY";
+      }
+      const now = new Date().toISOString();
+      const inserted = this.database.prepare(`
+        INSERT INTO provider_preparation_holds_v1 (
+          plan_id, local_user_id, approved_plan_hash, provider_bank_account_id,
+          amount, reserved_amount, state, provider_proposal_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'RESERVED', NULL, ?, ?)
+        ON CONFLICT (plan_id) DO NOTHING
+      `).run(input.planId, input.localUserId, input.approvedPlanHash,
+        input.providerBankAccountId, input.amount, input.reservedAmount, now, now);
+      this.database.exec("COMMIT");
+      return inserted.changes === 1 ? "CLAIMED" : "CONFLICT";
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   async findPreparationHold(planId: string, localUserId: string): Promise<PreparationHold | null> {
