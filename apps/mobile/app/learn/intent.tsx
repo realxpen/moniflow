@@ -6,6 +6,7 @@ import { PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/
 import {
   interpretOfflineExample, offlineIntentExamples, type OfflineIntentLabResult
 } from "@/services/offline-intent-lab";
+import { createOfflinePlanHandoff } from "@/services/offline-plan-handoff";
 import { colors, layout, radius, spacing, typography } from "@/theme";
 
 const naira = (n: number) => "₦" + n.toLocaleString("en-NG");
@@ -21,6 +22,7 @@ export default function IntentLabScreen() {
   const hasResult = evaluated !== null;
   const valid = evaluated?.state === "RECOGNIZED";
   const preview = valid ? evaluated?.preview : null;
+  const handoff = createOfflinePlanHandoff(evaluated);
 
   return (
     <Screen contentContainerStyle={styles.page}>
@@ -101,6 +103,19 @@ export default function IntentLabScreen() {
             ) : null}
           <Text style={styles.disclosure}>
             NOT A SERVER MONEY PLAN · NOT A MONI GUARD APPROVAL · BANK NOT VERIFIED · NO SIGNING OR TRANSFER
+          </Text>
+          {handoff ? (
+            <PrimaryButton onPress={() => router.push({
+              pathname: "/learn/playground",
+              params: handoff
+            })}>
+              Adjust this example in Money Plan Playground
+            </PrimaryButton>
+          ) : null}
+          <Text style={styles.body}>
+            {handoff
+              ? "Only the two hypothetical amounts continue to the Playground. This cannot create an actual money plan."
+              : "You can continue only after a fully recognized, valid example. Unsupported, live-data and overspending requests stay here."}
           </Text>
           <SecondaryButton onPress={() => { chosen(offlineIntentExamples[0].command); }}>
             Restore canonical instruction
