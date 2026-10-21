@@ -201,6 +201,9 @@ export default function WelcomeScreen() {
             </Text>
           </SoftCard>
         )}
+        <SecondaryButton onPress={() => router.push("/learn")}>
+          Explore Learning & Practice
+        </SecondaryButton>
         <SecondaryButton onPress={() => router.push("/demo/operator")}>
           Try offline Operator simulation
         </SecondaryButton>
