@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { financialRecoveryDescriptions, validateFinancialRecoveryPayload } from "./financial-recovery.js";
+import { financialRecoveryDescriptions, validateFinancialRecoveryPayload } from "./financial-recovery-contract.js";
 
 const me = "11111111-1111-4111-8111-111111111111";
 const record = {
