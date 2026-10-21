@@ -19,6 +19,7 @@ import {
 } from "../services/plans/approval.js";
 import { buildMoneyPlan, UnsupportedPlanIntentError } from "../services/plans/engine.js";
 import { computeAvailableToSpend } from "../services/plans/spendable.js";
+import { bindVerifiedPlanDestinations, getReviewedDestination } from "../services/plans/beneficiary-binding.js";
 
 const parseIntentBodySchema = z.object({ input: z.string().max(500) }).strict();
 const planBodySchema = z.object({
@@ -77,7 +78,11 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
       }
       const internalAllocated = await options.getPocketRepository().totalAllocated(parsed.data.localUserId);
       const currentAvailable = computeAvailableToSpend(providerBalance, internalAllocated);
-      const plan = moneyPlanSchema.parse(buildMoneyPlan(intent, currentAvailable));
+      const plan = await bindVerifiedPlanDestinations(
+        moneyPlanSchema.parse(buildMoneyPlan(intent, currentAvailable)),
+        parsed.data.localUserId,
+        options.getBankAccountRepository()
+      );
       const planHash = fingerprintMoneyPlan(plan);
       const persisted = await options.getMoneyPlanRepository().create({
         localUserId: parsed.data.localUserId,
@@ -133,7 +138,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
       result = withVerifiedDestination(result, null, "A plan with multiple bank withdrawals is unsupported. Split into separately reviewed plans.");
     } else if (withdrawals.length === 1) {
       const withdrawal = withdrawals[0]!;
-      const destination = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawal.label);
+      const destination = await getReviewedDestination(withdrawal, body.data.localUserId, options.getBankAccountRepository());
       result = withVerifiedDestination(result, destination ? `${destination.bankName} ${destination.maskedAccountNumber}` : null);
     }
 
@@ -159,7 +164,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
         return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Authorization requires exactly one bank withdrawal per plan." });
       }
       const withdrawal = withdrawals[0]!;
-      const destination = await options.getBankAccountRepository().findVerifiedByLabel(query.data.localUserId, withdrawal.label);
+      const destination = await getReviewedDestination(withdrawal, query.data.localUserId, options.getBankAccountRepository());
       if (!destination) {
         return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "The bank destination is no longer verified. Run MONI Guard again." });
       }
@@ -200,7 +205,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
         return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Multiple bank withdrawals cannot share a single human approval or device signature." });
       }
       if (withdrawals.length === 1) {
-        const destination = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawals[0]!.label);
+        const destination = await getReviewedDestination(withdrawals[0]!, body.data.localUserId, options.getBankAccountRepository());
         if (!destination) return reply.status(409).send({ statusCode: 409, error: "Conflict", message: "Verified bank destination required before approval." });
       }
       const approved = await approveMoneyPlan(
@@ -227,7 +232,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRouteOptions> = async (a
       if (withdrawals.length !== 1) {
         return reply.status(409).send({ planId: approved.id, canExecute: false, approvalHashMatches: true, error: "UNSUPPORTED_WITHDRAWAL_COUNT", message: "Execution supports exactly one bank withdrawal per approved plan." });
       }
-      const destination = await options.getBankAccountRepository().findVerifiedByLabel(query.data.localUserId, withdrawals[0]!.label);
+      const destination = await getReviewedDestination(withdrawals[0]!, query.data.localUserId, options.getBankAccountRepository());
       if (!destination) {
         return reply.status(409).send({ planId: approved.id, canExecute: false, approvalHashMatches: true, error: "DESTINATION_NOT_VERIFIED", message: "Verified bank destination required before execution." });
       }
