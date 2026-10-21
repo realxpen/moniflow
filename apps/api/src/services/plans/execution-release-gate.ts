@@ -10,13 +10,21 @@ import { env } from "../../config/env.js";
  */
 export function canUseFinancialExecution(
   provider: "bmoni" | "moniflow-sandbox",
-  environment: "development" | "test" | "production"
+  environment: "development" | "test" | "production",
+  hasProviderCredentials = false
 ): boolean {
-  return environment === "test" || provider === "moniflow-sandbox";
+  // Tests may exercise injected fake gateways, but may not rely on NODE_ENV
+  // alone to bypass a release gate when real provider credentials are present.
+  return provider === "moniflow-sandbox" ||
+    (environment === "test" && !hasProviderCredentials);
 }
 
 export function realFinancialExecutionReleased(): boolean {
-  return canUseFinancialExecution(env.FINANCIAL_PROVIDER, env.NODE_ENV);
+  return canUseFinancialExecution(
+    env.FINANCIAL_PROVIDER,
+    env.NODE_ENV,
+    Boolean(env.BMONI_API_KEY || env.BMONI_BASE_URL)
+  );
 }
 
 export const REAL_EXECUTION_RELEASE_CODE = "BMONI_FINANCIAL_EXECUTION_NOT_RELEASED" as const;
