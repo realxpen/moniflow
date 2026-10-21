@@ -65,7 +65,7 @@ export default function WalkthroughScreen() {
             {last ? "Restart walkthrough" : "Next step"}
           </PrimaryButton>
         </View>
-        <Pressable accessibilityRole="button" onPress={() => router.replace("/onboarding/welcome")} style={styles.leave}><Text style={styles.leaveLabel}>Return to MONIFlow</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.replace("/learn")} style={styles.leave}><Text style={styles.leaveLabel}>Return to Learning & Practice</Text></Pressable>
       </View>
     </Screen>
   );
