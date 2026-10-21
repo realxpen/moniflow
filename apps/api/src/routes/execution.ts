@@ -10,6 +10,7 @@ import { BmoniProviderError, type BmoniGateway } from "../services/bmoni/index.j
 import { BmoniUserService } from "../services/bmoni/user-service.js";
 import { fingerprintMoneyPlan, requireApprovedPlanForExecution } from "../services/plans/approval.js";
 import { computeAvailableToSpend } from "../services/plans/spendable.js";
+import { getReviewedDestination } from "../services/plans/beneficiary-binding.js";
 
 const paramsSchema = z.object({ planId: z.uuid() }).strict();
 const userBodySchema = z.object({ localUserId: z.uuid() }).strict();
@@ -64,7 +65,7 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     if (!mapping) return reply.status(409).send({ message: "Financial-provider user mapping is missing." });
     const wallet = await options.getWalletOwnershipRepository().findByLocalUserId(body.data.localUserId);
     if (!wallet) return reply.status(409).send({ message: "Managed CNGN wallet is missing." });
-    const bank = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawal.label);
+    const bank = await getReviewedDestination(withdrawal, body.data.localUserId, options.getBankAccountRepository());
     if (!bank) return reply.status(409).send({ message: "Verified Nigerian withdrawal destination is missing." });
 
     const balances = await options.getBmoniGateway().listAccountBalances(mapping.bmoniUserId);
@@ -132,6 +133,16 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     }
     if (fingerprintMoneyPlan(approved.plan) !== approved.approvedPlanHash) {
       return reply.status(409).send({ message: "Approved plan integrity changed; signature submission blocked." });
+    }
+    const signedWithdrawals = approved.plan.actions.filter((action) => action.kind === "BANK_WITHDRAWAL");
+    const signedWithdrawal = signedWithdrawals.length === 1 ? signedWithdrawals[0] : undefined;
+    const signedBank = signedWithdrawal
+      ? await getReviewedDestination(signedWithdrawal, body.data.localUserId, options.getBankAccountRepository())
+      : null;
+    if (!signedWithdrawal || !signedBank ||
+        execution.providerBankAccountId !== signedBank.providerAccountId ||
+        execution.amount !== signedWithdrawal.amount || execution.currency !== approved.plan.currency) {
+      return reply.status(409).send({ code: "EXECUTION_BENEFICIARY_MISMATCH", message: "Prepared proposal does not match the reviewed beneficiary and amount. Signature submission blocked." });
     }
 
     const mapping = await options.getBmoniUserService().getMapping(body.data.localUserId);
