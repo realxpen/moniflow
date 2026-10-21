@@ -2,7 +2,7 @@ import type { Sql } from "postgres";
 import { z } from "zod";
 
 import type { BankAccountRepository, VerifiedBankAccount } from "./bank-account.js";
-import { normalizeBankLabel } from "./bank-account.js";
+import { BankDestinationLabelConflictError, normalizeBankLabel, sameVerifiedBankDestination } from "./bank-account.js";
 
 const rowSchema = z.object({
   id: z.string(),
@@ -81,6 +81,8 @@ export class PostgresBankAccountRepository implements BankAccountRepository {
   }
 
   async saveVerified(account: VerifiedBankAccount): Promise<VerifiedBankAccount> {
+    // A label is an immutable approval-time beneficiary reference. Insert
+    // atomically, never overwrite an existing binding in a concurrent race.
     await this.sql`
       insert into moniflow_private.bank_accounts (
         id, local_user_id, label, normalized_label, bank_code, bank_name,
@@ -100,19 +102,13 @@ export class PostgresBankAccountRepository implements BankAccountRepository {
         ${account.createdAt}::timestamptz,
         ${account.updatedAt}::timestamptz
       )
-      on conflict (local_user_id, normalized_label) do update set
-        label = excluded.label,
-        bank_code = excluded.bank_code,
-        bank_name = excluded.bank_name,
-        account_number_masked = excluded.account_number_masked,
-        account_name = excluded.account_name,
-        bmoni_withdrawal_account_id = excluded.bmoni_withdrawal_account_id,
-        verified = true,
-        updated_at = excluded.updated_at
+      on conflict do nothing
     `;
-    const saved = await this.findVerifiedByLabel(account.localUserId, account.label);
-    if (!saved) throw new Error("Verified bank destination could not be reloaded.");
-    return saved;
+    const stored = await this.findVerifiedByLabel(account.localUserId, account.label);
+    if (!stored || !sameVerifiedBankDestination(stored, account)) {
+      throw new BankDestinationLabelConflictError();
+    }
+    return stored;
   }
 
   async close() {}

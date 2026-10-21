@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 
 import type { BankAccountRepository, VerifiedBankAccount } from "./bank-account.js";
-import { normalizeBankLabel } from "./bank-account.js";
+import { BankDestinationLabelConflictError, normalizeBankLabel, sameVerifiedBankDestination } from "./bank-account.js";
 
 const rowSchema = z.object({
   id: z.string(), local_user_id: z.string(), label: z.string(), provider_account_id: z.string(), bank_code: z.string(),
@@ -50,15 +50,18 @@ export class SqliteBankAccountRepository implements BankAccountRepository {
   }
 
   async saveVerified(account: VerifiedBankAccount): Promise<VerifiedBankAccount> {
+    // Database uniqueness is the last line of defense against concurrent writes.
+    // Never ON CONFLICT UPDATE a beneficiary that a human may have approved.
     this.database.prepare(`
       INSERT INTO bank_accounts_phase12 (id, local_user_id, label, normalized_label, provider_account_id, bank_code, bank_name, masked_account_number, account_holder_name, verified, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-      ON CONFLICT(local_user_id, normalized_label) DO UPDATE SET
-        label = excluded.label, provider_account_id = excluded.provider_account_id, bank_code = excluded.bank_code,
-        bank_name = excluded.bank_name, masked_account_number = excluded.masked_account_number,
-        account_holder_name = excluded.account_holder_name, verified = 1, updated_at = excluded.updated_at
+      ON CONFLICT DO NOTHING
     `).run(account.id, account.localUserId, account.label, normalizeBankLabel(account.label), account.providerAccountId, account.bankCode, account.bankName, account.maskedAccountNumber, account.accountHolderName, account.createdAt, account.updatedAt);
-    return account;
+    const stored = await this.findVerifiedByLabel(account.localUserId, account.label);
+    if (!stored || !sameVerifiedBankDestination(stored, account)) {
+      throw new BankDestinationLabelConflictError();
+    }
+    return stored;
   }
 
   async close() { this.database.close(); }

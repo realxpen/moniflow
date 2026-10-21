@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 
-import type { BankAccountRepository } from "../repositories/bank-account.js";
+import { BankDestinationLabelConflictError, type BankAccountRepository } from "../repositories/bank-account.js";
 import type { BmoniGateway } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
 
@@ -64,6 +64,16 @@ export const bankingRoutes: FastifyPluginAsync<BankingRouteOptions> = async (app
     const mapping = await options.getBmoniUserService().getMapping(parsed.data.localUserId);
     if (!mapping) return reply.status(409).send({ message: "Create the BMONI user first." });
 
+    // Never make a provider registration call for an already-used label.
+    // Money Plan approvals refer to this stable label, not an editable ID.
+    const existing = await options.getBankAccountRepository().findVerifiedByLabel(parsed.data.localUserId, parsed.data.label);
+    if (existing) {
+      return reply.status(409).send({
+        code: "BANK_DESTINATION_LABEL_CONFLICT",
+        message: "That saved bank label is already in use. Choose a new label and review a new Money Plan."
+      });
+    }
+
     // Re-verify on the server so a client cannot forge the holder name that BMONI requires verbatim.
     const verification = await options.getBmoniGateway().verifyNigerianAccount(mapping.bmoniUserId, {
       bankCode: parsed.data.bankCode,
@@ -84,7 +94,9 @@ export const bankingRoutes: FastifyPluginAsync<BankingRouteOptions> = async (app
     if (!providerAccountId) return reply.status(502).send({ message: "BMONI returned no withdrawal-account id." });
 
     const now = new Date().toISOString();
-    const saved = await options.getBankAccountRepository().saveVerified({
+    let saved;
+    try {
+      saved = await options.getBankAccountRepository().saveVerified({
       id: randomUUID(),
       localUserId: parsed.data.localUserId,
       label: parsed.data.label,
@@ -96,7 +108,14 @@ export const bankingRoutes: FastifyPluginAsync<BankingRouteOptions> = async (app
       verified: true,
       createdAt: now,
       updatedAt: now
-    });
+      });
+    } catch (error) {
+      // Repository uniqueness protects concurrent requests after the preflight.
+      if (error instanceof BankDestinationLabelConflictError) {
+        return reply.status(409).send({ code: error.code, message: error.message });
+      }
+      throw error;
+    }
 
     return reply.status(201).send({ destination: saved });
   });
