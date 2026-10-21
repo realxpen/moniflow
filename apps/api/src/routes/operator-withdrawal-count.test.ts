@@ -46,6 +46,17 @@ async function createPlan(plans: SqliteMoneyPlanRepository, multi = true) {
     ? { intent: "MULTI_ACTION" as const, actions: [money("GTBank", 40000), money("Access Bank", 10000)], requiresApproval: true }
     : money("GTBank", 40000);
   const plan = buildMoneyPlan(intent, 300000);
+  // Explicitly sealed *before* Guard, just as /api/operator/plan does.
+  for (const action of plan.actions) {
+    if (action.kind !== "BANK_WITHDRAWAL") continue;
+    action.destinationBinding = {
+      providerAccountId: action.label === "GTBank" ? "fixture-gtbank" : "fixture-access",
+      bankCode: action.label === "GTBank" ? "058" : "044",
+      bankName: action.label,
+      maskedAccountNumber: "•••• 0000",
+      accountHolderName: "TEST FIXTURE"
+    };
+  }
   const record = await plans.create({
     localUserId,
     originalInstruction: "Isolated test fixture; no real transaction",

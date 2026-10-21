@@ -207,7 +207,8 @@ export const buildApp = (dependencyOverrides?: AppDependencies) => {
     getMoneyPlanRepository,
     getExecutionRepository,
     getPocketRepository,
-    getActivityRepository
+    getActivityRepository,
+    getBankAccountRepository
   };
 
   app.register(healthRoutes, { getBmoniGateway: dependencies.getBmoniGateway });

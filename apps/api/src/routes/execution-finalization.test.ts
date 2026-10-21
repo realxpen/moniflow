@@ -6,6 +6,7 @@ import type { MoniflowIntent } from "../schemas/intent.js";
 import type { MoneyPlan } from "../schemas/money-plan.js";
 import type { BmoniGateway } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
+import { fingerprintMoneyPlan } from "../services/plans/approval.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const otherId = "22222222-2222-4222-8222-222222222222";
@@ -39,7 +40,14 @@ const plan: MoneyPlan = {
     {
       index: 1, kind: "BANK_WITHDRAWAL", label: "GTBank",
       description: "Withdrawal", amount: 40000,
-      movement: "EXTERNAL", requiresApproval: true
+      movement: "EXTERNAL", requiresApproval: true,
+      destinationBinding: {
+        providerAccountId: "bank-1",
+        bankCode: "058",
+        bankName: "GTBank",
+        maskedAccountNumber: "•••• 1234",
+        accountHolderName: "EXAMPLE HOLDER"
+      }
     },
     {
       index: 2, kind: "ALLOCATE_POCKET", label: "Laptop",
@@ -55,7 +63,7 @@ const plan: MoneyPlan = {
   }
 };
 
-async function fixture(state: "COMPLETED" | "PROCESSING") {
+async function fixture(state: "COMPLETED" | "PROCESSING" | "AWAITING_DEVICE_SIGNATURE") {
   const repositories = createRepositories(":memory:");
   const getProposal = vi.fn().mockResolvedValue({ proposalId: "provider-proposal-1", status: "PROCESSING" });
   const createUser = vi.fn().mockResolvedValue({
@@ -73,16 +81,33 @@ async function fixture(state: "COMPLETED" | "PROCESSING") {
     localUserId: userId, email: "sandbox@example.test",
     firstName: "Sandbox", phoneNumber: "+2348012345678"
   });
+  const now = new Date().toISOString();
+  await repositories.banks.saveVerified({
+    id: "33333333-3333-4333-8333-333333333333",
+    localUserId: userId,
+    label: "GTBank",
+    providerAccountId: "bank-1",
+    bankCode: "058",
+    bankName: "GTBank",
+    maskedAccountNumber: "•••• 1234",
+    accountHolderName: "EXAMPLE HOLDER",
+    verified: true,
+    createdAt: now,
+    updatedAt: now
+  });
+  const planHash = fingerprintMoneyPlan(plan);
   const saved = await repositories.plans.create({
     localUserId: userId,
     originalInstruction: "Withdraw 40000 to GTBank and save 20000 for Laptop",
-    intent, plan, planHash: "a".repeat(64)
+    intent, plan, planHash
   });
-  const now = new Date().toISOString();
+  await repositories.plans.recordGuard(saved.id, userId, "REVIEW", [], planHash);
+  await repositories.plans.approve(saved.id, userId, planHash);
   await repositories.executions.create({
     planId: saved.id, localUserId: userId, providerProposalId: "provider-proposal-1",
     providerBankAccountId: "bank-1", amount: 40000, currency: "NGN",
-    signHash: null, providerStatus: state, state, createdAt: now, updatedAt: now
+    signHash: state === "AWAITING_DEVICE_SIGNATURE" ? "0x" + "a".repeat(64) : null,
+    providerStatus: state, state, createdAt: now, updatedAt: now
   });
 
   const app = buildApp({
@@ -136,6 +161,54 @@ describe("provider-confirmed finalization via actual API and SQLite ledgers", ()
     expect(getProposal).toHaveBeenCalledTimes(1);
     expect(await repositories.pockets.totalAllocated(userId)).toBe(0);
     expect(await repositories.activities.list(userId)).toHaveLength(0);
+  });
+
+  it("never writes financial memory if a completed provider record points to a different reviewed beneficiary", async () => {
+    const { repositories, finalize, planId } = await fixture("COMPLETED");
+    const execution = await repositories.executions.findByPlanId(planId, userId);
+    if (!execution) throw Error("missing execution fixture");
+    await repositories.executions.update({ ...execution, providerBankAccountId: "wrong-bank" });
+    const response = await finalize();
+    expect(response.statusCode).toBe(409);
+    expect(response.json().code).toBe("EXECUTION_RECONCILIATION_MISMATCH");
+    expect(await repositories.activities.list(userId)).toHaveLength(0);
+    expect(await repositories.pockets.totalAllocated(userId)).toBe(0);
+  });
+
+  it("never writes completion if the execution amount differs from the approved plan", async () => {
+    const { repositories, finalize, planId } = await fixture("COMPLETED");
+    const execution = await repositories.executions.findByPlanId(planId, userId);
+    if (!execution) throw Error("missing execution fixture");
+    await repositories.executions.update({ ...execution, amount: 41000 });
+    const response = await finalize();
+    expect(response.statusCode).toBe(409);
+    expect(response.json().code).toBe("EXECUTION_RECONCILIATION_MISMATCH");
+    expect(await repositories.activities.list(userId)).toHaveLength(0);
+  });
+
+  it("blocks device-signature submission for a changed beneficiary and never invokes the provider", async () => {
+    const { app, repositories, gateway, planId } = await fixture("AWAITING_DEVICE_SIGNATURE");
+    const execution = await repositories.executions.findByPlanId(planId, userId);
+    if (!execution) throw Error("missing execution fixture");
+    await repositories.executions.update({ ...execution, providerBankAccountId: "wrong-bank" });
+    const response = await app.inject({
+      method: "POST", url: "/api/operator/plans/" + planId + "/execution/sign",
+      payload: { localUserId: userId, proposalId: "provider-proposal-1", signature: "0x" + "1".repeat(130) }
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json().code).toBe("EXECUTION_BENEFICIARY_MISMATCH");
+    expect(vi.mocked(gateway.signProposal)).not.toHaveBeenCalled();
+  });
+
+  it("accepts a matching reviewed beneficiary only for explicit device-signature submission", async () => {
+    const { app, gateway, planId } = await fixture("AWAITING_DEVICE_SIGNATURE");
+    const response = await app.inject({
+      method: "POST", url: "/api/operator/plans/" + planId + "/execution/sign",
+      payload: { localUserId: userId, proposalId: "provider-proposal-1", signature: "0x" + "1".repeat(130) }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().execution.state).toBe("PROCESSING");
+    expect(vi.mocked(gateway.signProposal)).toHaveBeenCalledTimes(1);
   });
 
   it("does not allow another local identity to finalize or read the same plan's accounting", async () => {

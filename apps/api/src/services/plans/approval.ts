@@ -25,7 +25,10 @@ export function fingerprintMoneyPlan(input: MoneyPlan): string {
         description: action.description,
         amount: action.amount,
         movement: action.movement,
-        requiresApproval: action.requiresApproval
+        requiresApproval: action.requiresApproval,
+        ...(action.kind === "BANK_WITHDRAWAL" && action.destinationBinding
+          ? { destinationBinding: action.destinationBinding }
+          : {})
       })),
     totals: {
       externalMovement: plan.totals.externalMovement,

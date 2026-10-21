@@ -8,8 +8,11 @@ import type { PocketRepository } from "../repositories/pocket.js";
 import type { WalletOwnershipRepository } from "../repositories/wallet-ownership.js";
 import { BmoniProviderError, type BmoniGateway } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
+import { realFinancialExecutionReleased, REAL_EXECUTION_RELEASE_CODE } from "../services/plans/execution-release-gate.js";
 import { fingerprintMoneyPlan, requireApprovedPlanForExecution } from "../services/plans/approval.js";
 import { computeAvailableToSpend } from "../services/plans/spendable.js";
+import { readCngnAvailableBalance } from "../services/plans/provider-balance.js";
+import { getReviewedDestination } from "../services/plans/beneficiary-binding.js";
 
 const paramsSchema = z.object({ planId: z.uuid() }).strict();
 const userBodySchema = z.object({ localUserId: z.uuid() }).strict();
@@ -33,6 +36,9 @@ type JsonRecord = Record<string, unknown>;
 
 export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async (app, options) => {
   app.post<{ Params: unknown; Body: unknown }>("/plans/:planId/execution/prepare", async (request, reply) => {
+    if (!realFinancialExecutionReleased()) {
+      return reply.status(503).send({ code: REAL_EXECUTION_RELEASE_CODE, message: "Real BMONI money execution is not released." });
+    }
     const params = paramsSchema.safeParse(request.params);
     const body = userBodySchema.safeParse(request.body);
     if (!params.success || !body.success) {
@@ -64,11 +70,11 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     if (!mapping) return reply.status(409).send({ message: "Financial-provider user mapping is missing." });
     const wallet = await options.getWalletOwnershipRepository().findByLocalUserId(body.data.localUserId);
     if (!wallet) return reply.status(409).send({ message: "Managed CNGN wallet is missing." });
-    const bank = await options.getBankAccountRepository().findVerifiedByLabel(body.data.localUserId, withdrawal.label);
+    const bank = await getReviewedDestination(withdrawal, body.data.localUserId, options.getBankAccountRepository());
     if (!bank) return reply.status(409).send({ message: "Verified Nigerian withdrawal destination is missing." });
 
     const balances = await options.getBmoniGateway().listAccountBalances(mapping.bmoniUserId);
-    const providerBalance = findCngnBalance(balances);
+    const providerBalance = readCngnAvailableBalance(balances);
     if (providerBalance === null) {
       return reply.status(502).send({ message: "The financial provider returned an undocumented CNGN balance response." });
     }
@@ -112,6 +118,9 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
   });
 
   app.post<{ Params: unknown; Body: unknown }>("/plans/:planId/execution/sign", async (request, reply) => {
+    if (!realFinancialExecutionReleased()) {
+      return reply.status(503).send({ code: REAL_EXECUTION_RELEASE_CODE, message: "Real BMONI money execution is not released." });
+    }
     const params = paramsSchema.safeParse(request.params);
     const body = signBodySchema.safeParse(request.body);
     if (!params.success || !body.success) {
@@ -132,6 +141,16 @@ export const executionRoutes: FastifyPluginAsync<ExecutionRouteOptions> = async 
     }
     if (fingerprintMoneyPlan(approved.plan) !== approved.approvedPlanHash) {
       return reply.status(409).send({ message: "Approved plan integrity changed; signature submission blocked." });
+    }
+    const signedWithdrawals = approved.plan.actions.filter((action) => action.kind === "BANK_WITHDRAWAL");
+    const signedWithdrawal = signedWithdrawals.length === 1 ? signedWithdrawals[0] : undefined;
+    const signedBank = signedWithdrawal
+      ? await getReviewedDestination(signedWithdrawal, body.data.localUserId, options.getBankAccountRepository())
+      : null;
+    if (!signedWithdrawal || !signedBank ||
+        execution.providerBankAccountId !== signedBank.providerAccountId ||
+        execution.amount !== signedWithdrawal.amount || execution.currency !== approved.plan.currency) {
+      return reply.status(409).send({ code: "EXECUTION_BENEFICIARY_MISMATCH", message: "Prepared proposal does not match the reviewed beneficiary and amount. Signature submission blocked." });
     }
 
     const mapping = await options.getBmoniUserService().getMapping(body.data.localUserId);
@@ -312,45 +331,6 @@ function proposalRecord(payload: unknown): JsonRecord | null {
 
 function isProviderReadinessPending(error: unknown) {
   return error instanceof BmoniProviderError && (error.statusCode === 404 || error.statusCode === 409);
-}
-
-function findCngnBalance(payload: unknown): number | null {
-  const record = findRecord(payload, (candidate) => {
-    const code = stringValue(candidate, ["currency", "symbol", "asset", "token", "code"]);
-    return code?.toUpperCase() === "CNGN";
-  });
-  if (!record) return null;
-  const raw = stringValue(record, ["availableBalance", "available", "balance", "amount", "total"]);
-  if (raw === undefined) return null;
-  const amount = Number(raw.replace(/,/g, ""));
-  return Number.isFinite(amount) && amount >= 0 ? amount : null;
-}
-
-function findRecord(value: unknown, predicate: (record: JsonRecord) => boolean): JsonRecord | null {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findRecord(item, predicate);
-      if (found) return found;
-    }
-    return null;
-  }
-  const record = asRecord(value);
-  if (!record) return null;
-  if (predicate(record)) return record;
-  for (const child of Object.values(record)) {
-    const found = findRecord(child, predicate);
-    if (found) return found;
-  }
-  return null;
-}
-
-function stringValue(record: JsonRecord, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) return value;
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return undefined;
 }
 
 function text(value: unknown): string | null {

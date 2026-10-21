@@ -2,11 +2,15 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 
 import type { ActivityRepository } from "../repositories/activity.js";
+import type { BankAccountRepository } from "../repositories/bank-account.js";
 import type { ExecutionRepository } from "../repositories/execution.js";
 import type { MoneyPlanRepository } from "../repositories/money-plan.js";
 import type { PocketRepository } from "../repositories/pocket.js";
 import type { BmoniGateway } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
+import { realFinancialExecutionReleased, REAL_EXECUTION_RELEASE_CODE } from "../services/plans/execution-release-gate.js";
+import { fingerprintMoneyPlan } from "../services/plans/approval.js";
+import { getReviewedDestination } from "../services/plans/beneficiary-binding.js";
 
 const paramsSchema = z.object({ planId: z.uuid() }).strict();
 const bodySchema = z.object({ localUserId: z.uuid() }).strict();
@@ -19,10 +23,14 @@ type FinalizationRouteOptions = {
   getExecutionRepository: () => ExecutionRepository;
   getPocketRepository: () => PocketRepository;
   getActivityRepository: () => ActivityRepository;
+  getBankAccountRepository: () => BankAccountRepository;
 };
 
 export const executionFinalizationRoutes: FastifyPluginAsync<FinalizationRouteOptions> = async (app, options) => {
   app.post<{ Params: unknown; Body: unknown }>("/plans/:planId/execution/finalize", async (request, reply) => {
+    if (!realFinancialExecutionReleased()) {
+      return reply.status(503).send({ code: REAL_EXECUTION_RELEASE_CODE, message: "Real BMONI money execution is not released." });
+    }
     const params = paramsSchema.safeParse(request.params);
     const body = bodySchema.safeParse(request.body);
     if (!params.success || !body.success) return reply.status(400).send({ message: "Valid planId and localUserId are required." });
@@ -30,6 +38,27 @@ export const executionFinalizationRoutes: FastifyPluginAsync<FinalizationRouteOp
     const executionRepository = options.getExecutionRepository();
     let execution = await executionRepository.findByPlanId(params.data.planId, body.data.localUserId);
     if (!execution) return reply.status(404).send({ message: "Execution not found for this Money Plan." });
+
+    const planRepository = options.getMoneyPlanRepository();
+    const stored = await planRepository.findById(params.data.planId, body.data.localUserId);
+    if (!stored) return reply.status(404).send({ message: "Money Plan not found." });
+
+    const withdrawals = stored.plan.actions.filter((action) => action.kind === "BANK_WITHDRAWAL");
+    const withdrawal = withdrawals.length === 1 ? withdrawals[0] : undefined;
+    const bank = withdrawal
+      ? await getReviewedDestination(withdrawal, body.data.localUserId, options.getBankAccountRepository())
+      : null;
+    const currentHash = fingerprintMoneyPlan(stored.plan);
+    if (!withdrawal || !bank ||
+        execution.providerBankAccountId !== bank.providerAccountId ||
+        execution.amount !== withdrawal.amount || execution.currency !== stored.plan.currency ||
+        stored.approvedPlanHash !== currentHash || stored.planHash !== currentHash ||
+        !["APPROVED", "EXECUTING", "AWAITING_DEVICE_SIGNATURE", "PROCESSING", "COMPLETED"].includes(stored.status)) {
+      return reply.status(409).send({
+        code: "EXECUTION_RECONCILIATION_MISMATCH",
+        message: "Provider completion cannot be recorded against an unapproved, changed, or mismatched Money Plan and beneficiary."
+      });
+    }
 
     if (execution.state !== "COMPLETED") {
       const mapping = await options.getBmoniUserService().getMapping(body.data.localUserId);
@@ -52,11 +81,6 @@ export const executionFinalizationRoutes: FastifyPluginAsync<FinalizationRouteOp
       });
     }
 
-    const planRepository = options.getMoneyPlanRepository();
-    const stored = await planRepository.findById(params.data.planId, body.data.localUserId);
-    if (!stored) return reply.status(404).send({ message: "Money Plan not found." });
-
-    const withdrawal = stored.plan.actions.find((action) => action.kind === "BANK_WITHDRAWAL");
     if (withdrawal) {
       await options.getActivityRepository().recordOnce({
         localUserId: body.data.localUserId,
@@ -66,7 +90,7 @@ export const executionFinalizationRoutes: FastifyPluginAsync<FinalizationRouteOp
         currency: "NGN",
         reference: `plan:${params.data.planId}:withdrawal:${withdrawal.index}`,
         source: "provider",
-        metadata: { planId: params.data.planId, proposalId: execution.providerProposalId, label: withdrawal.label }
+        metadata: { planId: params.data.planId, proposalId: execution.providerProposalId, label: withdrawal.label, providerBankAccountId: bank.providerAccountId }
       });
     }
 
