@@ -1,11 +1,12 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { PrimaryButton, Screen, SoftCard, StatusPill } from "@/components/ui";
+import { PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import {
   evaluatePlayground, playgroundOpeningBalance, playgroundPresets
 } from "@/services/money-plan-playground";
+import { readOfflinePlanHandoff } from "@/services/offline-plan-handoff";
 import { colors, layout, radius, spacing, typography } from "@/theme";
 
 const formatNaira = (value: number) => "₦" + value.toLocaleString("en-NG");
@@ -15,10 +16,22 @@ const formatNaira = (value: number) => "₦" + value.toLocaleString("en-NG");
  * call an operator endpoint or treat mathematical validation as MONI Guard.
  */
 export default function MoneyPlanPlaygroundScreen() {
-  const [withdrawal, setWithdrawal] = useState<string>("40000");
-  const [allocation, setAllocation] = useState<string>("20000");
+  const routeParams = useLocalSearchParams<{
+    source?: string | string[];
+    withdrawal?: string | string[];
+    allocation?: string | string[];
+  }>();
+  const [handoff] = useState(() => readOfflinePlanHandoff(routeParams));
+  const [withdrawal, setWithdrawal] = useState<string>(() => handoff?.withdrawal ?? "40000");
+  const [allocation, setAllocation] = useState<string>(() => handoff?.allocation ?? "20000");
   const result = evaluatePlayground(withdrawal, allocation);
   const valid = result.status === "MATH_PREVIEW";
+
+  const restoreHandoff = () => {
+    if (!handoff) return;
+    setWithdrawal(handoff.withdrawal);
+    setAllocation(handoff.allocation);
+  };
 
   const applyPreset = (preset: typeof playgroundPresets[number]) => {
     setWithdrawal(preset.withdrawal);
@@ -35,6 +48,12 @@ export default function MoneyPlanPlaygroundScreen() {
           This is a local mathematics exercise, never your account balance.
         </Text>
         <StatusPill label="OFFLINE NUMBERS · NO REAL FUNDS" tone="warning" />
+        {handoff ? (
+          <Text style={styles.copy}>
+            Imported two hypothetical amounts from the Offline Intent Lab. Edit them freely here;
+            no bank information, account identifier or approval was transferred.
+          </Text>
+        ) : null}
       </View>
 
       <SoftCard style={styles.card}>
@@ -61,6 +80,11 @@ export default function MoneyPlanPlaygroundScreen() {
 
       <SoftCard style={styles.card}>
         <Text style={styles.label}>YOUR HYPOTHETICAL MONEY PLAN</Text>
+        {handoff ? (
+          <SecondaryButton onPress={restoreHandoff}>
+            Restore amounts from Intent Lab
+          </SecondaryButton>
+        ) : null}
         <View style={styles.field}>
           <Text style={styles.fieldTitle}>GTBank withdrawal · external example</Text>
           <Text style={styles.copy}>Amount in whole naira. Bank account ownership is not verified.</Text>
