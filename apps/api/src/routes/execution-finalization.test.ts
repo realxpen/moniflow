@@ -6,6 +6,7 @@ import type { MoniflowIntent } from "../schemas/intent.js";
 import type { MoneyPlan } from "../schemas/money-plan.js";
 import type { BmoniGateway } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
+import { fingerprintMoneyPlan } from "../services/plans/approval.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const otherId = "22222222-2222-4222-8222-222222222222";
@@ -39,7 +40,14 @@ const plan: MoneyPlan = {
     {
       index: 1, kind: "BANK_WITHDRAWAL", label: "GTBank",
       description: "Withdrawal", amount: 40000,
-      movement: "EXTERNAL", requiresApproval: true
+      movement: "EXTERNAL", requiresApproval: true,
+      destinationBinding: {
+        providerAccountId: "bank-1",
+        bankCode: "058",
+        bankName: "GTBank",
+        maskedAccountNumber: "•••• 1234",
+        accountHolderName: "EXAMPLE HOLDER"
+      }
     },
     {
       index: 2, kind: "ALLOCATE_POCKET", label: "Laptop",
@@ -73,12 +81,28 @@ async function fixture(state: "COMPLETED" | "PROCESSING") {
     localUserId: userId, email: "sandbox@example.test",
     firstName: "Sandbox", phoneNumber: "+2348012345678"
   });
+  const now = new Date().toISOString();
+  await repositories.banks.saveVerified({
+    id: "33333333-3333-4333-8333-333333333333",
+    localUserId: userId,
+    label: "GTBank",
+    providerAccountId: "bank-1",
+    bankCode: "058",
+    bankName: "GTBank",
+    maskedAccountNumber: "•••• 1234",
+    accountHolderName: "EXAMPLE HOLDER",
+    verified: true,
+    createdAt: now,
+    updatedAt: now
+  });
+  const planHash = fingerprintMoneyPlan(plan);
   const saved = await repositories.plans.create({
     localUserId: userId,
     originalInstruction: "Withdraw 40000 to GTBank and save 20000 for Laptop",
-    intent, plan, planHash: "a".repeat(64)
+    intent, plan, planHash
   });
-  const now = new Date().toISOString();
+  await repositories.plans.recordGuard(saved.id, userId, "REVIEW", [], planHash);
+  await repositories.plans.approve(saved.id, userId, planHash);
   await repositories.executions.create({
     planId: saved.id, localUserId: userId, providerProposalId: "provider-proposal-1",
     providerBankAccountId: "bank-1", amount: 40000, currency: "NGN",
