@@ -3,6 +3,7 @@ import { sessionForApiRequest } from "@/services/auth-session";
 import { resolveApiUrl } from "@/services/runtime";
 
 import { validateFinancialRecoveryPayload } from "./financial-recovery-contract";
+import type { FinancialRecoverySnapshot } from "./financial-recovery-contract";
 
 export { financialRecoveryDescriptions, validateFinancialRecoveryPayload } from "./financial-recovery-contract";
 export type { FinancialRecoveryState, FinancialRecoverySnapshot } from "./financial-recovery-contract";
