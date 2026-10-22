@@ -1,4 +1,5 @@
 import { invalidateRejectedSession, sessionForApiRequest } from "@/services/auth-session";
+import { friendlyNetworkError } from "@/services/network-error";
 
 const defaultTimeoutMs = 12000;
 
@@ -44,9 +45,8 @@ export async function apiFetch(url: string, init?: RequestInit, timeoutMs = defa
     if (controller.signal.aborted) {
       throw new Error("MONIFlow API request timed out. Check your connection and try again.");
     }
-    if (cause instanceof TypeError && /fetch|network|load/i.test(cause.message)) {
-      throw new Error("Cannot reach MONIFlow API. Check the deployed API address, your connection, and browser access settings.", { cause });
-    }
+    const connectionError = friendlyNetworkError(cause);
+    if (connectionError) throw connectionError;
     throw cause;
   } finally {
     clearTimeout(timer);
