@@ -1,0 +1,198 @@
+name: MONIFlow Release Candidate - Two Android Preview APKs Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/RC_ANDROID_PREVIEWS_ONE_SHOT_20261022.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moniflow-rc-two-apks-20261022
+  cancel-in-progress: false
+
+jobs:
+  verify-and-build:
+    if: github.repository == 'realxpen/moniflow' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - profile: waydroid-x86-apk
+            abi: x86_64
+            package: com.realxpen.moniflow.waydroid
+            expo_variant: "1"
+          - profile: android-apk
+            abi: arm64-v8a
+            package: com.realxpen.moniflow
+            expo_variant: "0"
+    env:
+      CI: "1"
+      SOURCE_BASE_SHA: 64f79a765ad1df043958415366eb25974e547b2d
+      BEFORE_SHA: ${{ github.event.before }}
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Checkout the one-time reviewed release
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Enforce one-time approval, pinned source, and no application changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TICKET=docs/RC_ANDROID_PREVIEWS_ONE_SHOT_20261022.md
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$BEFORE_SHA" = "$SOURCE_BASE_SHA"
+          test "$(git rev-parse HEAD^)" = "$SOURCE_BASE_SHA"
+          test -n "$EXPO_TOKEN"
+          test -f "$TICKET"
+          if git cat-file -e "$BEFORE_SHA:$TICKET" 2>/dev/null; then
+            echo "::error::This one-time release ticket is already spent"; exit 1
+          fi
+          grep -Fxq 'Approval: REQUEST_ONE_EACH_MONIFLOW_MVP_WAYDROID_X86_AND_ANDROID_ARM64_PREVIEW_20261022' "$TICKET"
+          diff -u \
+            <(printf '%s\n' '.github/workflows/rc-android-previews-once.yml' "$TICKET" | sort) \
+            <(git diff --name-only "$SOURCE_BASE_SHA" HEAD | sort)
+          git checkout --force --detach "$SOURCE_BASE_SHA"
+          echo "Pinned app source: $SOURCE_BASE_SHA"
+
+      - name: Set up Node.js and pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: corepack enable
+
+      - name: Run complete static verification before any Expo submission
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm typecheck
+          pnpm test
+          pnpm --filter @moniflow/mobile build:web
+          node --test scripts/native-release-evidence.nodecheck.mjs scripts/android-apk-preview.nodecheck.mjs scripts/waydroid-x86-preview.nodecheck.mjs
+
+      - name: Validate exact build profile, native SDK boundary and app identity
+        working-directory: apps/mobile
+        shell: bash
+        env:
+          RC_VARIANT: ${{ matrix.expo_variant }}
+          RC_PACKAGE: ${{ matrix.package }}
+        run: |
+          set -euo pipefail
+          if [[ "$RC_VARIANT" == 1 ]]; then
+            export EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW=1
+          else
+            unset EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW
+          fi
+          pnpm exec expo config --json > "$RUNNER_TEMP/rc-expo.json"
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const c=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/rc-expo.json','utf8'));
+          const eas=require('./eas.json');
+          const way=process.env.RC_VARIANT==='1';
+          const pack=process.env.RC_PACKAGE;
+          const plugins=c.plugins||[];
+          if(c.owner!=='xpen'||c.slug!=='moniflow'||c.android?.package!==pack||
+             c.extra?.eas?.projectId!=='3d986249-f72b-494b-9ceb-eef8335a5ae0'||
+             eas.build['android-apk']?.android?.buildType!=='apk'||
+             eas.build['android-apk']?.developmentClient!==false) throw Error('Wrong EAS identity');
+          if(way){
+            if(c.extra?.nativeWalletFeaturesEnabled!==false||
+               !plugins.includes('./plugins/with-waydroid-x86.js')||
+               plugins.includes('./plugins/with-bmoni-sdk.js')||
+               !c.autolinking?.android?.exclude?.includes('@bkey-inc/bmoni_embedded_sdk'))
+              throw Error('x86 preview may not link the ARM64 BMONI signer');
+          }else{
+            if(!plugins.includes('./plugins/with-bmoni-sdk.js')||
+               plugins.includes('./plugins/with-waydroid-x86.js'))
+              throw Error('Physical phone build must retain the existing native SDK profile');
+          }
+          NODE
+
+      - name: Authenticate to the existing Expo project
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Submit exactly one APK for this profile and wait for final Expo result
+        working-directory: apps/mobile
+        shell: bash
+        env:
+          RC_PROFILE: ${{ matrix.profile }}
+          RC_ABI: ${{ matrix.abi }}
+        run: |
+          set -euo pipefail
+          eas project:info
+          eas build --platform android --profile "$RC_PROFILE" --non-interactive --wait --json > "$RUNNER_TEMP/eas-rc.json"
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const raw=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/eas-rc.json','utf8'));
+          const b=Array.isArray(raw)?raw[0]:raw;
+          if(!/^[0-9a-f-]{36}$/i.test(b?.id??'')) throw Error('Missing Expo build ID');
+          const page='https://expo.dev/accounts/xpen/projects/moniflow/builds/'+b.id;
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            '## MONIFlow RC '+process.env.RC_PROFILE+'\n\n'+
+            '- Source: '+process.env.SOURCE_BASE_SHA+'\n'+
+            '- Expo build: '+page+'\n'+
+            '- Status: '+b.status+'\n'+
+            '- BMONI settlement and physical-device tests: NOT VERIFIED\n');
+          if(b.status!=='FINISHED'||typeof b.artifacts?.buildUrl!=='string'){
+            throw Error('Expo did not return a FINISHED APK');
+          }
+          fs.writeFileSync(process.env.RUNNER_TEMP+'/rc-url',b.artifacts.buildUrl,{mode:0o600});
+          fs.writeFileSync(process.env.RUNNER_TEMP+'/rc-evidence.json',
+            JSON.stringify({sourceSha:process.env.SOURCE_BASE_SHA,profile:process.env.RC_PROFILE,
+              buildId:b.id,status:b.status,deviceTested:false,providerSettled:false,
+              bankVerified:false,bmoniPartnerApproved:false},null,2)+'\n');
+          NODE
+
+      - name: Download and inspect real APK architecture and archive checksum
+        shell: bash
+        env:
+          RC_PROFILE: ${{ matrix.profile }}
+          RC_ABI: ${{ matrix.abi }}
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail --location --max-time 240 \
+            --output "$RUNNER_TEMP/rc.apk" "$(cat "$RUNNER_TEMP/rc-url")"
+          test "$(stat -c '%s' "$RUNNER_TEMP/rc.apk")" -gt 5000000
+          unzip -tqq "$RUNNER_TEMP/rc.apk"
+          unzip -Z1 "$RUNNER_TEMP/rc.apk" > "$RUNNER_TEMP/apk-members"
+          grep -Fxq "lib/$RC_ABI/libreactnative.so" "$RUNNER_TEMP/apk-members"
+          if [[ "$RC_ABI" == "x86_64" ]]; then
+            if grep -Eq '^lib/(arm64-v8a|armeabi-v7a)/' "$RUNNER_TEMP/apk-members"; then
+              echo "::error::Waydroid APK includes unexpected ARM binaries"; exit 1
+            fi
+          else
+            if grep -Eq '^lib/(x86|x86_64)/' "$RUNNER_TEMP/apk-members"; then
+              echo "::error::Physical Android APK includes x86 native libraries"; exit 1
+            fi
+          fi
+          sha256sum "$RUNNER_TEMP/rc.apk" | awk '{print $1}' > "$RUNNER_TEMP/rc-sha"
+          node - <<'NODE'
+          const fs=require('node:fs'),base=process.env.RUNNER_TEMP;
+          const j=JSON.parse(fs.readFileSync(base+'/rc-evidence.json','utf8'));
+          j.archiveVerified=true; j.nativeAbi=process.env.RC_ABI;
+          j.sha256=fs.readFileSync(base+'/rc-sha','utf8').trim();
+          fs.writeFileSync(base+'/rc-evidence.json',JSON.stringify(j,null,2)+'\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            '- APK archive: PASS\n- Native ABI: '+j.nativeAbi+
+            '\n- SHA-256: '+j.sha256+
+            '\n- APK launch, wallets, signing, KYC, provider access and real funds: NOT VERIFIED\n');
+          NODE
+
+      - name: Publish metadata, not APK or credentials
+        uses: actions/upload-artifact@v4
+        with:
+          name: moniflow-rc-${{ matrix.profile }}-evidence
+          path: ${{ runner.temp }}/rc-evidence.json
+          retention-days: 14
+          if-no-files-found: error
