@@ -85,7 +85,12 @@ export default function ExecutionScreen() {
         <ProgressStep index={2} state="complete" title="You approved" detail="Approval integrity matched" />
         <ProgressStep index={3} state="complete" title="Proposal prepared" detail="Provider execution created" />
         <ProgressStep index={4} state="complete" title="Secure signing" detail="Proposal digest signed through the active provider path" />
-        <ProgressStep index={5} state={terminal ? "complete" : "active"} title="Provider processing" detail={execution?.providerStatus ?? "Reading provider status"} />
+        <ProgressStep
+          index={5}
+          state={execution?.state === "FAILED" ? "failed" : execution?.state === "COMPLETED" ? "complete" : "active"}
+          title="Provider processing"
+          detail={execution?.providerStatus ?? "Reading provider status"}
+        />
       </View>
       {error ? (
         <SoftCard style={styles.card}>

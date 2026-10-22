@@ -52,7 +52,7 @@ export function StatusPill({ label, tone }: StatusPillProps) {
   }, [dotOpacity, reducedMotion, tone]);
 
   return (
-    <View style={[styles.pill, { backgroundColor: toneStyle.backgroundColor }]}>
+    <View accessible accessibilityLabel={`Status: ${label}`} style={[styles.pill, { backgroundColor: toneStyle.backgroundColor }]}>
       <Animated.View
         style={[styles.dot, { backgroundColor: toneStyle.color, opacity: dotOpacity }]}
       />

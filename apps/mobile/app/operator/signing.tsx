@@ -173,6 +173,8 @@ export default function SigningScreen() {
         <SoftCard style={styles.pinCard}>
           <Text style={styles.micro}>DEVICE SIGNING PIN</Text>
           <TextInput
+            accessibilityLabel="Six-digit device signing PIN"
+            accessibilityHint="Secure input used for on-device signing. The PIN must never be shown or sent to MONIFlow."
             keyboardType="number-pad"
             maxLength={6}
             onChangeText={(value) => setPin(value.replace(/\D/g, ""))}
