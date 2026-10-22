@@ -79,6 +79,56 @@ jobs:
       - name: Isolated PostgreSQL cross-instance financial preparation fence
         run: pnpm exec vitest run apps/api/src/repositories/execution-preparation-postgres.integration.test.ts --reporter=verbose
 
+  canonical-mvp-smoke:
+    name: Canonical MVP · real HTTP sandbox journey (no BMONI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NODE_ENV: test
+      FINANCIAL_PROVIDER: moniflow-sandbox
+      BMONI_PARTNER_ONBOARDING_ENABLED: "false"
+      PARTNER_HUSTLE_SANDBOX_ENABLED: "false"
+      API_HOST: 127.0.0.1
+      API_PORT: "4102"
+      MONIFLOW_API_URL: http://127.0.0.1:4102
+      BMONI_IDENTITY_PHONE_HMAC_SECRET: ci-only-local-identity-lock-key-32-bytes-minimum
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build API and shared domain packages
+        run: pnpm --filter @moniflow/api build
+      - name: Start isolated sandbox API on runner loopback
+        shell: bash
+        run: |
+          echo "DATABASE_URL=file:$RUNNER_TEMP/moniflow-canonical-mvp.db" >> "$GITHUB_ENV"
+          DATABASE_URL="file:$RUNNER_TEMP/moniflow-canonical-mvp.db" \
+            pnpm --filter @moniflow/api start > "$RUNNER_TEMP/moniflow-canonical.log" 2>&1 &
+          for attempt in $(seq 1 35); do
+            if curl --silent --fail --max-time 2 http://127.0.0.1:4102/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Sandbox API did not become ready"
+          tail -n 80 "$RUNNER_TEMP/moniflow-canonical.log" || true
+          exit 1
+      - name: Execute complete canonical instruction through HTTP
+        run: pnpm --filter @moniflow/api demo:canonical
+      - name: Remove temporary sandbox files
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/moniflow-canonical-mvp.db" "$RUNNER_TEMP/moniflow-canonical-mvp.db-shm" "$RUNNER_TEMP/moniflow-canonical-mvp.db-wal"
+
   native-release-evidence:
     name: Native readiness evidence (source-only, no build)
     runs-on: ubuntu-latest
