@@ -78,3 +78,30 @@ jobs:
         run: pnpm exec vitest run apps/api/src/services/sandbox-demo/workspace-store.postgres.integration.test.ts --reporter=verbose
       - name: Isolated PostgreSQL cross-instance financial preparation fence
         run: pnpm exec vitest run apps/api/src/repositories/execution-preparation-postgres.integration.test.ts --reporter=verbose
+
+  native-release-evidence:
+    name: Native readiness evidence (source-only, no build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact reviewed commit
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify safe native preview profiles and evidence policy
+        run: |
+          node --test scripts/native-release-evidence.nodecheck.mjs
+          node --test scripts/android-apk-preview.nodecheck.mjs scripts/phase33a-android-apk.nodecheck.mjs scripts/waydroid-x86-preview.nodecheck.mjs
+      - name: Record source-only release evidence
+        run: node scripts/native-release-evidence.mjs --output "$RUNNER_TEMP/moniflow-native-readiness/report.json"
+      - name: Publish non-secret release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: moniflow-native-source-evidence
+          path: ${{ runner.temp }}/moniflow-native-readiness/report.json
+          retention-days: 14
+          if-no-files-found: error

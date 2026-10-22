@@ -3,20 +3,27 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const ui = readFileSync("apps/mobile/components/AuthenticatedWorkspace.tsx", "utf8");
+const profile = readFileSync("apps/mobile/components/workspace/ProfileReadinessPanel.tsx", "utf8");
+const journey = readFileSync("apps/mobile/services/account-readiness-journey.ts", "utf8");
 const client = readFileSync("apps/mobile/services/account-reconciliation.ts", "utf8");
 const backend = readFileSync("apps/api/src/routes/identity-reconciliation.ts", "utf8");
 const workflow = readFileSync(".github/workflows/phase33a-android-apk-once.yml", "utf8");
 const eas = JSON.parse(readFileSync("apps/mobile/eas.json", "utf8"));
 const app = JSON.parse(readFileSync("apps/mobile/app.json", "utf8")).expo;
 
-test("Phase 33A Profile has a protected identity-review panel and conservative outcomes", () => {
-  assert.match(ui, /BMONI IDENTITY RECONCILIATION/);
+test("Phase 33A Profile keeps protected owner-scoped identity review after Figma refactor", () => {
   assert.match(ui, /loadAccountReconciliation\(next\)/);
   assert.match(ui, /tab === "profile"/);
-  assert.match(ui, /EVIDENCE NEEDED/);
-  assert.match(ui, /UNVERIFIED/);
-  assert.match(ui, /MANUAL REVIEW/);
-  assert.match(ui, /No automatic account linking or money movement is enabled/);
+  assert.match(ui, /selectVisibleOwnerSnapshot\(auth\?\.userId, snapshot\)/);
+  assert.match(ui, /<ProfileReadinessPanel/);
+  assert.match(profile, /MANUAL IDENTITY REVIEW/);
+  assert.match(profile, /READ-ONLY · NO AUTOMATIC LINKING · NO FINANCIAL OPERATIONS/);
+  assert.match(profile, /onOpenFinancialRecovery/);
+  assert.match(journey, /EVIDENCE NEEDED/);
+  assert.match(journey, /RECORDED ONLY/);
+  assert.match(journey, /MANUAL REVIEW/);
+  assert.match(journey, /NOT REVERIFIED/);
+  assert.match(journey, /WITHHELD/);
 });
 
 test("Android identity-review client never attempts linking, money movement or privileged reads", () => {
