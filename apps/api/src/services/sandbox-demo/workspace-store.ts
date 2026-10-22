@@ -13,12 +13,51 @@ export interface SandboxDemoStore {
 function unpack(payload: unknown, userId: string): SandboxWorkspace {
   const state = (typeof payload === "string" ? JSON.parse(payload) : payload) as SandboxWorkspace;
   if (!state || state.localUserId !== userId || state.simulated !== true ||
-      state.provider !== "moniflow-sandbox" || !Number.isFinite(state.providerBalance) ||
-      !Number.isFinite(state.internalAllocated) || !Number.isFinite(state.availableToSpend) ||
+      state.provider !== "moniflow-sandbox" ||
+      !Number.isSafeInteger(state.providerBalance) ||
+      !Number.isSafeInteger(state.internalAllocated) ||
+      !Number.isSafeInteger(state.availableToSpend) ||
+      !Number.isSafeInteger(state.resetCount) || state.resetCount < 0 ||
       state.providerBalance < 0 || state.internalAllocated < 0 ||
+      state.availableToSpend < 0 ||
       state.availableToSpend !== state.providerBalance - state.internalAllocated ||
       !Array.isArray(state.activity)) {
     throw new Error("SANDBOX_LEDGER_INTEGRITY_ERROR");
+  }
+
+  // Ledger mutations are isolated, but should also reject invalid/corrupt
+  // records before committing them across SQLite or PostgreSQL instances.
+  const plan = state.plan;
+  if (plan === null) {
+    if (state.activity.length || state.internalAllocated !== 0) {
+      throw new Error("SANDBOX_LEDGER_INTEGRITY_ERROR");
+    }
+    return state;
+  }
+  if (!plan || !["AWAITING_APPROVAL", "APPROVED", "COMPLETED"].includes(plan.state) ||
+      !/^[a-f0-9]{64}$/.test(plan.planHash) || !plan.plan?.totals || !plan.verdict ||
+      (plan.state !== "COMPLETED" && state.activity.length !== 0) ||
+      (plan.state === "AWAITING_APPROVAL" && plan.approvedHash !== null)) {
+    throw new Error("SANDBOX_LEDGER_INTEGRITY_ERROR");
+  }
+  if (plan.state === "COMPLETED") {
+    const withdrawal = state.activity.find(entry =>
+      entry.reference === plan.id + ":withdrawal" &&
+      entry.kind === "BANK_WITHDRAWAL" && entry.source === "simulated_external");
+    const allocation = state.activity.find(entry =>
+      entry.reference === plan.id + ":allocation" &&
+      entry.kind === "POCKET_ALLOCATION" && entry.source === "simulated_internal");
+    if (state.activity.length !== 2 ||
+        plan.approvedHash !== plan.planHash ||
+        plan.plan.totals.availableAfter !== state.availableToSpend ||
+        !withdrawal || !allocation ||
+        !Number.isSafeInteger(withdrawal.amount) ||
+        !Number.isSafeInteger(allocation.amount) ||
+        withdrawal.status !== "SIMULATED" || allocation.status !== "SIMULATED" ||
+        withdrawal.amount !== plan.plan.totals.externalMovement ||
+        allocation.amount !== plan.plan.totals.internalAllocation) {
+      throw new Error("SANDBOX_LEDGER_INTEGRITY_ERROR");
+    }
   }
   return state;
 }

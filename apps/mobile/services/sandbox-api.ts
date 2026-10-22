@@ -1,4 +1,5 @@
 import { apiFetch } from "@/services/api-fetch";
+import { parseSandboxWorkspace } from "@/services/sandbox-contract";
 const base = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "") + "/api/sandbox-demo";
 
 export const sandboxDemoCommand = "Withdraw ₦40,000 to my GTBank account and save ₦20,000 for my laptop.";
@@ -42,11 +43,9 @@ async function request(path: string, method: "GET" | "POST" = "GET", body?: Reco
       : "The isolated sandbox request could not be completed.";
     throw new SandboxApiError(code, response.status, message);
   }
-  if (!json || json.simulated !== true || json.provider !== "moniflow-sandbox" ||
-      typeof json.localUserId !== "string") {
-    throw new Error("The API did not return a verified simulated MONIFlow workspace.");
-  }
-  return json as ApiSandboxWorkspace;
+  // HTTP success does not establish verified owner or financial truth.
+  // Fail closed on incomplete, forged, or inconsistent simulated snapshots.
+  return parseSandboxWorkspace(json);
 }
 export const loadApiSandbox = () => request("/status");
 export const bootstrapApiSandbox = () => request("/bootstrap", "POST");
