@@ -66,3 +66,49 @@ describe("memory-only financial authentication", () => {
     expect(auth.currentAuthSession()).toBeNull();
   });
 });
+
+
+describe("account-switch and sign-out races", () => {
+  it("does not resurrect a signed-out account when an earlier login finishes late", async () => {
+    let resolveRequest: ((response: unknown) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(resolve => { resolveRequest = resolve; })));
+    const auth = await authModule();
+    const pendingLogin = auth.signInWithPassword("first@example.test", "testpassword!");
+    auth.signOut();
+    resolveRequest?.({ ok: true, json: async () => body("late-token", 3600) });
+    await expect(pendingLogin).rejects.toThrow("cancelled or replaced");
+    expect(auth.currentAuthSession()).toBeNull();
+  });
+
+  it("keeps the most recently requested identity despite out-of-order login responses", async () => {
+    const pending = new Map<string, (response: unknown) => void>();
+    vi.stubGlobal("fetch", vi.fn((_url: string, init: { body: string }) =>
+      new Promise(resolve => { pending.set(JSON.parse(init.body).email, resolve); })
+    ));
+    const auth = await authModule();
+    const older = auth.signInWithPassword("first@example.test", "testpassword!");
+    const newer = auth.signInWithPassword("second@example.test", "testpassword!");
+
+    pending.get("second@example.test")?.({
+      ok: true, json: async () => body("newer-token", 3600, "22222222-2222-4222-8222-222222222222")
+    });
+    await expect(newer).resolves.toMatchObject({ accessToken: "newer-token" });
+    pending.get("first@example.test")?.({ ok: true, json: async () => body("older-token", 3600) });
+    await expect(older).rejects.toThrow("cancelled or replaced");
+    expect(auth.currentAuthSession()).toMatchObject({
+      accessToken: "newer-token",
+      userId: "22222222-2222-4222-8222-222222222222"
+    });
+  });
+
+  it("does not accept a late sign-up token after signing out", async () => {
+    let resolveRequest: ((response: unknown) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(resolve => { resolveRequest = resolve; })));
+    const auth = await authModule();
+    const pendingSignUp = auth.signUpWithPassword("first@example.test", "testpassword!");
+    auth.signOut();
+    resolveRequest?.({ ok: true, json: async () => body("late-signup-token", 3600) });
+    await expect(pendingSignUp).rejects.toThrow("cancelled or replaced");
+    expect(auth.currentAuthSession()).toBeNull();
+  });
+});
