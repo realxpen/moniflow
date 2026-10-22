@@ -1,0 +1,210 @@
+name: MONIFlow Pinned PR68 Waydroid x86_64 - One Reviewed Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/PINNED_PR68_WAYDROID_ONE_SHOT_20261022.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moniflow-pinned-pr68-waydroid-x86-once-20261022
+  cancel-in-progress: false
+
+jobs:
+  one-waydroid-ui-preview:
+    if: github.repository == 'realxpen/moniflow' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      CI: "1"
+      BUILD_SOURCE_SHA: 1d88ada4899e882b78491e3378d95bc397e9c067
+      BEFORE_SHA: ${{ github.event.before }}
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW: "1"
+    steps:
+      - name: Checkout approved source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify first-created ticket and exact unchanged app source
+        shell: bash
+        run: |
+          set -euo pipefail
+          TICKET="docs/PINNED_PR68_WAYDROID_ONE_SHOT_20261022.md"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          git merge-base --is-ancestor "$BUILD_SOURCE_SHA" "$BEFORE_SHA"
+          test "$(git rev-parse HEAD^)" = "$BEFORE_SHA"
+          test -n "$EXPO_TOKEN"
+          git cat-file -e "$BEFORE_SHA^{commit}"
+          git cat-file -e "$BUILD_SOURCE_SHA^{commit}"
+          git cat-file -e "HEAD:$TICKET"
+          if git cat-file -e "$BEFORE_SHA:$TICKET" 2>/dev/null; then
+            echo "::error::Ticket already spent"; exit 1
+          fi
+          grep -Fxq 'Approval: REQUEST_ONE_MONIFLOW_PINNED_PR68_WAYDROID_X86_64_APK_20261022' "$TICKET"
+          diff -u \
+            <(printf '%s\n' \
+              ".github/workflows/ci.yml" \
+              ".github/workflows/pinned-pr68-waydroid-x86-apk-once.yml" \
+              "docs/PINNED_PR68_WAYDROID_ONE_SHOT_20261022.md" \
+              "docs/PINNED_PR68_WAYDROID_QA.md" \
+              "scripts/pinned-pr68-waydroid-x86.nodecheck.mjs" | sort) \
+            <(git diff --name-only "$BEFORE_SHA" HEAD | sort)
+          echo "First-created ticket, reviewed pinned source and exact five-file merge verified."
+
+      - name: Select exact owner-reviewed mobile source, independent of later main merges
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --force --detach "$BUILD_SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$BUILD_SOURCE_SHA"
+          echo "Pinned preview build source: $BUILD_SOURCE_SHA"
+
+      - name: Enable pnpm and Node
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Full application, native profile and source safety checks
+        run: |
+          pnpm install --no-frozen-lockfile
+          node --test scripts/post-pr65-waydroid-x86.nodecheck.mjs
+          node --test scripts/waydroid-x86-preview.nodecheck.mjs scripts/native-release-evidence.nodecheck.mjs scripts/android-apk-preview.nodecheck.mjs scripts/phase33a-android-apk.nodecheck.mjs scripts/post-figma-android-apk.nodecheck.mjs
+          pnpm typecheck
+          pnpm test
+          pnpm --filter @moniflow/mobile build:web
+
+      - name: Verify signed-out API protection and financial feature disablement
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://moniflow-api-silk.vercel.app"
+          for ROUTE in /api/auth/session /api/workspace/overview /api/workspace/reconciliation /api/workspace/financial-recovery; do
+            STATUS="$(curl --silent --show-error --max-time 15 --output "$RUNNER_TEMP/unauthorized.json" --write-out '%{http_code}' "$API$ROUTE")"
+            if [[ "$STATUS" != "401" ]]; then echo "::error::Unauthenticated $ROUTE returned $STATUS"; exit 1; fi
+            node -e 'const p=require(process.env.RUNNER_TEMP+"/unauthorized.json");if(p.code!=="AUTH_REQUIRED")process.exit(1)'
+          done
+          STATUS="$(curl --silent --show-error --max-time 15 --output "$RUNNER_TEMP/provider.json" --write-out '%{http_code}' "$API/health/provider")"
+          if [[ "$STATUS" != "200" ]]; then echo "::error::Provider health responded $STATUS"; exit 1; fi
+          node -e 'const p=require(process.env.RUNNER_TEMP+"/provider.json");if(p.provider!=="bmoni"||p.partnerRegistrationEnabled!==false||p.authenticatedSandboxDemoEnabled!==false)process.exit(1)'
+
+      - name: Verify Waydroid identity and missing native BMONI signer
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec expo config --json > "$RUNNER_TEMP/waydroid-expo.json"
+          node - <<'NODE'
+          const fs=require("node:fs"),c=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/waydroid-expo.json","utf8"));
+          const eas=require("./eas.json"),w=eas.build["waydroid-x86-apk"],p=eas.build["android-apk"];
+          if(c.owner!=="xpen"||c.slug!=="moniflow"||c.extra?.eas?.projectId!=="3d986249-f72b-494b-9ceb-eef8335a5ae0"||c.android?.package!=="com.realxpen.moniflow.waydroid"||c.extra?.nativeWalletFeaturesEnabled!==false||!c.plugins?.includes("./plugins/with-waydroid-x86.js")||c.plugins?.includes("./plugins/with-bmoni-sdk.js")||!c.autolinking?.android?.exclude?.includes("@bkey-inc/bmoni_embedded_sdk")||w?.extends!=="android-apk"||w?.env?.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW!=="1"||p?.android?.buildType!=="apk"||p?.developmentClient!==false)throw Error("Waydroid profile isolation mismatch");
+          NODE
+          LINK_BIN="$(node - <<'NODE'
+          const path=require("node:path");
+          const root=path.dirname(require.resolve("expo/package.json"));
+          const m=require.resolve("expo-modules-autolinking/package.json",{paths:[root]});
+          const p=require(m),bin=typeof p.bin==="string"?p.bin:p.bin?.["expo-modules-autolinking"];
+          if(!bin)throw Error("Expo native autolinking unavailable");
+          process.stdout.write(path.resolve(path.dirname(m),bin));
+          NODE
+          )"
+          node "$LINK_BIN" react-native-config --platform android --json > "$RUNNER_TEMP/waydroid-autolink.json"
+          node - <<'NODE'
+          const fs=require("node:fs"),c=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/waydroid-autolink.json","utf8"));
+          const signer=c.dependencies?.["@bkey-inc/bmoni_embedded_sdk"];
+          if(signer&&signer.platforms?.android!=null)throw Error("BMONI ARM64 signer would be linked");
+          if(Object.keys(c.dependencies??{}).filter(k=>k!=="@bkey-inc/bmoni_embedded_sdk").length===0)throw Error("No valid Android native modules");
+          NODE
+
+      - name: Prebuild x86_64 and discard generated native project
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d android || -n "$(git ls-files -- android)" ]]; then
+            echo "::error::Unexpected Android sources"; exit 1
+          fi
+          pnpm exec expo prebuild --platform android --no-install --clean
+          grep -Fxq 'reactNativeArchitectures=x86_64' android/gradle.properties
+          if grep -R -Fq 'https://bkey-inc.github.io/package-distribution/maven' android; then
+            echo "::error::BMONI ARM64 Maven dependency found"; exit 1
+          fi
+          if [[ -n "$(git diff --name-only -- app.json eas.json app.config.js package.json)" ]]; then
+            echo "::error::Prebuild unexpectedly modified application configuration"; exit 1
+          fi
+          rm -rf android
+
+      - name: Authenticate to existing Expo project
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Check Expo project
+        working-directory: apps/mobile
+        run: eas project:info
+
+      - name: Submit exactly ONE x86_64 UI APK and wait for FINISHED
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          eas build --platform android --profile waydroid-x86-apk --non-interactive --wait --json > "$RUNNER_TEMP/eas-waydroid.json"
+          node - <<'NODE'
+          const fs=require("node:fs");
+          const raw=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/eas-waydroid.json","utf8"));
+          const b=Array.isArray(raw)?raw[0]:raw;
+          if(!/^[0-9a-f-]{36}$/i.test(b?.id??""))throw Error("Missing EAS build ID");
+          const page="https://expo.dev/accounts/xpen/projects/moniflow/builds/"+b.id;
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            "## MONIFlow Waydroid x86_64 preview\n\n- Reviewed source SHA: "+process.env.BUILD_SOURCE_SHA+"\n- One-shot trigger SHA: "+process.env.GITHUB_SHA+
+            "\n- Expo build: "+page+"\n- Reported status: "+b.status+
+            "\n- Profile: waydroid-x86-apk; signing and API financial writes disabled\n");
+          if(b.status!=="FINISHED"||typeof b.artifacts?.buildUrl!=="string")throw Error("No FINISHED Expo APK artifact");
+          fs.writeFileSync(process.env.RUNNER_TEMP+"/download-url",b.artifacts.buildUrl,{mode:0o600});
+          fs.writeFileSync(process.env.RUNNER_TEMP+"/waydroid-evidence.json",JSON.stringify({
+            sourceSha:process.env.BUILD_SOURCE_SHA,triggerSha:process.env.GITHUB_SHA,buildId:b.id,profile:"waydroid-x86-apk",status:b.status,
+            artifactInspected:false,deviceTested:false,bmoniSigningEnabled:false,financialOperationsVerified:false
+          },null,2)+"\n");
+          NODE
+
+      - name: Verify APK integrity and actual x86_64 native architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail --location --max-time 180 --output "$RUNNER_TEMP/waydroid-ui.apk" "$(cat "$RUNNER_TEMP/download-url")"
+          test "$(stat -c '%s' "$RUNNER_TEMP/waydroid-ui.apk")" -gt 5000000
+          unzip -tqq "$RUNNER_TEMP/waydroid-ui.apk"
+          unzip -Z1 "$RUNNER_TEMP/waydroid-ui.apk" > "$RUNNER_TEMP/apk-members"
+          if ! grep -Fxq 'lib/x86_64/libreactnative.so' "$RUNNER_TEMP/apk-members"; then
+            echo "::error::x86_64 libreactnative.so missing"; exit 1
+          fi
+          if grep -Eq '^lib/(arm64-v8a|armeabi-v7a)/' "$RUNNER_TEMP/apk-members"; then
+            echo "::error::ARM binaries unexpectedly included"; exit 1
+          fi
+          sha256sum "$RUNNER_TEMP/waydroid-ui.apk" | awk '{print $1}' > "$RUNNER_TEMP/apk-sha"
+          node - <<'NODE'
+          const fs=require("node:fs"),p=process.env.RUNNER_TEMP;
+          const r=JSON.parse(fs.readFileSync(p+"/waydroid-evidence.json","utf8"));
+          r.artifactInspected=true;r.x86_64ReactNativePresent=true;
+          r.apkSha256=fs.readFileSync(p+"/apk-sha","utf8").trim();
+          fs.writeFileSync(p+"/waydroid-evidence.json",JSON.stringify(r,null,2)+"\n");
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            "- APK ZIP integrity: PASS\n- x86_64 React Native: PRESENT\n- SHA-256: "+r.apkSha256+
+            "\n- Waydroid launch and screen-reader tests: NOT YET VERIFIED"+
+            "\n- BMONI wallet/signing and real transactions: DISABLED / NOT TESTED\n");
+          NODE
+
+      - name: Publish non-secret build metadata only (not APK)
+        uses: actions/upload-artifact@v4
+        with:
+          name: moniflow-pinned-pr68-waydroid-x86-evidence
+          path: ${{ runner.temp }}/waydroid-evidence.json
+          retention-days: 14
+          if-no-files-found: error
