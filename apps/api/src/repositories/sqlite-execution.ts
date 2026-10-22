@@ -14,7 +14,8 @@ const holdRowSchema = z.object({
   plan_id: z.string(), local_user_id: z.string(), approved_plan_hash: z.string(),
   provider_bank_account_id: z.string(), amount: z.number(),
   state: z.enum(["RESERVED", "PROVIDER_OUTCOME_UNKNOWN", "PROPOSAL_RECORDED"]),
-  provider_proposal_id: z.string().nullable(), created_at: z.string(), updated_at: z.string()
+  reserved_amount: z.number().nullable(),
+ provider_proposal_id: z.string().nullable(), created_at: z.string(), updated_at: z.string()
 });
 
 function databaseFilename(databaseUrl: string) {
@@ -151,9 +152,27 @@ export class SqliteExecutionRepository implements ExecutionRepository {
     return {
       planId: row.plan_id, localUserId: row.local_user_id,
       approvedPlanHash: row.approved_plan_hash, providerBankAccountId: row.provider_bank_account_id,
-      amount: row.amount, state: row.state, providerProposalId: row.provider_proposal_id,
+      amount: row.amount, reservedAmount: row.reserved_amount, state: row.state, providerProposalId: row.provider_proposal_id,
       createdAt: row.created_at, updatedAt: row.updated_at
     };
+  }
+
+  async listPreparationHolds(localUserId: string, limit: number): Promise<PreparationHold[]> {
+    const bounded = Math.max(1, Math.min(51, Math.floor(limit)));
+    const rows = this.database.prepare(`
+      SELECT * FROM provider_preparation_holds_v1
+      WHERE local_user_id = ? ORDER BY created_at DESC, plan_id DESC LIMIT ?
+    `).all(localUserId, bounded);
+    return rows.map(raw => {
+      const row = holdRowSchema.parse(raw);
+      return {
+        planId: row.plan_id, localUserId: row.local_user_id,
+        approvedPlanHash: row.approved_plan_hash, providerBankAccountId: row.provider_bank_account_id,
+        amount: row.amount, reservedAmount: row.reserved_amount,
+        state: row.state, providerProposalId: row.provider_proposal_id,
+        createdAt: row.created_at, updatedAt: row.updated_at
+      };
+    });
   }
 
   async recordPreparationOutcome(

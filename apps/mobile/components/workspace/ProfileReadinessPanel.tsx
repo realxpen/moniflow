@@ -13,6 +13,7 @@ type ProfileReadinessPanelProps = {
   reconciliationError: string | null;
   onRefresh: () => void;
   onOpenSession: () => void;
+  onOpenFinancialRecovery: () => void;
   onSignOut: () => void;
 };
 
@@ -29,6 +30,7 @@ export function ProfileReadinessPanel({
   reconciliationError,
   onRefresh,
   onOpenSession,
+  onOpenFinancialRecovery,
   onSignOut
 }: ProfileReadinessPanelProps) {
   const badge = profileSessionBadge(journey, checking);
@@ -90,6 +92,9 @@ export function ProfileReadinessPanel({
           {checking ? "Checking account status…" : "Refresh account status"}
         </SecondaryButton>
         <SecondaryButton onPress={onOpenSession}>Check MONIFlow API session</SecondaryButton>
+        <SecondaryButton onPress={onOpenFinancialRecovery}>
+          Financial recovery · read-only review
+        </SecondaryButton>
         <SecondaryButton onPress={onSignOut}>Sign out</SecondaryButton>
       </View>
 
