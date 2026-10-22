@@ -34,10 +34,13 @@ jobs:
       - name: Inspect existing October 20 Waydroid EAS build status
         working-directory: apps/mobile
         run: |
-          eas build:view "$WAYDROID_BUILD_ID" --json > "$RUNNER_TEMP/old-waydroid.json"
+          eas build:list --platform android --build-profile waydroid-x86-apk --limit 25 --json --non-interactive > "$RUNNER_TEMP/waydroid-build-list.json"
           node - <<'NODE'
           const fs=require("node:fs");
-          const x=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/old-waydroid.json","utf8"));
+          const items=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/waydroid-build-list.json","utf8"));
+          const x=Array.isArray(items)?items.find(entry=>entry.id===process.env.WAYDROID_BUILD_ID):null;
+          if(!x) throw Error("Oct 20 Waydroid build not present among the 25 most recent x86 preview builds.");
+          fs.writeFileSync(process.env.RUNNER_TEMP+"/old-waydroid.json",JSON.stringify(x));
           if(x.id!==process.env.WAYDROID_BUILD_ID)throw Error("Returned a different EAS build ID");
           const p=x.buildProfile??x.profile??"unknown";
           const r={
