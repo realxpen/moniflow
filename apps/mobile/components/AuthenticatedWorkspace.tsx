@@ -131,7 +131,7 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
         <ReadOnlyHomeHero checking={busy} onOpenPractice={() => router.push("/learn")} />
       ) : null}
 
-      {tab !== "profile" ? (
+      {tab === "home" ? (
         <>
       <SoftCard style={styles.card}>
         <Text style={styles.label}>SIGNED-IN IDENTITY</Text>
@@ -168,13 +168,27 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
       ) : null}
 
       {tab === "pockets" || tab === "activity" ? (
-        <ReadOnlyFinancialPanel
-          tab={tab}
-          checking={busy}
-          onOpenPractice={() =>
-            router.push(tab === "pockets" ? "/learn/playground" : "/demo/walkthrough")
-          }
-        />
+        <>
+          <ReadOnlyFinancialPanel
+            tab={tab}
+            checking={busy}
+            onOpenPractice={() =>
+              router.push(tab === "pockets" ? "/learn/playground" : "/demo/walkthrough")
+            }
+          />
+          <SoftCard style={styles.card}>
+            <Text style={styles.label}>ACCOUNT ACCESS · READ-ONLY</Text>
+            <Text style={styles.copy}>
+              Provider data remains withheld until identity, wallet ownership, KYC,
+              and financial-read permission are independently verified.
+              Review your account status in Profile.
+            </Text>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <SecondaryButton onPress={() => router.push("/(tabs)/profile")}>
+              Review readiness in Profile
+            </SecondaryButton>
+          </SoftCard>
+        </>
       ) : null}
 
       {tab === "profile" && journey ? (

@@ -29,7 +29,7 @@ export function Screen({
   const contentStyle = [styles.content, contentContainerStyle];
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
+    <SafeAreaView edges={["top", "bottom", "left", "right"]} style={styles.safeArea}>
       {scroll ? (
         <ScrollView
           {...scrollProps}
