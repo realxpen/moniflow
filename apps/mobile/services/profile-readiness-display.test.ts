@@ -69,7 +69,9 @@ describe("Figma v3 Profile - bounded read-only readiness", () => {
     const workspaceSource = readFileSync("apps/mobile/components/AuthenticatedWorkspace.tsx", "utf8");
     const panel = readFileSync("apps/mobile/components/workspace/ProfileReadinessPanel.tsx", "utf8");
     expect(workspaceSource).toContain("selectVisibleOwnerSnapshot(auth?.userId, snapshot)");
-    expect(workspaceSource).toContain('tab !== "profile"');
+    expect(workspaceSource).toContain('tab === "home" ? (');
+    expect(workspaceSource).toContain('tab === "pockets" || tab === "activity"');
+    expect(workspaceSource).toContain('router.push("/(tabs)/profile")');
     expect(workspaceSource).toContain("<ProfileReadinessPanel");
     expect(workspaceSource).toContain("journey={journey}");
     expect(workspaceSource).toContain('router.push("/auth/session")');
