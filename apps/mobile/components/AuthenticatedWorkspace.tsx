@@ -6,6 +6,7 @@ import { Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { ReadOnlyHomeHero } from "@/components/workspace/ReadOnlyHomeHero";
 import { ReadOnlyFinancialPanel } from "@/components/workspace/ReadOnlyFinancialPanel";
 import { ProfileReadinessPanel } from "@/components/workspace/ProfileReadinessPanel";
+import { FigmaPreviewWorkspace } from "@/components/workspace/FigmaPreviewWorkspace";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
 import { currentAuthSession, signOut, useAuthSession } from "@/services/auth-session";
 import { canApplyOwnerRequest, selectVisibleOwnerSnapshot, type OwnerWorkspaceSnapshot } from "@/services/owner-workspace-snapshot";
@@ -13,6 +14,7 @@ import { loadAccountWorkspace, type AccountWorkspaceOverview } from "@/services/
 import { loadAccountReconciliation, type AccountReconciliationReadiness } from "@/services/account-reconciliation";
 import { buildReadinessJourney } from "@/services/account-readiness-journey";
 import { useDemoSession } from "@/store/demo-session";
+import { useProductPreview } from "@/store/product-preview";
 import { colors, layout, radius, spacing, typography } from "@/theme";
 
 type Tab = "home" | "pockets" | "activity" | "profile";
@@ -27,6 +29,11 @@ const copy = {
 export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
   const auth = useAuthSession();
   const clearDemo = useDemoSession(state => state.clearSession);
+  const previewOwner = useProductPreview(state => state.ownerId);
+  const previewActive = useProductPreview(state => state.active);
+  const startPreview = useProductPreview(state => state.start);
+  const endPreview = useProductPreview(state => state.end);
+  const previewVisible = Boolean(auth?.userId && previewActive && previewOwner === auth.userId);
   const [snapshot, setSnapshot] = useState<OwnerWorkspaceSnapshot | null>(null);
   const requestSequence = useRef(0);
   const title = copy[tab];
@@ -93,12 +100,17 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
     return () => { requestSequence.current += 1; };
   }, [refresh]);
   useAppActiveRefresh(refresh);
+  useEffect(() => {
+    // Old-user preview state cannot survive any account identity change.
+    if (previewOwner && previewOwner !== auth?.userId) endPreview();
+  }, [auth?.userId, previewOwner, endPreview]);
 
   const leave = () => {
     requestSequence.current += 1;
     setSnapshot(null);
     signOut();
     clearDemo();
+    endPreview();
     router.replace("/auth/sign-in");
   };
 
@@ -115,6 +127,10 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
   const ownerWallet = overview?.wallet === "recorded_not_reverified";
   const journey = tab === "profile" ? buildReadinessJourney(overview, reconciliation) : null;
 
+  if (previewVisible && tab !== "profile" && auth?.userId) {
+    return <FigmaPreviewWorkspace tab={tab} ownerId={auth.userId} onExit={endPreview} />;
+  }
+
   return (
     <Screen contentContainerStyle={styles.page}>
       <View style={styles.heading}>
@@ -126,6 +142,15 @@ export function AuthenticatedWorkspace({ tab }: { tab: Tab }) {
           tone={busy || overview ? "processing" : "warning"}
         />
       </View>
+
+      {auth?.userId ? (
+        <SecondaryButton onPress={() => {
+          startPreview(auth.userId);
+          if (tab === "profile") router.replace("/(tabs)/home");
+        }}>
+          Explore the interactive Figma demo · example funds
+        </SecondaryButton>
+      ) : null}
 
       {tab === "home" ? (
         <ReadOnlyHomeHero checking={busy} onOpenPractice={() => router.push("/learn")} />
