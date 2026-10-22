@@ -11,6 +11,9 @@ export type AuthSession = {
 let session: AuthSession | null = null;
 let refreshToken: string | null = null;
 let refreshInFlight: Promise<AuthSession | null> | null = null;
+// Late sign-in/sign-up responses must not restore an account after sign-out,
+// or overwrite a more recent attempt for another account.
+let authIntentRevision = 0;
 const listeners = new Set<() => void>();
 
 const emit = () => listeners.forEach(listener => listener());
@@ -19,7 +22,10 @@ function setSession(next: AuthSession | null, nextRefresh: string | null = null)
   refreshToken = nextRefresh;
   emit();
 }
-export function signOut() { setSession(null); }
+export function signOut() {
+  authIntentRevision += 1;
+  setSession(null);
+}
 
 export function currentAuthSession(): AuthSession | null {
   return session && session.expiresAt > Date.now() + 5000 ? session : null;
@@ -97,11 +103,21 @@ function remember(result: AuthResponse, previous?: AuthSession): AuthSession {
   setSession(next, result.refresh_token ?? null);
   return next;
 }
+function assertCurrentAuthAttempt(revision: number) {
+  if (revision !== authIntentRevision) {
+    throw new Error("This sign-in attempt was cancelled or replaced. Please sign in again.");
+  }
+}
 export async function signInWithPassword(email: string, password: string) {
-  return remember(await authRequest("token?grant_type=password", { email: email.toLowerCase().trim(), password }));
+  const revision = ++authIntentRevision;
+  const result = await authRequest("token?grant_type=password", { email: email.toLowerCase().trim(), password });
+  assertCurrentAuthAttempt(revision);
+  return remember(result);
 }
 export async function signUpWithPassword(email: string, password: string) {
+  const revision = ++authIntentRevision;
   const result = await authRequest("signup", { email: email.toLowerCase().trim(), password });
+  assertCurrentAuthAttempt(revision);
   if (result.access_token) {
     remember(result);
     return true;
