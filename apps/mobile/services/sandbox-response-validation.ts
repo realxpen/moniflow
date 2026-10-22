@@ -27,7 +27,7 @@ const plan = z.object({
   approvedHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   verdict: z.object({
     verdict: z.enum(["ALLOW", "REVIEW", "BLOCK"]),
-    checks: z.array(guardCheck).min(1)
+    checks: z.array(guardCheck).length(8)
   }),
   plan: z.object({
     totals: z.object({
@@ -52,7 +52,7 @@ export const apiSandboxResponseSchema = z.object({
   internalAllocated: amount,
   availableToSpend: amount,
   resetCount: z.number().int().nonnegative(),
-  activity: z.array(event).max(30),
+  activity: z.array(event).max(2),
   plan: plan.nullable()
 }).superRefine((value, ctx) => {
   if (value.availableToSpend !== value.providerBalance - value.internalAllocated) {
@@ -74,8 +74,10 @@ export const apiSandboxResponseSchema = z.object({
     if (p.approvedHash !== p.planHash || value.providerBalance !== 260000 ||
         value.internalAllocated !== 20000 || value.availableToSpend !== 240000 ||
         value.activity.length !== 2 ||
-        !value.activity.some(e => e.kind === "BANK_WITHDRAWAL" && e.amount === 40000 && e.source === "simulated_external") ||
-        !value.activity.some(e => e.kind === "POCKET_ALLOCATION" && e.amount === 20000 && e.source === "simulated_internal")) {
+        !value.activity.some(e => e.reference === p.id + ":withdrawal" &&
+          e.kind === "BANK_WITHDRAWAL" && e.amount === 40000 && e.source === "simulated_external") ||
+        !value.activity.some(e => e.reference === p.id + ":allocation" &&
+          e.kind === "POCKET_ALLOCATION" && e.amount === 20000 && e.source === "simulated_internal")) {
       ctx.addIssue({ code: "custom", message: "SANDBOX_COMPLETION_EVIDENCE_MISMATCH" });
     }
   } else if (value.activity.length || value.providerBalance !== 300000 || value.internalAllocated !== 0 ||

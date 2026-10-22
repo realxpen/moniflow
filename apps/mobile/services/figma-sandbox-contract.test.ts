@@ -74,6 +74,23 @@ describe("API-to-Figma shared MVP contract", () => {
     })).toThrow();
   });
 
+  it("rejects forged or replayed Activity references rather than mistaking them for persisted funds", () => {
+    const { finished } = flow();
+    const first = finished.activity[0]!;
+    const second = finished.activity[1]!;
+    for (const unsafe of [
+      { ...finished, activity: [{ ...first, reference: "unlinked:withdrawal" }, second] },
+      { ...finished, activity: [{ ...first, reference: finished.plan!.id + ":allocation" }, second] },
+      { ...finished, activity: [first, { ...second, reference: first.reference }] },
+      { ...finished, activity: [first, second, second] },
+      { ...finished, plan: { ...finished.plan, verdict: {
+        ...finished.plan!.verdict, checks: finished.plan!.verdict.checks.slice(0, 1)
+      } } }
+    ]) {
+      expect(() => parseApiSandboxResponse(unsafe)).toThrow();
+    }
+  });
+
   it("cannot claim BMONI readiness from sandbox state", () => {
     const { finished } = flow();
     expect(parseApiSandboxResponse(finished)).not.toHaveProperty("walletOwnership");

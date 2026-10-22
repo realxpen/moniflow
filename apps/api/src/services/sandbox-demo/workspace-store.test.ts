@@ -20,6 +20,30 @@ describe("durable isolated sandbox storage", () => {
     expect((await store.find(bob))?.plan).toBeNull();
     expect(await store.mutate(randomUUID(), state => state)).toBeNull();
   });
+  it("rejects forged financial snapshots transactionally and preserves owner isolation", async () => {
+    const store = fixture(), owner = randomUUID(), other = randomUUID();
+    await store.bootstrap(owner);
+    for (const mutate of [
+      (s: import("./state.js").SandboxWorkspace) => ({ ...s, availableToSpend: 999999 }),
+      (s: import("./state.js").SandboxWorkspace) => ({ ...s, providerBalance: Number.NaN }),
+      (s: import("./state.js").SandboxWorkspace) => ({
+        ...s, providerBalance: 123.5, availableToSpend: 123.5
+      }),
+      (s: import("./state.js").SandboxWorkspace) => ({ ...s, resetCount: -1 }),
+      (s: import("./state.js").SandboxWorkspace) => ({
+        ...s, activity: [{ reference: "forged", kind: "POCKET_ALLOCATION" as const,
+          source: "simulated_internal" as const, amount: 20000,
+          status: "SIMULATED" as const, label: "Laptop" }]
+      }),
+      (s: import("./state.js").SandboxWorkspace) => ({ ...s, localUserId: other })
+    ]) {
+      await expect(store.mutate(owner, mutate)).rejects.toThrow("SANDBOX_LEDGER_INTEGRITY_ERROR");
+      expect((await store.find(owner))?.availableToSpend).toBe(300000);
+      expect((await store.find(owner))?.activity).toEqual([]);
+    }
+    expect(await store.find(other)).toBeNull();
+  });
+
   it("makes concurrent attempts exactly-once and safely resets only a simulated ledger", async () => {
     const store = fixture(), user = randomUUID();
     await store.bootstrap(user);
