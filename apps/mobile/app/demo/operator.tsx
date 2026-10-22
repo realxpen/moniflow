@@ -110,11 +110,14 @@ export default function DemoOperatorScreen() {
           <Text style={styles.micro}>04 / EXPLICIT DEMO ACKNOWLEDGEMENT</Text>
           <Text style={styles.copy}>Example withdrawal: {naira(walkthroughScenario.withdrawal)} to GTBank. Example internal Laptop allocation: {naira(walkthroughScenario.laptopAllocation)}. This is not a live approval.</Text>
           <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }}
+            accessibilityLabel="I understand this is an offline demonstration, not a real financial approval"
             onPress={() => setChecked(v => !v)} style={styles.checkboxRow}>
-            <View style={[styles.checkbox, checked && styles.selected]} />
-            <Text style={[styles.copy, { flex: 1 }]}>I understand that approving example progression cannot authorize any real transaction.</Text>
+            <View style={[styles.checkbox, checked && styles.selected]} accessible={false}>
+              {checked ? <Text style={styles.checkmark}>✓</Text> : null}
+            </View>
+            <Text style={[styles.copy, { flex: 1 }]}>I understand that this demonstration cannot authorize any real transaction.</Text>
           </Pressable>
-          <PrimaryButton disabled={!checked} onPress={() => act({ type: "APPROVE_SIMULATION", acknowledged: checked })}>Approve example progression</PrimaryButton>
+          <PrimaryButton disabled={!checked} onPress={() => act({ type: "APPROVE_SIMULATION", acknowledged: checked })}>Confirm demo only · no payment</PrimaryButton>
           <SecondaryButton onPress={() => act({ type: "CANCEL" })}>Cancel example</SecondaryButton>
         </SoftCard>
       ) : null}
@@ -192,9 +195,10 @@ const styles = StyleSheet.create({
   moneyName: { ...typography.body, flex: 1, color: colors.textSecondary },
   moneyValue: { ...typography.section, color: colors.textPrimary, flexShrink: 1, textAlign: "right" },
   moneyStrong: { color: colors.statusSuccess, fontWeight: "700" },
-  checkboxRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
-  checkbox: { height: 24, width: 24, borderWidth: 1, borderRadius: radius.sm, borderColor: colors.borderSoft },
+  checkboxRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, minHeight: 44 },
+  checkbox: { alignItems: "center", justifyContent: "center", height: 24, width: 24, borderWidth: 1, borderRadius: radius.sm, borderColor: colors.borderSoft },
   selected: { backgroundColor: colors.statusSuccess, borderColor: colors.statusSuccess },
+  checkmark: { ...typography.body, color: colors.surface, fontWeight: "800", textAlign: "center" },
   error: { ...typography.caption, color: colors.statusError },
   leave: { alignItems: "center", paddingVertical: spacing.md }
 });
