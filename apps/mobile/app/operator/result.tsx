@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { ActivityRow } from "@/components/activity";
 import { FlowHeader, PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
+import { providerResultPresentation } from "@/services/provider-result-presentation";
 import { loadActivity, type FinancialActivity } from "@/services/activity";
 import { finalizeExecution, getExecutionStatus, type ExecutionSnapshot } from "@/services/execution";
 import { loadPockets, type Pocket } from "@/services/pockets";
@@ -65,6 +66,7 @@ export default function ResultScreen() {
   const completed = execution?.state === "COMPLETED";
   const failed = execution?.state === "FAILED";
   const processing = execution && !completed && !failed;
+  const outcome = providerResultPresentation(execution?.state);
   const laptop = pockets.find((pocket) => pocket.name === "Laptop");
 
   const returnHome = () => {
@@ -75,19 +77,15 @@ export default function ResultScreen() {
   return (
     <Screen contentContainerStyle={styles.screen}>
       <FlowHeader
-        description={completed
-          ? "Provider completion is confirmed and MONIFlow has finalized internal bookkeeping."
-          : failed
-            ? "The provider reports a terminal failure state."
-            : "This remains a live provider state. MONIFlow does not infer completion."}
+        description={outcome.description}
         eyebrow="EXECUTION RESULT"
-        title={completed ? "Completed." : failed ? "Not completed." : "Processing."}
+        title={outcome.title}
       />
 
-      <SoftCard style={styles.card}>
+      <SoftCard style={[styles.card, completed ? styles.confirmedCard : failed ? styles.failedCard : styles.processingCard]}>
         <StatusPill
-          label={loading && !execution ? "CHECKING PROVIDER" : execution?.providerStatus ?? execution?.state ?? "UNAVAILABLE"}
-          tone={completed ? "success" : failed ? "warning" : "processing"}
+          label={loading && !execution ? "CHECKING PROVIDER" : outcome.stateLabel}
+          tone={outcome.tone}
         />
         <Text style={styles.amount}>{execution ? formatNaira(execution.amount) : "—"}</Text>
         <Text style={styles.cardTitle}>{completed ? "Provider-confirmed movement" : failed ? "Execution failed" : "Provider processing continues"}</Text>
@@ -160,6 +158,9 @@ function formatMoneyString(value: string) { return formatNaira(Number.parseFloat
 const styles = StyleSheet.create({
   screen: { gap: spacing.xxl, paddingBottom: spacing.xxxl },
   card: { gap: spacing.md },
+  processingCard: { backgroundColor: colors.backgroundSecondary },
+  confirmedCard: { backgroundColor: colors.statusSuccessSoft },
+  failedCard: { backgroundColor: colors.statusErrorSoft },
   section: { gap: spacing.xs },
   amount: { ...typography.display, color: colors.textPrimary },
   cardTitle: { ...typography.heading, color: colors.textPrimary },

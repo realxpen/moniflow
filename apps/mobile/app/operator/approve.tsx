@@ -26,6 +26,7 @@ export default function ApprovalScreen() {
     }
     setLoading(true);
     setError(null);
+    setAuthorization(null);
     try {
       setAuthorization(await getAuthorization(planId, localUserId));
     } catch (cause) {
@@ -70,7 +71,7 @@ export default function ApprovalScreen() {
   if (loading && !authorization) {
     return (
       <Screen contentContainerStyle={styles.screen}>
-        <FlowHeader description="Loading the server-approved consequence snapshot." eyebrow="AUTHORIZE" title="Confirm the exact movement." />
+        <FlowHeader description="Retrieving the server-approved consequence snapshot. No approval can proceed while this check is running." eyebrow="AUTHORIZE" title="You\u2019re in control." />
         <SoftCard style={styles.notice}>
           <StatusPill label="LOADING" tone="processing" />
           <Text style={styles.noticeCopy}>Checking the persisted Money Plan and approval state…</Text>
@@ -94,10 +95,17 @@ export default function ApprovalScreen() {
 
   return (
     <Screen contentContainerStyle={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>AUTHORIZE</Text>
+      <FlowHeader
+        eyebrow="AUTHORIZE · SERVER PLAN"
+        title="You’re in control."
+        description="Review the exact amount and destination. Approval is separate from signing or sending money."
+      />
+      <View style={styles.amountCard}>
+        <Text style={styles.eyebrow}>AMOUNT TO AUTHORIZE</Text>
         <Text style={styles.amount}>{formatNaira(authorization.amount)}</Text>
-        <Text style={styles.to}>to</Text>
+      </View>
+      <View style={styles.destinationCard}>
+        <Text style={styles.eyebrow}>DESTINATION</Text>
         <Text style={styles.bank}>{authorization.destination.bankName}</Text>
         {authorization.destination.maskedAccountNumber ? <Text style={styles.account}>{authorization.destination.maskedAccountNumber}</Text> : null}
         {authorization.destination.accountHolderName ? <Text style={styles.holder}>{authorization.destination.accountHolderName}</Text> : null}
@@ -119,14 +127,19 @@ export default function ApprovalScreen() {
 
       {authorization.status === "AWAITING_USER_APPROVAL" ? (
         <ConfirmationButton disabled={approving || loading} label={approving ? "Recording approval…" : `Approve ${formatNaira(authorization.amount)}`} onPress={() => void approve()} />
-      ) : (
+      ) : authorization.status === "APPROVED" ? (
         <>
           <SoftCard style={styles.notice}>
-            <StatusPill label="APPROVED" tone="success" />
-            <Text style={styles.noticeCopy}>The server has recorded approval for this exact plan fingerprint.</Text>
+            <StatusPill label="PLAN APPROVED · NOT SENT" tone="processing" />
+            <Text style={styles.noticeCopy}>The server recorded approval for the exact plan fingerprint. Signing and provider confirmation are still separate steps.</Text>
           </SoftCard>
-          <PrimaryButton onPress={openSigning}>Continue to secure execution</PrimaryButton>
+          <PrimaryButton disabled={loading} onPress={openSigning}>Continue to device signing</PrimaryButton>
         </>
+      ) : (
+        <SoftCard style={styles.notice}>
+          <StatusPill label="UNRECOGNIZED APPROVAL STATE" tone="warning" />
+          <Text style={styles.noticeCopy}>This authorization status cannot enable signing. Return to MONI Guard and review again.</Text>
+        </SoftCard>
       )}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -141,11 +154,11 @@ function formatNaira(amount: number) {
 
 const styles = StyleSheet.create({
   screen: { gap: spacing.xxl, paddingBottom: spacing.xxl },
-  header: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.xl },
-  eyebrow: { ...typography.technical, color: colors.textSecondary, letterSpacing: 1.8 },
-  amount: { ...typography.hero, color: colors.textPrimary, fontSize: 64, lineHeight: 70 },
-  to: { ...typography.body, color: colors.textSecondary },
-  bank: { ...typography.display, color: colors.textPrimary, textAlign: "center" },
+  amountCard: { backgroundColor: colors.backgroundSecondary, borderRadius: radius.card, gap: spacing.md, padding: spacing.xl },
+  destinationCard: { backgroundColor: colors.surface, borderRadius: radius.lg, gap: spacing.sm, padding: spacing.xl },
+  eyebrow: { ...typography.technical, color: colors.statusProcessing, letterSpacing: 1.2 },
+  amount: { ...typography.hero, color: colors.textPrimary, fontSize: 48, lineHeight: 56 },
+  bank: { ...typography.heading, color: colors.textPrimary },
   account: { ...typography.section, color: colors.textPrimary },
   holder: { ...typography.body, color: colors.textSecondary },
   warningCard: { backgroundColor: colors.surfaceStrong, borderRadius: radius.card, gap: spacing.lg, padding: spacing.xl },
