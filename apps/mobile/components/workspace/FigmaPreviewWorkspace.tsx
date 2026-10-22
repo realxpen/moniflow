@@ -6,6 +6,7 @@ import { PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/
 import { interpretOfflineExample } from "@/services/offline-intent-lab";
 import { practicePockets, practiceSummary, type PracticePocket } from "@/services/offline-pocket-ledger";
 import { useProductPreview } from "@/store/product-preview";
+import { ServerSandboxWorkspace } from "@/components/workspace/ServerSandboxWorkspace";
 import { colors, layout, radius, spacing, typography } from "@/theme";
 
 type Tab = "home" | "pockets" | "activity";
@@ -17,6 +18,8 @@ export function FigmaPreviewWorkspace({ tab, ownerId, onExit }: {
   tab: Tab; ownerId: string; onExit: () => void;
 }) {
   const ledger = useProductPreview(s => s.ledger);
+  const serverMode = useProductPreview(s => s.serverMode);
+  const enableServer = useProductPreview(s => s.enableServer);
   const simulate = useProductPreview(s => s.simulate);
   const simulateInstruction = useProductPreview(s => s.simulateInstruction);
   const lastMessage = useProductPreview(s => s.lastMessage);
@@ -34,6 +37,8 @@ export function FigmaPreviewWorkspace({ tab, ownerId, onExit }: {
     setReviewed(false);
   };
 
+  if (serverMode) return <ServerSandboxWorkspace tab={tab} ownerId={ownerId} onExit={onExit} />;
+
   return (
     <Screen contentContainerStyle={styles.page}>
       <View style={styles.modeHeading}>
@@ -46,6 +51,18 @@ export function FigmaPreviewWorkspace({ tab, ownerId, onExit }: {
         </Pressable>
       </View>
       <StatusPill label="SIMULATED DATA · NO REAL PAYMENTS" tone="warning" />
+      {tab === "home" ? (
+        <SoftCard style={styles.card}>
+          <Text style={styles.eyebrow}>REAL MONEY PLAN ENGINE · ISOLATED SIMULATED FUNDS</Text>
+          <Text style={styles.rowTitle}>Use the saved backend walkthrough</Text>
+          <Text style={styles.body}>
+            Switch to the MONIFlow API's actual deterministic Intent Engine, Money Plan,
+            MONI Guard, exact human approval and durable simulated Activity.
+            No BMONI money or bank verification is involved.
+          </Text>
+          <PrimaryButton onPress={() => enableServer(ownerId)}>Try API-backed sandbox · separate fake funds</PrimaryButton>
+        </SoftCard>
+      ) : null}
 
       {tab === "home" ? (
         <>
