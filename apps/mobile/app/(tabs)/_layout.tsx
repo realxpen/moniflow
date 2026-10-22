@@ -1,6 +1,7 @@
 import { Redirect, Tabs } from "expo-router";
 import { useAuthSession } from "@/services/auth-session";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors, layout, radius, shadows, spacing, typography } from "@/theme";
 
@@ -13,17 +14,19 @@ const tabLabels: Record<string, string> = {
 
 export default function TabLayout() {
   const auth = useAuthSession();
+  const insets = useSafeAreaInsets();
   if (!__DEV__ && !auth) return <Redirect href="/auth/sign-in" />;
   return (
     <Tabs
       tabBar={({ navigation, state }) => (
-        <View pointerEvents="box-none" style={styles.shell}>
+        <View pointerEvents="box-none" style={[styles.shell, { bottom: spacing.sm + insets.bottom }]}>
           <View style={styles.bar}>
             {state.routes.map((route, index) => {
               const selected = state.index === index;
               return (
                 <Pressable
                   accessibilityRole="tab"
+                  accessibilityLabel={`${tabLabels[route.name] ?? route.name} tab`}
                   accessibilityState={{ selected }}
                   key={route.key}
                   onPress={() => navigation.navigate(route.name)}
@@ -59,7 +62,6 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   shell: {
     alignItems: "center",
-    bottom: spacing.sm,
     left: 0,
     paddingHorizontal: spacing.md,
     position: "absolute",
