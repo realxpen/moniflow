@@ -1,0 +1,156 @@
+name: MONIFlow Post-Figma ARM64 Android APK - One Approved Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/POST_FIGMA_ANDROID_APK_ONE_SHOT_20261022.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moniflow-post-figma-arm64-apk-one-shot-20261022
+  cancel-in-progress: false
+
+jobs:
+  single-android-preview:
+    if: github.repository == 'realxpen/moniflow' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      CI: "1"
+      BEFORE_SHA: ${{ github.event.before }}
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      SOURCE_BASE_SHA: d02c7887dd1c8f526e5cc6ebe8fa6bb9f32a8a04
+    steps:
+      - name: Checkout the reviewed revision
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Enforce first-created owner ticket, exact source and no app code changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TICKET="docs/POST_FIGMA_ANDROID_APK_ONE_SHOT_20261022.md"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$BEFORE_SHA" = "$SOURCE_BASE_SHA"
+          test "$(git rev-parse HEAD^)" = "$SOURCE_BASE_SHA"
+          test -n "$EXPO_TOKEN"
+          git cat-file -e "$BEFORE_SHA^{commit}"
+          git cat-file -e "HEAD:$TICKET"
+          if git cat-file -e "$BEFORE_SHA:$TICKET" 2>/dev/null; then
+            echo "::error::Ticket was already present; refusing repeat build"; exit 1
+          fi
+          grep -Fxq 'Approval: REQUEST_ONE_MONIFLOW_POST_FIGMA_ANDROID_ARM64_APK_20261022' "$TICKET"
+          diff -u <(printf '%s\n' \
+            ".github/workflows/ci.yml" \
+            ".github/workflows/post-figma-android-apk-once.yml" \
+            "docs/POST_FIGMA_ANDROID_APK_ONE_SHOT_20261022.md" \
+            "docs/POST_FIGMA_NATIVE_PREVIEW_RUNBOOK.md" \
+            "scripts/post-figma-android-apk.nodecheck.mjs" | sort) \
+            <(git diff --name-only "$BEFORE_SHA" HEAD | sort)
+          echo "Exactly one approved build ticket and no application-source modifications."
+
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Validate repository and financial safety before a native build
+        run: |
+          pnpm install --no-frozen-lockfile
+          node --test scripts/post-figma-android-apk.nodecheck.mjs
+          node --test scripts/native-release-evidence.nodecheck.mjs scripts/android-apk-preview.nodecheck.mjs scripts/phase33a-android-apk.nodecheck.mjs scripts/waydroid-x86-preview.nodecheck.mjs
+          pnpm typecheck
+          pnpm test
+          pnpm --filter @moniflow/mobile build:web
+
+      - name: Confirm public provider health and unauthenticated access denial
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://moniflow-api-silk.vercel.app"
+          for ROUTE in /api/auth/session /api/workspace/overview /api/workspace/reconciliation /api/workspace/financial-recovery; do
+            STATUS="$(curl --silent --show-error --max-time 15 --output "$RUNNER_TEMP/auth.json" --write-out '%{http_code}' "$URL$ROUTE")"
+            if [[ "$STATUS" != "401" ]]; then echo "::error::Unexpected $ROUTE status $STATUS"; exit 1; fi
+            node -e 'const p=require(process.env.RUNNER_TEMP+"/auth.json");if(p.code!=="AUTH_REQUIRED")process.exit(1)'
+          done
+          STATUS="$(curl --silent --show-error --max-time 15 --output "$RUNNER_TEMP/provider.json" --write-out '%{http_code}' "$URL/health/provider")"
+          if [[ "$STATUS" != "200" ]]; then echo "::error::Provider health unavailable"; exit 1; fi
+          node -e 'const p=require(process.env.RUNNER_TEMP+"/provider.json");if(p.provider!=="bmoni"||p.partnerRegistrationEnabled!==false||p.authenticatedSandboxDemoEnabled!==false)process.exit(1)'
+
+      - name: Authenticate existing Expo account
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Verify physical-device APK configuration
+        shell: bash
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          pnpm exec expo config --json > "$RUNNER_TEMP/expo-config.json"
+          node - <<'NODE'
+          const fs=require("node:fs");
+          const c=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/expo-config.json","utf8"));
+          const eas=require("./eas.json");
+          const b=eas.build["android-apk"];
+          if(process.env.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW==="1"||c.owner!=="xpen"||c.slug!=="moniflow"||c.extra?.eas?.projectId!=="3d986249-f72b-494b-9ceb-eef8335a5ae0"||c.android?.package!=="com.realxpen.moniflow"||!c.plugins?.includes("./plugins/with-bmoni-sdk.js")||c.plugins?.includes("./plugins/with-waydroid-x86.js")||b.android?.buildType!=="apk"||b.developmentClient!==false||b.extends!=="preview") throw Error("Unexpected physical Android Expo identity; refusing build.");
+          NODE
+          eas project:info
+
+      - name: Start exactly ONE Android APK build and wait for completion
+        shell: bash
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          eas build --platform android --profile android-apk --non-interactive --wait --json > "$RUNNER_TEMP/eas-build.json"
+          node - <<'NODE'
+          const fs=require("node:fs");
+          const raw=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/eas-build.json","utf8"));
+          const b=Array.isArray(raw)?raw[0]:raw;
+          if(!/^[0-9a-f-]{36}$/i.test(b?.id??"")) throw Error("No valid Expo build ID");
+          const buildPage="https://expo.dev/accounts/xpen/projects/moniflow/builds/"+b.id;
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,"## One-time MONIFlow APK\n\n- Source: "+process.env.GITHUB_SHA+"\n- Build: "+buildPage+"\n- Status: "+b.status+"\n- Profile: internal android-apk (not production release)\n");
+          if(b.status!=="FINISHED"||typeof b.artifacts?.buildUrl!=="string") throw Error("Build is not FINISHED with an APK artifact.");
+          fs.writeFileSync(process.env.RUNNER_TEMP+"/apk-url",b.artifacts.buildUrl,{mode:0o600});
+          fs.writeFileSync(process.env.RUNNER_TEMP+"/apk-evidence.json",JSON.stringify({sourceSha:process.env.GITHUB_SHA,buildId:b.id,status:b.status,profile:"android-apk",deviceTested:false,providerVerified:false},null,2)+"\n");
+          NODE
+
+      - name: Inspect finished ARM64 APK without installing or executing it
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail --location --max-time 180 --output "$RUNNER_TEMP/preview.apk" "$(cat "$RUNNER_TEMP/apk-url")"
+          test "$(stat -c '%s' "$RUNNER_TEMP/preview.apk")" -gt 5000000
+          unzip -tqq "$RUNNER_TEMP/preview.apk"
+          unzip -Z1 "$RUNNER_TEMP/preview.apk" > "$RUNNER_TEMP/apk-file-list"
+          if ! grep -Fxq "lib/arm64-v8a/libreactnative.so" "$RUNNER_TEMP/apk-file-list"; then
+            echo "::error::ARM64 React Native library missing"; exit 1
+          fi
+          if grep -Eq '^lib/(x86|x86_64)/' "$RUNNER_TEMP/apk-file-list"; then
+            echo "::error::Unexpected x86 native library in phone APK"; exit 1
+          fi
+          sha256sum "$RUNNER_TEMP/preview.apk" | awk '{print $1}' > "$RUNNER_TEMP/apk-sha"
+          node - <<'NODE'
+          const fs=require("node:fs"),p=process.env.RUNNER_TEMP;
+          const o=JSON.parse(fs.readFileSync(p+"/apk-evidence.json","utf8"));
+          o.archiveVerified=true;
+          o.arm64ReactNativePresent=true;
+          o.apkSha256=fs.readFileSync(p+"/apk-sha","utf8").trim();
+          fs.writeFileSync(p+"/apk-evidence.json",JSON.stringify(o,null,2)+"\n");
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,"\n- APK integrity and ARM64 React Native: **PASS**\n- SHA-256: "+o.apkSha256+"\n- Physical device, accessibility, signing, KYC and provider outcomes: **NOT VERIFIED**\n- No release, submission, signing, or money movement\n");
+          NODE
+
+      - name: Save non-secret build metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: moniflow-post-figma-apk-evidence
+          path: ${{ runner.temp }}/apk-evidence.json
+          retention-days: 14
+          if-no-files-found: error
