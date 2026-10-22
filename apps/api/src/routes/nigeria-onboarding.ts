@@ -13,6 +13,7 @@ import {
 } from "../services/bmoni/index.js";
 import { BmoniUserService } from "../services/bmoni/user-service.js";
 import { env } from "../config/env.js";
+import { partnerRegistrationEnabled } from "../services/bmoni/partner-access.js";
 import { getAuthenticatedUserId } from "../security/user-authorization.js";
 
 const localUserIdSchema = z.uuid();
@@ -37,6 +38,21 @@ type NigeriaOnboardingRouteOptions = {
 type JsonRecord = Record<string, unknown>;
 
 export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteOptions> = async (app, options) => {
+  // A provider-health check, existing mapping or test environment never
+  // authorizes BMONI KYC. Guard before multipart, DB access and provider calls.
+  app.addHook("preHandler", async (request, reply) => {
+    if (request.method !== "POST") return;
+    if (!partnerRegistrationEnabled(env.FINANCIAL_PROVIDER, env.BMONI_PARTNER_ONBOARDING_ENABLED)) {
+      return reply.status(423).send({
+        statusCode: 423,
+        error: "Locked",
+        provisioningState: "PARTNER_ACCESS_PENDING",
+        retryable: false,
+        message: "BMONI Nigeria KYC and rail activation require approved partner sandbox access."
+      });
+    }
+  });
+
   app.get<{ Querystring: unknown }>("/options", async (request, reply) => {
     const parsed = metadataQuerySchema.safeParse(request.query);
     if (!parsed.success) return reply.status(400).send({ message: "A valid localUserId is required." });
@@ -223,11 +239,18 @@ export const nigeriaOnboardingRoutes: FastifyPluginAsync<NigeriaOnboardingRouteO
   });
 };
 
-function deriveNigeriaStatus(providerStatus: Record<string, unknown>) {
-  const serialized = JSON.stringify(providerStatus).toLowerCase();
-  if (/\b(active|completed|ready)\b/.test(serialized)) return "ready" as const;
-  if (/\b(failed|rejected|error)\b/.test(serialized)) return "failed" as const;
-  if (/\b(action_required|action required|documents|required)\b/.test(serialized)) return "action_required" as const;
+/**
+ * Never infer a live rail from a word in nested provider notes or errors.
+ * Only explicit top-level status values are interpreted. Undocumented or
+ * contradictory shapes remain unverified pending provider reconciliation.
+ */
+export function deriveNigeriaStatus(providerStatus: Record<string, unknown>) {
+  const raw = providerStatus.status;
+  if (typeof raw !== "string") return "processing" as const;
+  const status = raw.trim().toLowerCase();
+  if (status === "failed" || status === "rejected" || status === "error") return "failed" as const;
+  if (status === "action_required" || status === "documents_required" || status === "required") return "action_required" as const;
+  if (status === "active" || status === "completed" || status === "ready") return "ready" as const;
   return "processing" as const;
 }
 
