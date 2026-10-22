@@ -47,6 +47,9 @@ export default function LearningHubScreen() {
         <SecondaryButton onPress={() => router.push("/learn/intent")}>
           Try the Offline Intent Lab
         </SecondaryButton>
+        <SecondaryButton onPress={() => router.push("/learn/pockets")}>
+          Practice Pockets & simulated Activity
+        </SecondaryButton>
       </SoftCard>
 
       <SoftCard style={styles.card}>
