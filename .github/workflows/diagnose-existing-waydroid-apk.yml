@@ -1,0 +1,110 @@
+name: Diagnose Existing MONIFlow Waydroid x86 APK - Read Only
+
+on:
+  push:
+    branches:
+      - diag/verify-existing-waydroid-x86-20261022
+    paths:
+      - .github/workflows/diagnose-existing-waydroid-apk.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-existing-eas-artifact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CI: "1"
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      WAYDROID_BUILD_ID: d45c9566-bb4e-45c0-9221-765299666500
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate one-way read-only diagnostic boundaries
+        run: |
+          test -n "$EXPO_TOKEN"
+          test "$WAYDROID_BUILD_ID" = "d45c9566-bb4e-45c0-9221-765299666500"
+          if grep -E 'eas (build |submit )|eas update|eas deploy|eas secret:|workflow_dispatch' "$GITHUB_WORKSPACE/.github/workflows/diagnose-existing-waydroid-apk.yml" | grep -v 'if grep'; then
+            echo "::error::Build or deploy command detected"; exit 1
+          fi
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Inspect existing October 20 Waydroid EAS build status
+        working-directory: apps/mobile
+        run: |
+          eas build:view "$WAYDROID_BUILD_ID" --json > "$RUNNER_TEMP/old-waydroid.json"
+          node - <<'NODE'
+          const fs=require("node:fs");
+          const x=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/old-waydroid.json","utf8"));
+          if(x.id!==process.env.WAYDROID_BUILD_ID)throw Error("Returned a different EAS build ID");
+          const p=x.buildProfile??x.profile??"unknown";
+          const r={
+            buildId:x.id,
+            url:"https://expo.dev/accounts/xpen/projects/moniflow/builds/"+x.id,
+            status:x.status??"UNKNOWN",
+            platform:x.platform??"UNKNOWN",
+            buildProfile:p,
+            sourceCommit:x.gitCommitHash??x.metadata?.gitCommitHash??"unknown",
+            artifactAvailable:typeof x.artifacts?.buildUrl==="string",
+            apkArchitectureVerified:false,
+            nativeLaunchVerified:false,
+            bmoniSignerAvailable:false,
+            realFinancialOperationsEnabled:false
+          };
+          fs.writeFileSync(process.env.RUNNER_TEMP+"/waydroid-status.json",JSON.stringify(r,null,2)+"\n");
+          if(r.platform!=="ANDROID")throw Error("Existing artifact is not Android");
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            "## Existing Waydroid x86_64 APK (READ ONLY)\n\n"+
+            "- Expo build: "+r.url+"\n- Status: **"+r.status+"**\n- Profile: "+r.buildProfile+
+            "\n- Source SHA: "+r.sourceCommit+"\n- New builds submitted: **ZERO**\n"+
+            "- Financial operations: **DISABLED**\n");
+          if(r.status==="FINISHED"&&!r.artifactAvailable)throw Error("FINISHED but no downloadable APK");
+          NODE
+      - name: Verify existing APK ZIP and x86_64 React Native architecture (if finished)
+        shell: bash
+        run: |
+          set -euo pipefail
+          READY="$(node -e 'const f=require(process.env.RUNNER_TEMP+"/waydroid-status.json");process.stdout.write(f.status==="FINISHED"&&f.artifactAvailable?"1":"0")')"
+          if [[ "$READY" != "1" ]]; then
+            echo "Existing Waydroid EAS build is not FINISHED; no artifact to verify." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node - <<'NODE'
+          const fs=require("node:fs");
+          const x=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/old-waydroid.json","utf8"));
+          fs.writeFileSync(process.env.RUNNER_TEMP+"/waydroid-download-url",x.artifacts.buildUrl,{mode:0o600});
+          NODE
+          curl --fail --silent --show-error --location --max-time 120 \
+            --output "$RUNNER_TEMP/waydroid-x86.apk" "$(cat "$RUNNER_TEMP/waydroid-download-url")"
+          test "$(stat -c '%s' "$RUNNER_TEMP/waydroid-x86.apk")" -gt 5000000
+          unzip -tqq "$RUNNER_TEMP/waydroid-x86.apk"
+          unzip -Z1 "$RUNNER_TEMP/waydroid-x86.apk" > "$RUNNER_TEMP/apk-members"
+          grep -Fxq "lib/x86_64/libreactnative.so" "$RUNNER_TEMP/apk-members" || {
+            echo "::error::Existing Waydroid APK has no x86_64 React Native library"; exit 1;
+          }
+          if grep -Eq '^lib/arm64-v8a/' "$RUNNER_TEMP/apk-members"; then
+            echo "::error::Unexpected ARM64 libraries in dedicated x86 UI preview";exit 1
+          fi
+          sha256sum "$RUNNER_TEMP/waydroid-x86.apk" | awk '{print $1}' > "$RUNNER_TEMP/x86-sha256"
+          node - <<'NODE'
+          const fs=require("node:fs");
+          const p=process.env.RUNNER_TEMP;
+          const r=JSON.parse(fs.readFileSync(p+"/waydroid-status.json","utf8"));
+          r.apkArchitectureVerified=true;
+          r.apkSha256=fs.readFileSync(p+"/x86-sha256","utf8").trim();
+          fs.writeFileSync(p+"/waydroid-status.json",JSON.stringify(r,null,2)+"\n");
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            "- APK ZIP integrity: **PASS**\n- x86_64 libreactnative.so: **PRESENT**"+
+            "\n- SHA-256: "+r.apkSha256+
+            "\n- Waydroid cold start: **NOT VERIFIED**"+
+            "\n- Wallet signing and real payments: **UNAVAILABLE**\n");
+          NODE
+      - name: Publish metadata only, never share APK or private signed URL
+        uses: actions/upload-artifact@v4
+        with:
+          name: moniflow-existing-waydroid-x86-evidence
+          path: ${{ runner.temp }}/waydroid-status.json
+          if-no-files-found: error
+          retention-days: 14
