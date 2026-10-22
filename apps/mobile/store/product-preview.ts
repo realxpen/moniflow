@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { interpretOfflineExample } from "@/services/offline-intent-lab";
 
 import {
   applyPracticeAction, initialPracticeLedger, practiceSummary,
@@ -19,6 +20,7 @@ type ProductPreviewStore = {
   start: (ownerId: string) => void;
   end: () => void;
   simulate: (ownerId: string, action: PracticeAction) => PracticeOutcome["status"];
+  simulateInstruction: (ownerId: string, instruction: string) => PracticeOutcome["status"];
 };
 
 const empty = () => ({
@@ -40,6 +42,39 @@ export const useProductPreview = create<ProductPreviewStore>((set, get) => ({
     const result = applyPracticeAction(state.ledger, action);
     set({ ledger: result.ledger, lastResult: result.status, lastMessage: result.explanation });
     return result.status;
+  },
+  simulateInstruction: (ownerId, instruction) => {
+    const state = get();
+    if (!ownerId || !state.active || state.ownerId !== ownerId) return "BLOCKED";
+    const parsed = interpretOfflineExample(instruction);
+    if (parsed.state !== "RECOGNIZED") {
+      set({ lastResult: "BLOCKED", lastMessage: parsed.explanation });
+      return "BLOCKED";
+    }
+    const withdrawal = parsed.actions.find(action => action.kind === "BANK_WITHDRAWAL")?.amount ?? 0;
+    const allocation = parsed.actions.find(action => action.kind === "ALLOCATE_POCKET")?.amount ?? 0;
+    const available = practiceSummary(state.ledger).available;
+    if (withdrawal + allocation > available) {
+      set({ lastResult: "BLOCKED", lastMessage: "This example would overcommit your remaining demo funds. No action was applied." });
+      return "BLOCKED";
+    }
+    // Stage every local change first; commit both or neither.
+    let next = state.ledger;
+    if (withdrawal > 0) {
+      const r = applyPracticeAction(next, { type: "WITHDRAW", amountText: String(withdrawal) });
+      if (r.status !== "SIMULATED") return "BLOCKED";
+      next = r.ledger;
+    }
+    if (allocation > 0) {
+      const r = applyPracticeAction(next, { type: "ALLOCATE", pocket: "Laptop", amountText: String(allocation) });
+      if (r.status !== "SIMULATED") return "BLOCKED";
+      next = r.ledger;
+    }
+    set({
+      ledger: next, lastResult: "SIMULATED",
+      lastMessage: "Both actions were simulated together. No MONI Guard authorization, bank verification or BMONI transaction occurred."
+    });
+    return "SIMULATED";
   }
 }));
 
