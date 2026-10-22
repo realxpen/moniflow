@@ -1,16 +1,16 @@
-name: MONIFlow Release Candidate - Two Android Preview APKs Once
+name: MONIFlow RC - Two Android Preview APKs (Pre-Expo pnpm Retry)
 
 on:
   push:
     branches: [main]
     paths:
-      - docs/RC_ANDROID_PREVIEWS_ONE_SHOT_20261022.md
+      - docs/RC_ANDROID_PREVIEWS_RETRY_ONE_SHOT_20261022.md
 
 permissions:
   contents: read
 
 concurrency:
-  group: moniflow-rc-two-apks-20261022
+  group: moniflow-rc-two-apks-preexpo-retry-20261022
   cancel-in-progress: false
 
 jobs:
@@ -34,6 +34,7 @@ jobs:
     env:
       CI: "1"
       SOURCE_BASE_SHA: 64f79a765ad1df043958415366eb25974e547b2d
+      RELEASE_BASE_SHA: 4829f90e5c755b63d2bd3521f1480c0b58b8e6c3
       BEFORE_SHA: ${{ github.event.before }}
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
@@ -47,28 +48,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TICKET=docs/RC_ANDROID_PREVIEWS_ONE_SHOT_20261022.md
+          TICKET=docs/RC_ANDROID_PREVIEWS_RETRY_ONE_SHOT_20261022.md
           test "$GITHUB_RUN_ATTEMPT" = "1"
-          test "$BEFORE_SHA" = "$SOURCE_BASE_SHA"
-          test "$(git rev-parse HEAD^)" = "$SOURCE_BASE_SHA"
+          test "$BEFORE_SHA" = "$RELEASE_BASE_SHA"
+          test "$(git rev-parse HEAD^)" = "$RELEASE_BASE_SHA"
           test -n "$EXPO_TOKEN"
           test -f "$TICKET"
           if git cat-file -e "$BEFORE_SHA:$TICKET" 2>/dev/null; then
             echo "::error::This one-time release ticket is already spent"; exit 1
           fi
-          grep -Fxq 'Approval: REQUEST_ONE_EACH_MONIFLOW_MVP_WAYDROID_X86_AND_ANDROID_ARM64_PREVIEW_20261022' "$TICKET"
+          grep -Fxq 'Approval: RETRY_ONE_EACH_MVP_ANDROID_AFTER_VERIFIED_PRE_EXPO_PNPM_FAILURE_20261022' "$TICKET"
           diff -u \
             <(printf '%s\n' '.github/workflows/rc-android-previews-once.yml' "$TICKET" | sort) \
-            <(git diff --name-only "$SOURCE_BASE_SHA" HEAD | sort)
+            <(git diff --name-only "$RELEASE_BASE_SHA" HEAD | sort)
           git checkout --force --detach "$SOURCE_BASE_SHA"
           echo "Pinned app source: $SOURCE_BASE_SHA"
 
+      - name: Enable pnpm before setup-node cache lookup
+        run: corepack enable
       - name: Set up Node.js and pnpm
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: pnpm
-      - run: corepack enable
 
       - name: Run complete static verification before any Expo submission
         run: |
