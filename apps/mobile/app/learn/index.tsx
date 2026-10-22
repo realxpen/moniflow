@@ -50,18 +50,6 @@ export default function LearningHubScreen() {
         <SecondaryButton onPress={() => router.push("/learn/pockets")}>
           Practice Pockets & simulated Activity
         </SecondaryButton>
-        {auth && process.env.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW !== "1" ? (
-          <View style={styles.serverPractice}>
-            <Text style={styles.copy}>
-              Optional: access the separately stored, signed-in demonstration of
-              Intent → Money Plan → MONI Guard → explicit consent → simulated Activity.
-              The API must explicitly enable this feature. No real money can move.
-            </Text>
-            <SecondaryButton onPress={() => router.push("/demo/live")}>
-              Open saved simulated Operator journey
-            </SecondaryButton>
-          </View>
-        ) : null}
       </SoftCard>
 
       <SoftCard style={styles.card}>
@@ -106,7 +94,6 @@ const styles = StyleSheet.create({
   copy: { ...typography.body, color: colors.textSecondary },
   label: { ...typography.technical, color: colors.statusProcessing },
   card: { gap: spacing.md },
-  serverPractice: { gap: spacing.sm, paddingTop: spacing.sm },
   step: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start", paddingVertical: spacing.sm },
   number: { minHeight: 40, minWidth: 40, borderRadius: radius.lg,
     backgroundColor: colors.accentSoft, alignItems: "center", justifyContent: "center" },
