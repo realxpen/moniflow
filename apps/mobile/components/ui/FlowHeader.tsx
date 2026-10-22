@@ -33,7 +33,7 @@ export function FlowHeader({
         )}
         <Text style={styles.eyebrow}>{eyebrow}</Text>
       </View>
-      <Text style={styles.title}>{title}</Text>
+      <Text accessibilityRole="header" style={styles.title}>{title}</Text>
       {description ? <Text style={styles.description}>{description}</Text> : null}
     </View>
   );

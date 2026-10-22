@@ -21,7 +21,11 @@ export function GuardCheck({ delay = 0, message, rule, status }: GuardCheckProps
 
   return (
     <AnimatedEntry delay={delay}>
-      <View style={styles.row}>
+      <View
+        accessible
+        accessibilityLabel={`MONI Guard rule ${rule}: ${tone.label}. ${message}`}
+        style={styles.row}
+      >
         <View style={[styles.marker, { backgroundColor: tone.background }]}>
           <Text style={[styles.markerLabel, { color: tone.foreground }]}>{tone.label}</Text>
         </View>

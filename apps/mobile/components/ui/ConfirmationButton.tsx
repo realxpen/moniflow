@@ -6,17 +6,21 @@ type ConfirmationButtonProps = Omit<PressableProps, "children" | "style"> & {
   label: string;
 };
 
-export function ConfirmationButton({ label, onPress, ...props }: ConfirmationButtonProps) {
+export function ConfirmationButton({ label, onPress, disabled, ...props }: ConfirmationButtonProps) {
   return (
     <Pressable
-      accessibilityHint="Confirms the financial action shown above"
+      {...props}
+      accessibilityHint="Records approval for the exact reviewed plan; approval alone does not move money."
+      accessibilityLabel={label}
       accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      disabled={disabled}
       onPress={(event) => {
+        if (disabled) return;
         Vibration.vibrate(10);
         onPress?.(event);
       }}
-      style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-      {...props}
+      style={({ pressed }) => [styles.button, pressed && styles.pressed, disabled && styles.disabled]}
     >
       <Text style={styles.eyebrow}>EXPLICIT CONFIRMATION</Text>
       <Text style={styles.label}>{label}</Text>
@@ -37,5 +41,6 @@ const styles = StyleSheet.create({
   },
   eyebrow: { ...typography.technical, color: colors.accentSoft, fontSize: 9 },
   label: { ...typography.body, color: colors.textInverse, fontWeight: "600" },
-  pressed: { opacity: 0.86, transform: [{ scale: 0.99 }] }
+  pressed: { opacity: 0.86, transform: [{ scale: 0.99 }] },
+  disabled: { opacity: 0.45 }
 });

@@ -11,7 +11,11 @@ export function OperatorJourneyHeader({ stage, eyebrow, title, description }: Pr
   return (
     <View style={styles.root}>
       <FlowHeader eyebrow={eyebrow} title={title} description={description} />
-      <View accessibilityLabel={`Money Plan review step ${selected + 1} of 3`} style={styles.stages}>
+      <View
+        accessible
+        accessibilityLabel={`Money Plan review step ${selected + 1} of 3: ${operatorJourneyStages[selected]?.label ?? "unknown"}`}
+        style={styles.stages}
+      >
         {operatorJourneyStages.map((item, index) => (
           <View key={item.id} style={[
             styles.stage,

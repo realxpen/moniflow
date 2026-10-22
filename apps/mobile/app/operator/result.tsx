@@ -88,13 +88,15 @@ export default function ResultScreen() {
           tone={outcome.tone}
         />
         <Text style={styles.amount}>{execution ? formatNaira(execution.amount) : "—"}</Text>
-        <Text style={styles.cardTitle}>{completed ? "Provider-confirmed movement" : failed ? "Execution failed" : "Provider processing continues"}</Text>
+        <Text style={styles.cardTitle}>{completed ? "Provider-confirmed movement" : failed ? "Execution failed" : processing ? "Provider processing continues" : "Provider outcome unavailable"}</Text>
         <Text style={styles.cardCopy}>
           {completed
             ? "The external movement is provider-confirmed. Internal Money Space allocation is recorded separately by MONIFlow."
             : failed
               ? "No success is claimed. Review the provider state before recovery."
-              : "Keep this action in PROCESSING until a terminal provider status arrives."}
+              : processing
+                ? "Keep this action in PROCESSING until a terminal provider status arrives."
+                : "No trustworthy provider result is available yet. Refresh status before making any conclusions."}
         </Text>
       </SoftCard>
 
