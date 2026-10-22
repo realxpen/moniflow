@@ -99,6 +99,7 @@ jobs:
           node --test scripts/post-figma-waydroid-x86.nodecheck.mjs
           node --test scripts/post-pr65-waydroid-x86.nodecheck.mjs
           node --test scripts/post-pr66-recovery-waydroid-x86.nodecheck.mjs
+          node --test scripts/pinned-pr68-waydroid-x86.nodecheck.mjs
           node --test scripts/android-apk-preview.nodecheck.mjs scripts/phase33a-android-apk.nodecheck.mjs scripts/waydroid-x86-preview.nodecheck.mjs
       - name: Record source-only release evidence
         run: node scripts/native-release-evidence.mjs --output "$RUNNER_TEMP/moniflow-native-readiness/report.json"
