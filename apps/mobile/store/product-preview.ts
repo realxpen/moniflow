@@ -1,10 +1,10 @@
 import { create } from "zustand";
-import { interpretOfflineExample } from "@/services/offline-intent-lab";
+import { interpretOfflineExample } from "../services/offline-intent-lab";
 
 import {
   applyPracticeAction, initialPracticeLedger, practiceSummary,
   type PracticeAction, type PracticeLedger, type PracticeOutcome
-} from "@/services/offline-pocket-ledger";
+} from "../services/offline-pocket-ledger";
 
 /**
  * A user-opted-in, Figma-styled *example workspace* shared between tabs.
