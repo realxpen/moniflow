@@ -135,7 +135,7 @@ export function FigmaPreviewWorkspace({ tab, ownerId, onExit }: {
             <SoftCard key={name} style={styles.card}>
               <Line name={name} value={money(ledger.allocated[name])} />
               <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: Math.min(100, ledger.allocated[name] / 200000 * 100) + "%" }]} />
+                <View style={[styles.progressFill, { width: `${Math.min(100, ledger.allocated[name] / 200000 * 100)}%` as const }]} />
               </View>
               <Text style={styles.small}>Illustrative target: ₦200,000 · internal bookkeeping only</Text>
             </SoftCard>
