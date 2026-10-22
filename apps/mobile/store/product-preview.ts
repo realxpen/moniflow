@@ -14,17 +14,20 @@ import {
 type ProductPreviewStore = {
   ownerId: string | null;
   active: boolean;
+  serverMode: boolean;
   ledger: PracticeLedger;
   lastResult: PracticeOutcome["status"] | null;
   lastMessage: string | null;
   start: (ownerId: string) => void;
+  enableServer: (ownerId: string) => void;
+  disableServer: (ownerId: string) => void;
   end: () => void;
   simulate: (ownerId: string, action: PracticeAction) => PracticeOutcome["status"];
   simulateInstruction: (ownerId: string, instruction: string) => PracticeOutcome["status"];
 };
 
 const empty = () => ({
-  ownerId: null, active: false, ledger: initialPracticeLedger(),
+  ownerId: null, active: false, serverMode: false, ledger: initialPracticeLedger(),
   lastResult: null, lastMessage: null
 });
 
@@ -34,6 +37,14 @@ export const useProductPreview = create<ProductPreviewStore>((set, get) => ({
     // Starting anew always clears any prior person's fictional records.
     if (!ownerId) return;
     set({ ...empty(), ownerId, active: true });
+  },
+  enableServer: (ownerId) => {
+    const state = get();
+    if (ownerId && state.active && state.ownerId === ownerId) set({ serverMode: true });
+  },
+  disableServer: (ownerId) => {
+    const state = get();
+    if (ownerId && state.active && state.ownerId === ownerId) set({ serverMode: false });
   },
   end: () => set(empty()),
   simulate: (ownerId, action) => {
