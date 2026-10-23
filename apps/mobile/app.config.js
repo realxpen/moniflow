@@ -3,6 +3,10 @@
  * Only the explicit Waydroid EAS profile switches to x86_64 UI-only mode.
  */
 module.exports = ({ config }) => {
+  if (process.env.EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW === "1" &&
+      process.env.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW !== "1") {
+    throw new Error("Connected sandbox preview must use the signer-free x86 Waydroid profile.");
+  }
   if (process.env.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW !== "1") return config;
 
   // Use a separate package name so installing the connected *sandbox*
