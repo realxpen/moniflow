@@ -1,0 +1,26 @@
+name: MONIFlow isolated staging API perimeter smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/staging-preview-smoke.yml"
+      - "scripts/staging-preview-smoke.mjs"
+      - "apps/mobile/services/waydroid-sandbox-write-policy.ts"
+      - "apps/mobile/eas.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-staging:
+    if: github.repository == 'realxpen/moniflow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify staging provider, anonymous JWT barrier and zero financial writes
+        run: node scripts/staging-preview-smoke.mjs
