@@ -121,5 +121,6 @@ jobs:
             '- Expo project: xpen/moniflow\n'+
             '- Preview URL(s): '+(urls.length?urls.join(', '):'See the EAS Hosting deployment details')+'\n'+
             '- No native build, wallet signing, bank funds, BMONI execution or production deployment\n');
+          if (urls.length) console.log('MONIFLOW_PWA_PREVIEW_URL=' + urls[0]);
           console.log('Expo Hosting preview deployment request returned successfully.');
           NODE
