@@ -3,15 +3,22 @@
  * Only the explicit Waydroid EAS profile switches to x86_64 UI-only mode.
  */
 module.exports = ({ config }) => {
+  if (process.env.EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW === "1" &&
+      process.env.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW !== "1") {
+    throw new Error("Connected sandbox preview must use the signer-free x86 Waydroid profile.");
+  }
   if (process.env.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW !== "1") return config;
 
+  // Use a separate package name so installing the connected *sandbox*
+  // never overwrites the existing read-only Waydroid app.
+  const dedicatedSandbox = process.env.EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW === "1";
   return {
     ...config,
-    name: "MONIFlow Waydroid",
-    scheme: "moniflow-waydroid",
+    name: dedicatedSandbox ? "MONIFlow Sandbox" : "MONIFlow Waydroid",
+    scheme: dedicatedSandbox ? "moniflow-sandbox" : "moniflow-waydroid",
     android: {
       ...config.android,
-      package: "com.realxpen.moniflow.waydroid"
+      package: dedicatedSandbox ? "com.realxpen.moniflow.sandbox" : "com.realxpen.moniflow.waydroid"
     },
     plugins: [
       ...(config.plugins ?? []).filter((plugin) => plugin !== "./plugins/with-bmoni-sdk.js"),
@@ -31,7 +38,7 @@ module.exports = ({ config }) => {
     },
     extra: {
       ...config.extra,
-      buildVariant: "waydroid-x86-ui-only",
+      buildVariant: dedicatedSandbox ? "waydroid-x86-authenticated-sandbox" : "waydroid-x86-ui-only",
       nativeWalletFeaturesEnabled: false
     }
   };
