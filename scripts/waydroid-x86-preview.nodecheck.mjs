@@ -80,11 +80,37 @@ test("Preview targets x86_64 and cannot initialize device keys or sign", () => {
   assert.doesNotMatch(device, /^import \{ BmoniEmbeddedSdk \} from /m);
 });
 
-test("Preview blocks MONIFlow API mutations and identifies itself to the user", () => {
+test("Original Waydroid remains read-only; separate sandbox APK cannot sign", () => {
   const api = text("apps/mobile/services/api-fetch.ts");
+  const policy = text("apps/mobile/services/waydroid-sandbox-write-policy.ts");
   const welcome = text("apps/mobile/app/onboarding/welcome.tsx");
-  assert.match(api, /isOurApi &&/);
   assert.match(api, /!\["GET", "HEAD"\]\.includes/);
-  assert.match(api, /read-only/);
+  assert.match(api, /isAllowedWaydroidSandboxMutation/);
+  assert.match(api, /EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW === "1"/);
+  assert.match(api, /Waydroid financial operations are disabled/);
+  assert.match(policy, /sandboxMutationPaths/);
+  assert.match(policy, /moniflow-sandbox-staging-git-rc-moni/);
   assert.match(welcome, /WAYDROID · READ-ONLY PREVIEW/);
+  assert.equal(eas.build["waydroid-x86-apk"].env.EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW, undefined);
+  const special = eas.build["waydroid-sandbox-x86-apk"];
+  assert.equal(special.extends, "waydroid-x86-apk");
+  assert.equal(special.env.EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW, "1");
+  const previous = process.env.EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW;
+  try {
+    withPreview(true, () => {
+      process.env.EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW = "1";
+      const preview = config({ config: base });
+      assert.equal(preview.android.package, "com.realxpen.moniflow.sandbox");
+      assert.equal(preview.extra.nativeWalletFeaturesEnabled, false);
+      assert.ok(!preview.plugins.includes("./plugins/with-bmoni-sdk.js"));
+      assert.ok(preview.autolinking.android.exclude.includes("@bkey-inc/bmoni_embedded_sdk"));
+    });
+    withPreview(false, () => {
+      process.env.EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW = "1";
+      assert.throws(() => config({ config: base }), /must use the signer-free/);
+    });
+  } finally {
+    if (previous === undefined) delete process.env.EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW;
+    else process.env.EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW = previous;
+  }
 });
