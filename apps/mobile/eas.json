@@ -40,6 +40,14 @@
       "env": {
         "EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW": "1"
       }
+    },
+    "waydroid-sandbox-x86-apk": {
+      "extends": "waydroid-x86-apk",
+      "env": {
+        "EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW": "1",
+        "EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW": "1",
+        "EXPO_PUBLIC_API_URL": "https://moniflow-sandbox-staging-git-rc-moni-312569-swifnatechnologyltd.vercel.app"
+      }
     }
   }
 }
