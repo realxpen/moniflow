@@ -51,5 +51,60 @@ await expectStatus("/api/sandbox-demo/status", "GET", 401);
 await expectStatus("/api/sandbox-demo/bootstrap", "POST", 401);
 await expectStatus("/api/onboarding/nigeria/start", "POST", 401);
 await expectStatus("/api/operator/plans", "POST", 401);
+/**
+ * The PWA's very first provider health check is a cross-origin browser GET.
+ * Native Android apps do not enforce CORS, so previously-green Android and
+ * server tests cannot prove Safari can reach this provider.
+ *
+ * Test one exact reviewed origin, preflight and protected responses from the
+ * GitHub runner without accounts or bearer tokens. If this fails, the iPhone
+ * will surface a generic "failed to fetch" even while the API reports READY.
+ */
+const pwaOrigin = "https://xpen-moniflow-pwa-202610--n9px8b7cup.expo.app";
+async function assertCors(path, method, headers, expected, expectedOrigin) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 18000);
+  try {
+    const res = await fetch(base + path, {
+      method,
+      headers,
+      redirect: "manual",
+      signal: controller.signal
+    });
+    const allow = res.headers.get("access-control-allow-origin");
+    const credentials = res.headers.get("access-control-allow-credentials");
+    const vary = res.headers.get("vary") || "";
+    if (res.status !== expected || allow !== expectedOrigin || credentials === "true" ||
+        !vary.toLowerCase().includes("origin")) {
+      throw new Error("Safari browser barrier on " + method + " " + path +
+        ": HTTP " + res.status + ", allow-origin " + (allow ?? "(missing)") +
+        ", expected origin " + (expectedOrigin ?? "(no origin)") + ".");
+    }
+    if (method === "OPTIONS" && expectedOrigin) {
+      const methods = res.headers.get("access-control-allow-methods") || "";
+      const allowedHeaders = res.headers.get("access-control-allow-headers") || "";
+      if (!methods.includes("POST") || !allowedHeaders.toLowerCase().includes("authorization")) {
+        throw new Error("Safari protected sandbox CORS preflight headers incomplete");
+      }
+    }
+    console.log("PASS", method, path, "Safari browser origin", expected);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Read-only health and protected non-mutating GET must work in Safari.
+await assertCors("/health/provider", "GET",
+  { origin: pwaOrigin, accept: "application/json" }, 200, pwaOrigin);
+await assertCors("/api/sandbox-demo/status", "GET",
+  { origin: pwaOrigin, accept: "application/json" }, 401, pwaOrigin);
+// This preflight never sends a POST, user information or financial instruction.
+await assertCors("/api/sandbox-demo/bootstrap", "OPTIONS",
+  { origin: pwaOrigin, "access-control-request-method": "POST",
+    "access-control-request-headers": "authorization,content-type" }, 204, pwaOrigin);
+// Unknown websites must never inherit authenticated browser access.
+await assertCors("/health/provider", "GET",
+  { origin: "https://untrusted.example", accept: "application/json" }, 200, null);
+
 // No bearer token, no KYC documents, no provider calls, no financial writes.
 console.log("PASS isolated preview public-health and JWT protection perimeter");
