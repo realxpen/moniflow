@@ -1,6 +1,10 @@
 import { invalidateRejectedSession, sessionForApiRequest } from "@/services/auth-session";
 import { friendlyNetworkError } from "@/services/network-error";
-import { isAllowedWaydroidSandboxMutation } from "@/services/waydroid-sandbox-write-policy";
+import { Platform } from "react-native";
+import {
+  isAllowedBrowserPwaSandboxMutation,
+  isAllowedWaydroidSandboxMutation
+} from "@/services/waydroid-sandbox-write-policy";
 
 const defaultTimeoutMs = 12000;
 
@@ -30,6 +34,19 @@ export async function apiFetch(url: string, init?: RequestInit, timeoutMs = defa
           method
         })) {
       throw new Error("Waydroid financial operations are disabled. Only the separately packaged MONIFlow Sandbox app may save simulated Money Plans and Activity.");
+    }
+    // The installed iPhone PWA runs this SAME client, but only the authenticated
+    // simulation namespace may mutate. No browser user can submit KYC, signing,
+    // partner collection, bank, or real provider writes from this preview.
+    if (Platform.OS === "web" &&
+        process.env.EXPO_PUBLIC_MONIFLOW_PWA_PREVIEW === "1" &&
+        !["GET", "HEAD"].includes(method) &&
+        !isAllowedBrowserPwaSandboxMutation({
+          configuredApiUrl: expectedApi,
+          requestUrl: url,
+          method
+        })) {
+      throw new Error("MONIFlow PWA is simulation-only. Real financial and partner operations are disabled.");
     }
     // Health is public; authentication trouble must not make provider health look offline.
     const isHealth = target.pathname.startsWith("/health");
