@@ -31,6 +31,14 @@ async function expectStatus(path, method, wanted) {
     if (wanted === 200 && !parsed?.status) {
       throw new Error("Health response is missing its status.");
     }
+    if (path === "/health/provider" && (
+      parsed.provider !== "moniflow-sandbox" ||
+      parsed.simulated !== true ||
+      parsed.authenticatedSandboxDemoEnabled !== true ||
+      parsed.partnerRegistrationEnabled !== false
+    )) {
+      throw new Error("Wrong provider mode, sandbox capability or partner access state.");
+    }
     console.log("PASS", method, path, "HTTP", response.status);
   } finally {
     clearTimeout(timer);
@@ -38,6 +46,7 @@ async function expectStatus(path, method, wanted) {
 }
 
 await expectStatus("/health", "GET", 200);
+await expectStatus("/health/provider", "GET", 200);
 await expectStatus("/api/sandbox-demo/status", "GET", 401);
 await expectStatus("/api/sandbox-demo/bootstrap", "POST", 401);
 await expectStatus("/api/onboarding/nigeria/start", "POST", 401);
