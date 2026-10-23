@@ -1,0 +1,18 @@
+{
+  "name": "MONIFlow Sandbox — Financial Operator Demo",
+  "short_name": "MONIFlow",
+  "description": "Test MONIFlow Money Plans, MONI Guard, simulated Pockets and Activity. No real payments.",
+  "id": "/?app=moniflow-sandbox-pwa",
+  "start_url": "/?app=moniflow-sandbox-pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F8F5F0",
+  "theme_color": "#19191B",
+  "lang": "en",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
