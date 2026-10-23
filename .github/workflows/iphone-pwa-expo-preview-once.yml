@@ -1,0 +1,126 @@
+name: MONIFlow iPhone PWA - One Isolated Expo Web Preview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/RC_IPHONE_PWA_EXPO_HOSTING_ONE_SHOT_20261023.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moniflow-iphone-pwa-expo-web-preview-first-deploy
+  cancel-in-progress: false
+
+jobs:
+  verify-and-host:
+    if: github.repository == 'realxpen/moniflow' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CI: "1"
+      PINNED_APP_SOURCE: 1c02c91ecdda2828f06ed27c17604032f4c58f49
+      PREVIOUS_MAIN: ${{ github.event.before }}
+      EXPO_PUBLIC_MONIFLOW_PWA_PREVIEW: "1"
+      EXPO_PUBLIC_API_URL: https://moniflow-sandbox-staging-git-rc-moni-312569-swifnatechnologyltd.vercel.app
+      EXPO_PUBLIC_SUPABASE_URL: https://rtcjismwbrvulccryyau.supabase.co
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_SM3_8xbrUe2S1H5FSctY5w_xova1cwj
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Pin approved source and consume the single-use preview ticket
+        shell: bash
+        run: |
+          set -euo pipefail
+          TICKET=docs/RC_IPHONE_PWA_EXPO_HOSTING_ONE_SHOT_20261023.md
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$PREVIOUS_MAIN" = "$PINNED_APP_SOURCE"
+          test "$(git rev-parse HEAD^)" = "$PINNED_APP_SOURCE"
+          test -f "$TICKET"
+          if git cat-file -e "$PREVIOUS_MAIN:$TICKET" 2>/dev/null; then
+            echo "::error::The one-time PWA publishing ticket was already consumed."
+            exit 1
+          fi
+          grep -Fxq 'Approval: ONE_ISOLATED_EXPO_IPHONE_PWA_PREVIEW_NO_NATIVE_BUILD_20261023' "$TICKET"
+          diff -u \
+            <(printf '%s\n' '.github/workflows/iphone-pwa-expo-preview-once.yml' "$TICKET" | sort) \
+            <(git diff --name-only "$PINNED_APP_SOURCE" HEAD | sort)
+          git checkout --force --detach "$PINNED_APP_SOURCE"
+          echo "Pinned MONIFlow PWA source: $PINNED_APP_SOURCE"
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install exact workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Verify the same Android/web product without native builds
+        run: |
+          pnpm typecheck
+          pnpm test
+      - name: Export the real Figma mobile routes as a static iPhone PWA
+        run: pnpm --filter @moniflow/mobile build:web
+      - name: Verify real installable assets and keep BMONI signer off web
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIST=apps/mobile/dist
+          test -f "$DIST/index.html"
+          test -f "$DIST/manifest.webmanifest"
+          test -s "$DIST/apple-touch-icon.png"
+          test -s "$DIST/icon-192.png"
+          test -s "$DIST/icon-512.png"
+          grep -q 'manifest.webmanifest' "$DIST/index.html"
+          grep -q 'apple-touch-icon' "$DIST/index.html"
+          if grep -Eqi '(BMONI_API_KEY|PARTNER_HUSTLE_HMAC_SECRET|BMONI_IDENTITY_PHONE_HMAC_SECRET)' "$DIST/index.html"; then
+            echo "::error::Financial backend configuration leaked to static HTML"
+            exit 1
+          fi
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const d = 'apps/mobile/dist/';
+          const m = JSON.parse(fs.readFileSync(d+'manifest.webmanifest','utf8'));
+          if(m.display !== 'standalone' || m.scope !== '/' ||
+             !m.name.includes('Sandbox') || m.icons.length !== 2)
+            throw Error('PWA install metadata failed');
+          console.log('PASS: static iOS install HTML, real app icons, sandbox manifest');
+          NODE
+      - name: Authenticate the previously connected Expo project
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Publish exactly one Expo Hosting PREVIEW (never production)
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EXPO_TOKEN"
+          eas project:info
+          eas deploy --non-interactive --dev-domain xpen-moniflow-pwa-202610 --alias mvp-preview --environment preview --json > "$RUNNER_TEMP/eas-pwa-preview.json"
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const raw=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/eas-pwa-preview.json','utf8'));
+          const entries=Array.isArray(raw)?raw:[raw];
+          const urls=[];
+          for(const x of entries) {
+            for(const val of [x?.url,x?.deploymentUrl,x?.previewUrl,x?.deployment?.url,x?.deployment?.previewUrl]) {
+              if(typeof val==='string' && val.startsWith('https://') && val.endsWith('.expo.app/')) urls.push(val);
+              else if(typeof val==='string' && /^https:\/\/[^\s]+\.expo\.app\/?$/.test(val)) urls.push(val);
+            }
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            '## MONIFlow iPhone PWA · Expo Hosting PREVIEW\n\n' +
+            '- Application source: '+process.env.PINNED_APP_SOURCE+'\n'+
+            '- Expo project: xpen/moniflow\n'+
+            '- Preview URL(s): '+(urls.length?urls.join(', '):'See the EAS Hosting deployment details')+'\n'+
+            '- No native build, wallet signing, bank funds, BMONI execution or production deployment\n');
+          if (urls.length) console.log('MONIFLOW_PWA_PREVIEW_URL=' + urls[0]);
+          console.log('Expo Hosting preview deployment request returned successfully.');
+          NODE
