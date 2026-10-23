@@ -17,15 +17,27 @@ const sandboxMutationPaths = new Set([
 const sandboxPlanMutationPath =
   /^\/api\/sandbox-demo\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(?:approve|simulate)$/i;
 
-export function isAllowedWaydroidSandboxMutation(args: {
-  waydroidPreview: boolean;
-  dedicatedSandboxPreview: boolean;
+type IsolatedPreviewMutation = {
   configuredApiUrl: string | undefined;
   requestUrl: string;
   method: string;
+};
+
+/** A narrowly scoped browser PWA cannot write to real provider or partner APIs. */
+export function isAllowedBrowserPwaSandboxMutation(args: IsolatedPreviewMutation) {
+  return allowedSandboxMutation(args);
+}
+
+export function isAllowedWaydroidSandboxMutation(args: IsolatedPreviewMutation & {
+  waydroidPreview: boolean;
+  dedicatedSandboxPreview: boolean;
 }) {
-  if (!args.waydroidPreview || !args.dedicatedSandboxPreview ||
-      args.method.toUpperCase() !== "POST" || !args.configuredApiUrl) {
+  if (!args.waydroidPreview || !args.dedicatedSandboxPreview) return false;
+  return allowedSandboxMutation(args);
+}
+
+function allowedSandboxMutation(args: IsolatedPreviewMutation) {
+  if (args.method.toUpperCase() !== "POST" || !args.configuredApiUrl) {
     return false;
   }
   try {

@@ -98,6 +98,21 @@ export default function WelcomeScreen() {
       </View>
 
       <View style={styles.bottom}>
+        {process.env.EXPO_PUBLIC_MONIFLOW_PWA_PREVIEW === "1" ? (
+          <SoftCard style={styles.resumeCard}>
+            <StatusPill label="MONIFLOW PWA · SIMULATED PAYMENTS ONLY" tone="warning" />
+            <Text style={styles.resumeTitle}>Your financial operator, on your Home Screen.</Text>
+            <Text style={styles.providerCopy}>
+              On iPhone, open this website in Safari, tap Share, then Add to Home Screen.
+              The same MONIFlow app runs without a laptop or Expo development server.
+              Sign-in tokens stay in memory; reopening may require signing in again.
+            </Text>
+            <Text style={styles.providerCopy}>
+              This is a test app. BMONI device signing, real bank transfers and settlement
+              cannot run in the browser. Money Plans and Activity are simulated.
+            </Text>
+          </SoftCard>
+        ) : null}
         {process.env.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW === "1" ? (
           <SoftCard style={styles.resumeCard}>
             <StatusPill label="WAYDROID · READ-ONLY PREVIEW" tone="warning" />
