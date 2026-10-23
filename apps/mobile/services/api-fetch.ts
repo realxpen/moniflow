@@ -1,5 +1,6 @@
 import { invalidateRejectedSession, sessionForApiRequest } from "@/services/auth-session";
 import { friendlyNetworkError } from "@/services/network-error";
+import { isAllowedWaydroidSandboxMutation } from "@/services/waydroid-sandbox-write-policy";
 
 const defaultTimeoutMs = 12000;
 
@@ -15,9 +16,20 @@ export async function apiFetch(url: string, init?: RequestInit, timeoutMs = defa
     const isOurApi = !!apiOrigin && target.origin === apiOrigin;
     // The Waydroid variant is for authenticated reads and navigation only.
     // Block workspace mutations before any HTTP request is sent.
-    if (process.env.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW === "1" && isOurApi &&
-        !["GET", "HEAD"].includes((init?.method ?? "GET").toUpperCase())) {
-      throw new Error("This MONIFlow Waydroid preview is read-only. Use the physical Android app for financial workflows.");
+    const method = (init?.method ?? "GET").toUpperCase();
+    // All finance writes stay blocked in both x86 APKs. Only the distinctly
+    // packaged sandbox APK may POST to a tiny authenticated DEMO namespace on
+    // one exact staging host. This check runs before JWT lookup or fetch.
+    if (process.env.EXPO_PUBLIC_MONIFLOW_WAYDROID_PREVIEW === "1" &&
+        !["GET", "HEAD"].includes(method) &&
+        !isAllowedWaydroidSandboxMutation({
+          waydroidPreview: true,
+          dedicatedSandboxPreview: process.env.EXPO_PUBLIC_MONIFLOW_SANDBOX_PREVIEW === "1",
+          configuredApiUrl: expectedApi,
+          requestUrl: url,
+          method
+        })) {
+      throw new Error("Waydroid financial operations are disabled. Only the separately packaged MONIFlow Sandbox app may save simulated Money Plans and Activity.");
     }
     // Health is public; authentication trouble must not make provider health look offline.
     const isHealth = target.pathname.startsWith("/health");
