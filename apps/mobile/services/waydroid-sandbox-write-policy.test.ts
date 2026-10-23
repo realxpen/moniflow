@@ -3,10 +3,15 @@ import { describe, expect, it } from "vitest";
 import { isAllowedWaydroidSandboxMutation, waydroidSandboxHostname } from "./waydroid-sandbox-write-policy";
 
 const api = "https://" + waydroidSandboxHostname;
-const base = {
+const base: {
+  waydroidPreview: boolean;
+  dedicatedSandboxPreview: boolean;
+  configuredApiUrl: string;
+  method: string;
+} = {
   waydroidPreview: true, dedicatedSandboxPreview: true,
   configuredApiUrl: api, method: "POST"
-} as const;
+};
 const allowed = (path: string, overrides: Partial<typeof base> = {}) =>
   isAllowedWaydroidSandboxMutation({ ...base, ...overrides, requestUrl: api + path });
 
