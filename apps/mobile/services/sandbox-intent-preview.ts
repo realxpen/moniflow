@@ -1,6 +1,6 @@
 import { apiFetch } from "./api-fetch";
 import { SandboxApiError } from "./sandbox-api";
-import { parseSandboxIntentPreview } from "./sandbox-intent-preview-validation";
+import { parseSandboxIntentPreview, type SandboxIntentPreview } from "./sandbox-intent-preview-validation";
 
 export type { SandboxIntentPreview } from "./sandbox-intent-preview-validation";
 
