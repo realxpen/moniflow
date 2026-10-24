@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
+import { clearPwaRefreshCredential, persistPwaRefreshCredential, readPwaRefreshCredential } from "./pwa-auth-storage";
 
-/** Financial sign-in and refresh tokens are memory-only. Reload requires sign-in. */
+/** Access tokens are always memory-only; only a bounded sandbox PWA refresh credential can survive Safari relaunch. */
 export type AuthSession = {
   accessToken: string;
   userId: string;
@@ -11,6 +12,7 @@ export type AuthSession = {
 let session: AuthSession | null = null;
 let refreshToken: string | null = null;
 let refreshInFlight: Promise<AuthSession | null> | null = null;
+let restoreInFlight: Promise<AuthSession | null> | null = null;
 // Late sign-in/sign-up responses must not restore an account after sign-out,
 // or overwrite a more recent attempt for another account.
 let authIntentRevision = 0;
@@ -20,6 +22,8 @@ const emit = () => listeners.forEach(listener => listener());
 function setSession(next: AuthSession | null, nextRefresh: string | null = null) {
   session = next;
   refreshToken = nextRefresh;
+  if (next && nextRefresh) persistPwaRefreshCredential(next.userId, nextRefresh);
+  else clearPwaRefreshCredential();
   emit();
 }
 export function signOut() {
@@ -56,6 +60,11 @@ function config() {
   return { base: parsed.origin, key: publishableKey };
 }
 
+class AuthRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+class AuthIdentityMismatchError extends Error {}
+
 type AuthResponse = {
   access_token?: string;
   refresh_token?: string;
@@ -79,7 +88,7 @@ async function authRequest(path: string, payload: Record<string, string>): Promi
     });
     const result = await response.json() as AuthResponse;
     if (!response.ok) {
-      throw new Error(result.error_description ?? result.msg ?? result.message ?? "Authentication failed.");
+      throw new AuthRequestError(result.error_description ?? result.msg ?? result.message ?? "Authentication failed.", response.status);
     }
     return result;
   } finally {
@@ -92,7 +101,10 @@ function remember(result: AuthResponse, previous?: AuthSession): AuthSession {
     throw new Error("Confirm your email, then sign in to MONIFlow.");
   }
   if (previous && previous.userId !== result.user.id) {
-    throw new Error("Session identity changed unexpectedly. Sign in again.");
+    throw new AuthIdentityMismatchError("Session identity changed unexpectedly. Sign in again.");
+  }
+  if (!Number.isFinite(result.expires_in) || result.expires_in <= 0 || result.expires_in > 86400) {
+    throw new Error("The authentication server returned an invalid expiration.");
   }
   const next = {
     accessToken: result.access_token,
@@ -125,6 +137,45 @@ export async function signUpWithPassword(email: string, password: string) {
   return false;
 }
 
+/**
+ * Reopen an installed iPhone PWA by exchanging a storage-scoped refresh token
+ * for a NEW access token over HTTPS. No access token or account balance is read
+ * from browser storage. The Auth API's userId must match the remembered owner.
+ * All older pending restore requests are discarded on sign-out or fresh login.
+ */
+export function restoreAuthSession(): Promise<AuthSession | null> {
+  if (restoreInFlight) return restoreInFlight;
+  if (session) return Promise.resolve(currentAuthSession());
+  const stored = readPwaRefreshCredential();
+  if (!stored) return Promise.resolve(null);
+  const revision = authIntentRevision;
+  const request = (async () => {
+    try {
+      const result = await authRequest("token?grant_type=refresh_token", {
+        refresh_token: stored.refreshToken
+      });
+      if (revision !== authIntentRevision || session) return currentAuthSession();
+      if (!result.user?.id || result.user.id.toLowerCase() !== stored.userId.toLowerCase() ||
+          !result.refresh_token) {
+        clearPwaRefreshCredential(stored.refreshToken);
+        return null;
+      }
+      return remember(result, { accessToken: "", userId: stored.userId, email: "", expiresAt: 0 });
+    } catch (cause) {
+      // Offline Safari must not permanently lose a stored login. Only an
+      // explicit invalid/revoked credential response can erase the token.
+      if (cause instanceof AuthRequestError && [400, 401, 403].includes(cause.status) &&
+          revision === authIntentRevision && !session) {
+        clearPwaRefreshCredential(stored.refreshToken);
+      }
+      return null;
+    }
+  })();
+  restoreInFlight = request;
+  void request.finally(() => { if (restoreInFlight === request) restoreInFlight = null; });
+  return request;
+}
+
 /** Serializes token renewal across concurrent reads. Never retries a money movement. */
 export async function sessionForApiRequest(): Promise<AuthSession | null> {
   if (!session) return null;
@@ -142,8 +193,14 @@ export async function sessionForApiRequest(): Promise<AuthSession | null> {
       if (session !== previous || refreshToken !== token) return currentAuthSession();
       return remember(result, previous);
     } catch (cause) {
-      if (session === previous && refreshToken === token) signOut();
-      throw new Error("MONIFlow could not renew your session. Sign in again.", { cause });
+      const revoked = cause instanceof AuthIdentityMismatchError ||
+        (cause instanceof AuthRequestError && [400, 401, 403].includes(cause.status));
+      if (revoked && session === previous && refreshToken === token) signOut();
+      // Network/transient failure leaves the prior owner + saved refresh
+      // credential untouched. Never reuse an expired access token for writes.
+      throw new Error(revoked
+        ? "MONIFlow could not renew your session. Sign in again."
+        : "MONIFlow couldn't renew your session right now. Check your connection and retry the read.", { cause });
     }
   })();
   refreshInFlight = pending;

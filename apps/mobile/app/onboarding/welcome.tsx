@@ -105,7 +105,7 @@ export default function WelcomeScreen() {
             <Text style={styles.providerCopy}>
               On iPhone, open this website in Safari, tap Share, then Add to Home Screen.
               The same MONIFlow app runs without a laptop or Expo development server.
-              Sign-in tokens stay in memory; reopening may require signing in again.
+              This sandbox app can remember your sign-in for up to 7 days on this device. Only a refresh credential is kept in Safari storage; access tokens remain in memory. Sign out on shared devices.
             </Text>
             <Text style={styles.providerCopy}>
               This is a test app. BMONI device signing, real bank transfers and settlement
