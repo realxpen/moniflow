@@ -1,0 +1,73 @@
+name: MONIFlow iPhone Intent Lab - Public Preview Evidence
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/iphone-intent-alias-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify-published-alias:
+    if: github.repository == 'realxpen/moniflow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify immutable Expo alias serves the new read-only Intent Lab
+        shell: bash
+        run: |
+          node --input-type=module - <<'NODE'
+          const origin = "https://xpen-moniflow-pwa-202610--mvp-preview.expo.app";
+          const r = await fetch(origin + "/", { redirect: "manual" });
+          if (r.status !== 200) throw Error("Expo named preview alias is unavailable: HTTP " + r.status);
+          const html=await r.text();
+          if (!/manifest.webmanifest/.test(html) || !/expo/.test(html.toLowerCase()))
+            throw Error("Expo PWA manifest or HTML bundle metadata is absent");
+          const manifest=await fetch(origin+"/manifest.webmanifest");
+          if(manifest.status!==200) throw Error("PWA manifest unavailable: HTTP "+manifest.status);
+          const m=await manifest.json();
+          if(m.display!=="standalone" || !m.name.includes("Sandbox"))
+            throw Error("Wrong PWA release or unsafe non-sandbox metadata");
+          const js=[...html.matchAll(/<script[^>]+src=["']([^"']+\.js[^"']*)["']/g)]
+            .map(m => m[1]);
+          if(!js.length) throw Error("No JavaScript bundle found to confirm feature");
+          let feature=false;
+          for(const path of js.slice(0,12)) {
+            const bundle=await fetch(new URL(path,origin));
+            if(bundle.status!==200) throw Error("Expo script not available");
+            const source=await bundle.text();
+            if(source.includes("Try your own Money Plan") && source.includes("READ-ONLY PREVIEW"))
+              feature=true;
+          }
+          if(!feature) throw Error("Published bundle does not contain new Intent Lab. New Expo deployment not verified.");
+          console.log("PASS Expo alias, installable PWA, read-only Intent Lab in deployed JS bundle");
+          NODE
+      - name: Inspect staging sandbox origin gate without sign-in or writes
+        shell: bash
+        run: |
+          node --input-type=module - <<'NODE'
+          const api="https://moniflow-sandbox-staging-git-rc-moni-312569-swifnatechnologyltd.vercel.app";
+          const origin="https://xpen-moniflow-pwa-202610--mvp-preview.expo.app";
+          const health=await fetch(api+"/health/provider",{headers:{origin}});
+          if(health.status!==200) throw Error("Sandbox provider health unavailable: HTTP "+health.status);
+          const body=await health.json();
+          if(body.provider!=="moniflow-sandbox" || body.simulated!==true)
+            throw Error("Staging provider is not isolated simulation");
+          const protectedPost=await fetch(api+"/api/sandbox-demo/preview",{
+            method:"POST",headers:{origin,"content-type":"application/json"},body:"{}"
+          });
+          if(protectedPost.status!==401 || (await protectedPost.json()).code!=="AUTH_REQUIRED")
+            throw Error("JWT protection on new preview route is missing");
+          const preflight=await fetch(api+"/api/sandbox-demo/preview",{
+            method:"OPTIONS",
+            headers:{origin,"access-control-request-method":"POST",
+              "access-control-request-headers":"authorization,content-type"}
+          });
+          const allowed=preflight.headers.get("access-control-allow-origin");
+          if(preflight.status!==204 || allowed!==origin) {
+            throw Error("STAGING_CORS_PENDING: approved alias origin not active in deployed API (HTTP "+
+              preflight.status+", allow="+allowed+"). No financial actions attempted.");
+          }
+          console.log("PASS staging preview CORS and provider isolation");
+          NODE
