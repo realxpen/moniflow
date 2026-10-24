@@ -28,7 +28,7 @@ describe("iPhone PWA full-height money-plan readability", () => {
   ])("uses smaller in-flow web padding but retains native tab clearance: %s", file => {
     const content = src(file);
     expect(content).toContain('paddingBottom: Platform.OS === "web" ? spacing.lg : layout.tabContentBottomInset');
-    expect(content).toContain("Scroll");
+    expect(content).toContain("contentContainerStyle={styles.");
   });
 
   it("leaves exact simulation approval, Guard status and real-money lock untouched", () => {
