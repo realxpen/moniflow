@@ -1,6 +1,6 @@
 import { Redirect, Tabs } from "expo-router";
 import { useAuthSession } from "@/services/auth-session";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors, layout, radius, shadows, spacing, typography } from "@/theme";
@@ -19,7 +19,14 @@ export default function TabLayout() {
   return (
     <Tabs
       tabBar={({ navigation, state }) => (
-        <View pointerEvents="box-none" style={[styles.shell, { bottom: spacing.sm + insets.bottom }]}>
+        <View pointerEvents="box-none" style={[
+          styles.shell,
+          // iPhone PWA: reserve real layout space so Money Plan and Guard text
+          // never sits behind the navigation. Native retains the Figma float.
+          Platform.OS === "web"
+            ? [styles.webShell, { paddingBottom: spacing.sm + insets.bottom }]
+            : { bottom: spacing.sm + insets.bottom }
+        ]}>
           <View style={styles.bar}>
             {state.routes.map((route, index) => {
               const selected = state.index === index;
@@ -66,6 +73,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     position: "absolute",
     right: 0
+  },
+  webShell: {
+    position: "relative",
+    bottom: 0,
+    paddingTop: spacing.sm,
+    backgroundColor: colors.backgroundPrimary,
   },
   bar: {
     backgroundColor: colors.surface,
