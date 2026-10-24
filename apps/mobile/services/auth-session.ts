@@ -34,6 +34,15 @@ export function signOut() {
 export function currentAuthSession(): AuthSession | null {
   return session && session.expiresAt > Date.now() + 5000 ? session : null;
 }
+
+/**
+ * An owner-scoped async request captures this identity version at dispatch.
+ * Account change, sign-out, or new sign-in invalidates previous responses.
+ * Silent JWT refresh for the SAME subject keeps this identity version.
+ */
+export function currentAuthScope(): { userId: string | null; revision: number } {
+  return { userId: currentAuthSession()?.userId ?? null, revision: authIntentRevision };
+}
 function subscribe(callback: () => void) {
   listeners.add(callback);
   return () => { listeners.delete(callback); };
