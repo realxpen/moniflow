@@ -54,7 +54,7 @@ jobs:
              guarded.headers.get('access-control-allow-origin') !== old) throw Error('Preview route not JWT-protected');
           const preflight=await req('/api/sandbox-demo/preview','OPTIONS',old);
           if(preflight.status !== 204 ||
-             preflight.headers.get('access-control-allow-origin') !== old) throw Error('PWA preflight failed');
+             preflight.headers.get('access-control-allow-origin') !== old) throw Error('PWA preflight failed HTTP '+preflight.status+' allow '+preflight.headers.get('access-control-allow-origin')+' content-type '+preflight.headers.get('content-type'));
           const alien=await req('/health/provider','GET','https://foreign.example');
           if(alien.headers.get('access-control-allow-origin') !== null) throw Error('Wildcard/foreign CORS allowed');
           console.log('PASS: backend preview route, protected 401, existing PWA CORS, foreign denial');
