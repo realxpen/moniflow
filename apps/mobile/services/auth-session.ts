@@ -60,6 +60,10 @@ function config() {
   return { base: parsed.origin, key: publishableKey };
 }
 
+class AuthRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 type AuthResponse = {
   access_token?: string;
   refresh_token?: string;
@@ -83,7 +87,7 @@ async function authRequest(path: string, payload: Record<string, string>): Promi
     });
     const result = await response.json() as AuthResponse;
     if (!response.ok) {
-      throw new Error(result.error_description ?? result.msg ?? result.message ?? "Authentication failed.");
+      throw new AuthRequestError(result.error_description ?? result.msg ?? result.message ?? "Authentication failed.", response.status);
     }
     return result;
   } finally {
@@ -156,10 +160,11 @@ export function restoreAuthSession(): Promise<AuthSession | null> {
         return null;
       }
       return remember(result, { accessToken: "", userId: stored.userId, email: "", expiresAt: 0 });
-    } catch {
-      if (revision === authIntentRevision && !session) {
-        // A lost connection or invalid credential must not expose cached account
-        // data. After uncertain network errors the person may sign in normally.
+    } catch (cause) {
+      // Offline Safari must not permanently lose a stored login. Only an
+      // explicit invalid/revoked credential response can erase the token.
+      if (cause instanceof AuthRequestError && [400, 401, 403].includes(cause.status) &&
+          revision === authIntentRevision && !session) {
         clearPwaRefreshCredential(stored.refreshToken);
       }
       return null;
@@ -187,8 +192,13 @@ export async function sessionForApiRequest(): Promise<AuthSession | null> {
       if (session !== previous || refreshToken !== token) return currentAuthSession();
       return remember(result, previous);
     } catch (cause) {
-      if (session === previous && refreshToken === token) signOut();
-      throw new Error("MONIFlow could not renew your session. Sign in again.", { cause });
+      const revoked = cause instanceof AuthRequestError && [400, 401, 403].includes(cause.status);
+      if (revoked && session === previous && refreshToken === token) signOut();
+      // Network/transient failure leaves the prior owner + saved refresh
+      // credential untouched. Never reuse an expired access token for writes.
+      throw new Error(revoked
+        ? "Your MONIFlow session expired or was revoked. Sign in again."
+        : "MONIFlow couldn't renew your session right now. Check your connection and retry the read.", { cause });
     }
   })();
   refreshInFlight = pending;
