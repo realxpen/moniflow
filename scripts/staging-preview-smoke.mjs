@@ -60,7 +60,10 @@ await expectStatus("/api/operator/plans", "POST", 401);
  * GitHub runner without accounts or bearer tokens. If this fails, the iPhone
  * will surface a generic "failed to fetch" even while the API reports READY.
  */
-const pwaOrigin = "https://xpen-moniflow-pwa-202610--n9px8b7cup.expo.app";
+const pwaOrigins = [
+  "https://xpen-moniflow-pwa-202610--n9px8b7cup.expo.app",
+  "https://xpen-moniflow-pwa-202610--7emunmce6e.expo.app"
+];
 async function assertCors(path, method, headers, expected, expectedOrigin) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 18000);
@@ -93,15 +96,18 @@ async function assertCors(path, method, headers, expected, expectedOrigin) {
   }
 }
 
-// Read-only health and protected non-mutating GET must work in Safari.
-await assertCors("/health/provider", "GET",
-  { origin: pwaOrigin, accept: "application/json" }, 200, pwaOrigin);
-await assertCors("/api/sandbox-demo/status", "GET",
-  { origin: pwaOrigin, accept: "application/json" }, 401, pwaOrigin);
-// This preflight never sends a POST, user information or financial instruction.
-await assertCors("/api/sandbox-demo/bootstrap", "OPTIONS",
-  { origin: pwaOrigin, "access-control-request-method": "POST",
-    "access-control-request-headers": "authorization,content-type" }, 204, pwaOrigin);
+// Preserve old installed iPhone PWA access while separately admitting the
+// approved session-restoration preview origin; each must still pass JWT gates.
+for (const pwaOrigin of pwaOrigins) {
+  await assertCors("/health/provider", "GET",
+    { origin: pwaOrigin, accept: "application/json" }, 200, pwaOrigin);
+  await assertCors("/api/sandbox-demo/status", "GET",
+    { origin: pwaOrigin, accept: "application/json" }, 401, pwaOrigin);
+  // OPTIONS is a browser permission check, NOT a money-plan mutation.
+  await assertCors("/api/sandbox-demo/bootstrap", "OPTIONS",
+    { origin: pwaOrigin, "access-control-request-method": "POST",
+      "access-control-request-headers": "authorization,content-type" }, 204, pwaOrigin);
+}
 // Unknown websites must never inherit authenticated browser access.
 await assertCors("/health/provider", "GET",
   { origin: "https://untrusted.example", accept: "application/json" }, 200, null);
