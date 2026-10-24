@@ -47,7 +47,7 @@ describe("MONIFlow iPhone Home Screen app install contract", () => {
     }
   });
 
-  it("never ships BMONI native signing to the browser or stores access tokens on reload", () => {
+  it("keeps BMONI signing out of the browser and limits saved credentials to PWA refresh only", () => {
     expect(webDevice).toContain("available: false");
     expect(webDevice).toContain("BMONI device signing requires");
     expect(webDevice).not.toContain("from \"@bkey-inc/");
@@ -56,7 +56,7 @@ describe("MONIFlow iPhone Home Screen app install contract", () => {
     expect(auth).not.toMatch(/(localStorage|sessionStorage|AsyncStorage)\.(setItem|getItem)/);
     expect(welcome).toContain("MONIFLOW PWA · SIMULATED PAYMENTS ONLY");
     expect(welcome).toContain("Add to Home Screen");
-    expect(welcome).toContain("Sign-in tokens stay in memory");
+    expect(welcome).toContain("access tokens remain in memory");
     expect(welcome).toContain("cannot run in the browser");
   });
 });
