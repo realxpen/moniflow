@@ -11,7 +11,7 @@
  */
 const key = "moniflow.pwa.sandbox-auth.refresh.v1";
 const maxAgeMs = 7 * 24 * 60 * 60 * 1000;
-const previewOrigin = "https://xpen-moniflow-pwa-202610--n9px8b7cup.expo.app";
+const previewHostname = /^xpen-moniflow-pwa-202610--[a-z0-9-]+\.expo\.app$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type Persisted = {
@@ -23,7 +23,7 @@ type Persisted = {
 
 function storage(): Storage | null {
   if (process.env.EXPO_PUBLIC_MONIFLOW_PWA_PREVIEW !== "1") return null;
-  if (typeof window === "undefined" || window.location?.origin !== previewOrigin) return null;
+  if (typeof window === "undefined" || window.location?.protocol !== "https:" ||\n      !previewHostname.test(window.location.hostname)) return null;
   try { return window.localStorage; } catch { return null; }
 }
 
