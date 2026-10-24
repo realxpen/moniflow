@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { initialSandboxWorkspace } from "../../api/src/services/sandbox-demo/state";
 import { previewSandboxIntent } from "../../api/src/services/sandbox-demo/intent-preview";
-import { parseSandboxIntentPreview } from "./sandbox-intent-preview";
+import { parseSandboxIntentPreview } from "./sandbox-intent-preview-validation";
 
 const owner = "e8e5e2d1-9031-41e3-92cb-d6e8935b62c9";
 const state = () => initialSandboxWorkspace(owner);
