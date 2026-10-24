@@ -67,7 +67,7 @@ export function parseSandboxIntentPreview(payload: unknown): SandboxIntentPrevie
 }
 
 export async function previewApiSandboxIntent(command: string): Promise<SandboxIntentPreview> {
-  const base = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\\/$/, "");
+  const base = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/$/, "");
   const response = await apiFetch(base + "/api/sandbox-demo/preview", {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ command })
