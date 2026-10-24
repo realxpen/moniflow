@@ -3,6 +3,8 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
+import { currentAuthScope } from "@/services/auth-session";
+import { canApplySandboxResponse, canApplySandboxFailure, mutationRecoveryMessage } from "@/services/sandbox-request-safety";
 import {
   approveApiSandboxPlan, bootstrapApiSandbox, loadApiSandbox, prepareApiSandboxPlan,
   resetApiSandbox, sandboxDemoCommand, SandboxApiError, simulateApiSandboxPlan,
@@ -31,6 +33,7 @@ export function ServerSandboxWorkspace({ ownerId, tab, onExit }: {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uncertainAction, setUncertainAction] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [resetAcknowledged, setResetAcknowledged] = useState(false);
   const ownerRef = useRef(ownerId);
@@ -38,29 +41,46 @@ export function ServerSandboxWorkspace({ ownerId, tab, onExit }: {
   const actionRef = useRef(false);
   ownerRef.current = ownerId;
 
-  const applySnapshot = useCallback((snapshot: ApiSandboxWorkspace, owner: string, seq: number) => {
-    if (seq !== requestRef.current || ownerRef.current !== owner) return;
-    if (snapshot.localUserId.toLowerCase() !== owner.toLowerCase() ||
-        snapshot.provider !== "moniflow-sandbox" || snapshot.simulated !== true) {
+  const applySnapshot = useCallback((snapshot: ApiSandboxWorkspace, owner: string, seq: number, authRevision: number) => {
+    const scope = {
+      requestedOwner: owner, requestedSequence: seq,
+      latestSequence: requestRef.current, requestedAuthRevision: authRevision,
+      activeScope: currentAuthScope(), currentScreenOwner: ownerRef.current
+    };
+    if (!canApplySandboxFailure(scope)) return;
+    if (!canApplySandboxResponse({ ...scope, responseOwner: snapshot.localUserId })) {
+      setWorkspace(null);
+      setError("The saved sandbox response belongs to another account. No example funds were displayed.");
+      return;
+    }
+    if (snapshot.provider !== "moniflow-sandbox" || snapshot.simulated !== true) {
       setWorkspace(null);
       setError("The server returned a workspace that does not belong to this verified account.");
       return;
     }
     setWorkspace(snapshot);
     setError(null);
+    setUncertainAction(false);
   }, []);
 
   const refresh = useCallback(async () => {
+    // App-resume and manual GETs cannot overtake an in-flight POST.
+    if (actionRef.current) return;
     const seq = ++requestRef.current;
     const owner = ownerId;
+    const authRevision = currentAuthScope().revision;
     setLoading(true);
     setError(null);
     setWorkspace(null);
     try {
       const snapshot = await loadApiSandbox();
-      applySnapshot(snapshot, owner, seq);
+      applySnapshot(snapshot, owner, seq, authRevision);
     } catch (cause) {
-      if (seq !== requestRef.current || ownerRef.current !== owner) return;
+      if (!canApplySandboxFailure({
+        requestedOwner: owner, requestedSequence: seq, latestSequence: requestRef.current,
+        requestedAuthRevision: authRevision, activeScope: currentAuthScope(),
+        currentScreenOwner: ownerRef.current
+      })) return;
       if (cause instanceof SandboxApiError && cause.code === "SANDBOX_NOT_STARTED") {
         setWorkspace(null);
         setError(null);
@@ -78,6 +98,7 @@ export function ServerSandboxWorkspace({ ownerId, tab, onExit }: {
     setError(null);
     setAcknowledged(false);
     setResetAcknowledged(false);
+    setUncertainAction(false);
     void refresh();
     return () => { ++requestRef.current; };
   }, [refresh]);
@@ -88,19 +109,30 @@ export function ServerSandboxWorkspace({ ownerId, tab, onExit }: {
     actionRef.current = true;
     const seq = ++requestRef.current;
     const owner = ownerId;
+    const authRevision = currentAuthScope().revision;
     setBusy(true);
     setError(null);
     try {
       const result = await action();
-      applySnapshot(result, owner, seq);
-      if (seq === requestRef.current && ownerRef.current === owner) {
+      applySnapshot(result, owner, seq, authRevision);
+      if (canApplySandboxFailure({
+        requestedOwner: owner, requestedSequence: seq, latestSequence: requestRef.current,
+        requestedAuthRevision: authRevision, activeScope: currentAuthScope(),
+        currentScreenOwner: ownerRef.current
+      })) {
         setAcknowledged(false);
         setResetAcknowledged(false);
       }
     } catch (cause) {
-      if (seq === requestRef.current && ownerRef.current === owner) {
-        setError(cause instanceof Error ? cause.message : "The example request was not confirmed.");
-        // Explicit read-only reconciliation only. Never auto-retry mutations.
+      if (canApplySandboxFailure({
+        requestedOwner: owner, requestedSequence: seq, latestSequence: requestRef.current,
+        requestedAuthRevision: authRevision, activeScope: currentAuthScope(),
+        currentScreenOwner: ownerRef.current
+      })) {
+        const recovery = mutationRecoveryMessage(cause);
+        setError(recovery.message);
+        setUncertainAction(recovery.outcomeUnknown);
+        // All write controls stay hidden until a verified GET reconciles state.
         setWorkspace(null);
       }
     } finally {
@@ -109,7 +141,9 @@ export function ServerSandboxWorkspace({ ownerId, tab, onExit }: {
     }
   };
   const plan = workspace?.plan ?? null;
+  const signedInScope = currentAuthScope();
   const safeWorkspace = Boolean(workspace?.simulated && workspace.provider === "moniflow-sandbox" &&
+    signedInScope.userId?.toLowerCase() === ownerId.toLowerCase() &&
     workspace.localUserId.toLowerCase() === ownerId.toLowerCase());
 
   return (
@@ -138,9 +172,9 @@ export function ServerSandboxWorkspace({ ownerId, tab, onExit }: {
 
       {!loading && error ? (
         <SoftCard style={styles.card}>
-          <StatusPill label="SANDBOX STATUS UNCONFIRMED" tone="warning" />
+          <StatusPill label={uncertainAction ? "SIMULATION OUTCOME UNKNOWN" : "SANDBOX STATUS UNCONFIRMED"} tone="warning" />
           <Text style={styles.body}>{error}</Text>
-          <Text style={styles.body}>The API may be disabled on this release. No payments have been attempted.</Text>
+          <Text style={styles.body}>Only a read-only server status request can resolve this state. No BMONI payment has been attempted.</Text>
           <SecondaryButton disabled={busy} onPress={() => void refresh()}>Recheck server state · read only</SecondaryButton>
         </SoftCard>
       ) : null}
