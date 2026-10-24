@@ -63,6 +63,7 @@ function config() {
 class AuthRequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
 }
+class AuthIdentityMismatchError extends Error {}
 
 type AuthResponse = {
   access_token?: string;
@@ -100,7 +101,7 @@ function remember(result: AuthResponse, previous?: AuthSession): AuthSession {
     throw new Error("Confirm your email, then sign in to MONIFlow.");
   }
   if (previous && previous.userId !== result.user.id) {
-    throw new Error("Session identity changed unexpectedly. Sign in again.");
+    throw new AuthIdentityMismatchError("Session identity changed unexpectedly. Sign in again.");
   }
   if (!Number.isFinite(result.expires_in) || result.expires_in <= 0 || result.expires_in > 86400) {
     throw new Error("The authentication server returned an invalid expiration.");
@@ -192,12 +193,13 @@ export async function sessionForApiRequest(): Promise<AuthSession | null> {
       if (session !== previous || refreshToken !== token) return currentAuthSession();
       return remember(result, previous);
     } catch (cause) {
-      const revoked = cause instanceof AuthRequestError && [400, 401, 403].includes(cause.status);
+      const revoked = cause instanceof AuthIdentityMismatchError ||
+        (cause instanceof AuthRequestError && [400, 401, 403].includes(cause.status));
       if (revoked && session === previous && refreshToken === token) signOut();
       // Network/transient failure leaves the prior owner + saved refresh
       // credential untouched. Never reuse an expired access token for writes.
       throw new Error(revoked
-        ? "Your MONIFlow session expired or was revoked. Sign in again."
+        ? "MONIFlow could not renew your session. Sign in again."
         : "MONIFlow couldn't renew your session right now. Check your connection and retry the read.", { cause });
     }
   })();
