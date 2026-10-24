@@ -23,7 +23,8 @@ type Persisted = {
 
 function storage(): Storage | null {
   if (process.env.EXPO_PUBLIC_MONIFLOW_PWA_PREVIEW !== "1") return null;
-  if (typeof window === "undefined" || window.location?.protocol !== "https:" ||\n      !previewHostname.test(window.location.hostname)) return null;
+  if (typeof window === "undefined" || window.location?.protocol !== "https:" ||
+      !previewHostname.test(window.location.hostname)) return null;
   try { return window.localStorage; } catch { return null; }
 }
 
