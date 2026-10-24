@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { interpretOfflineExample } from "@/services/offline-intent-lab";
@@ -225,7 +225,7 @@ function Line({ name, value }: { name: string; value: string }) {
     <Text style={styles.lineValue}>{value}</Text></View>;
 }
 const styles = StyleSheet.create({
-  page: { gap: spacing.lg, paddingTop: spacing.lg, paddingBottom: layout.tabContentBottomInset },
+  page: { gap: spacing.lg, paddingTop: spacing.lg, paddingBottom: Platform.OS === "web" ? spacing.lg : layout.tabContentBottomInset },
   modeHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
   modeCopy: { flex: 1, gap: spacing.xxs },
   modeNote: { ...typography.caption, color: colors.textSecondary },

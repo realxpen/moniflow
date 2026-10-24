@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { PrimaryButton, Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { useAppActiveRefresh } from "@/hooks/use-app-active-refresh";
@@ -299,7 +299,7 @@ function MoneyRow({ label, value }: { label: string; value: string }) {
   </View>;
 }
 const styles = StyleSheet.create({
-  screen: { gap: spacing.lg, paddingTop: spacing.lg, paddingBottom: layout.tabContentBottomInset },
+  screen: { gap: spacing.lg, paddingTop: spacing.lg, paddingBottom: Platform.OS === "web" ? spacing.lg : layout.tabContentBottomInset },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.sm },
   headerCopy: { flex: 1, gap: spacing.sm },
   heading: { ...typography.heading, color: colors.textPrimary },
