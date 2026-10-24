@@ -11,6 +11,7 @@ export const waydroidSandboxHostname =
 
 const sandboxMutationPaths = new Set([
   "/api/sandbox-demo/bootstrap",
+  "/api/sandbox-demo/preview",
   "/api/sandbox-demo/plan",
   "/api/sandbox-demo/reset"
 ]);

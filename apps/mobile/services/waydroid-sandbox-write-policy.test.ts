@@ -22,6 +22,7 @@ const allowed = (path: string, overrides: Partial<typeof base> = {}) =>
 describe("separate x86 Waydroid sandbox writes", () => {
   it.each([
     "/api/sandbox-demo/bootstrap",
+    "/api/sandbox-demo/preview",
     "/api/sandbox-demo/plan",
     "/api/sandbox-demo/reset",
     "/api/sandbox-demo/plans/11111111-1111-4111-8111-111111111111/approve",
@@ -91,6 +92,7 @@ describe("iPhone PWA sandbox-only network boundary", () => {
     });
   it("permits only user-authenticated server-sandbox command routes", () => {
     expect(check("/api/sandbox-demo/bootstrap")).toBe(true);
+    expect(check("/api/sandbox-demo/preview")).toBe(true);
     expect(check("/api/sandbox-demo/plan")).toBe(true);
     expect(check("/api/sandbox-demo/reset")).toBe(true);
     expect(check("/api/sandbox-demo/plans/11111111-1111-4111-8111-111111111111/approve")).toBe(true);

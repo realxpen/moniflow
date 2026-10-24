@@ -110,4 +110,48 @@ describe("JWT-bound authenticated financial sandbox endpoints", () => {
     expect((await request("GET", "/status", bob)).json().resetCount).toBe(0);
     expect((await request("POST", "/plans/" + planned.plan.id + "/simulate", alice)).statusCode).toBe(404);
   });
+  it("previews other supported instructions using saved fictional money without changing Activity", async () => {
+    const { request } = setup();
+    expect((await request("POST", "/preview")).statusCode).toBe(401);
+    expect((await request("POST", "/preview", alice, { command: "Save ₦10,000 for my rent" })).statusCode).toBe(404);
+    await request("POST", "/bootstrap", alice);
+    const before = (await request("GET", "/status", alice)).json();
+    const sample = await request("POST", "/preview", alice,
+      { command: "Withdraw ₦50,000 to Zenith Bank and save ₦10,000 for my rent" });
+    expect(sample.statusCode).toBe(200);
+    expect(sample.json()).toMatchObject({
+      localUserId: alice, simulated: true, previewOnly: true, realFundsMoved: false,
+      status: "PREVIEW", intent: "MULTI_ACTION", verdict: "REVIEW",
+      totals: { externalMovement: 50000, internalAllocation: 10000, availableAfter: 240000 }
+    });
+    expect(sample.json().checks).toHaveLength(8);
+    expect(sample.json().checks.find((c: { rule: string }) => c.rule === "DESTINATION").message)
+      .toContain("no real destination has been verified");
+    expect((await request("GET", "/status", alice)).json()).toEqual(before);
+    expect((await request("POST", "/preview", bob, { command: "Save ₦10,000 for rent" })).statusCode).toBe(404);
+  });
+
+  it("blocks unsafe plans and returns unsupported without side effects", async () => {
+    const { request } = setup();
+    await request("POST", "/bootstrap", alice);
+    for (const [command, expected] of [
+      ["Withdraw ₦400,000 to GTBank", "BLOCK"],
+      ["Withdraw ₦30k to GTBank and withdraw ₦20k to Access Bank", "BLOCK"],
+      ["Send ₦20,000 to an unknown bank", "UNSUPPORTED"]
+    ]) {
+      const response = await request("POST", "/preview", alice, { command });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().status === "PREVIEW" ? response.json().verdict : response.json().status)
+        .toBe(expected);
+    }
+    expect((await request("POST", "/preview", alice, { command: "x".repeat(241) })).statusCode).toBe(400);
+    const saved = (await request("GET", "/status", alice)).json();
+    expect(saved).toMatchObject({ providerBalance: 300000, internalAllocated: 0, activity: [], plan: null });
+    const livePlan = await request("POST", "/plan", alice, { command: SANDBOX_COMMAND });
+    expect(livePlan.statusCode).toBe(200);
+    const after = (await request("POST", "/preview", alice, { command: "How much money do I have?" })).json();
+    expect(after).toMatchObject({ status: "PREVIEW", totals: { totalCommitted: 0, availableAfter: 300000 } });
+    expect((await request("GET", "/status", alice)).json().plan.id).toBe(livePlan.json().plan.id);
+  });
+
 });

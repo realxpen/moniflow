@@ -10,6 +10,7 @@ import {
   resetApiSandbox, sandboxDemoCommand, SandboxApiError, simulateApiSandboxPlan,
   type ApiSandboxWorkspace
 } from "@/services/sandbox-api";
+import { SandboxIntentLab } from "@/components/workspace/SandboxIntentLab";
 import { useProductPreview } from "@/store/product-preview";
 import { colors, layout, radius, spacing, typography } from "@/theme";
 
@@ -302,6 +303,7 @@ export function ServerSandboxWorkspace({ ownerId, tab, onExit }: {
             </>
           ) : null}
 
+          {tab === "home" ? <SandboxIntentLab key={ownerId} ownerId={ownerId} /> : null}
           <SoftCard style={styles.card}>
             <Text style={styles.micro}>RESTART THE SAVED SIMULATION</Text>
             <Text style={styles.body}>Reset erases only this account's fictional practice plan, balance and history. Real accounts and provider information are untouched.</Text>
