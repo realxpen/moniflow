@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   canApplySandboxFailure, canApplySandboxResponse, mutationRecoveryMessage
 } from "./sandbox-request-safety";
-import { SandboxApiError } from "./sandbox-api";
 
 const alice = "11111111-1111-4111-8111-111111111111";
 const bob = "22222222-2222-4222-8222-222222222222";
@@ -51,9 +50,9 @@ describe("unknown outcome recovery never replays sandbox mutations", () => {
   });
 
   it("treats 5xx as unknown but confirmed guard/owner rejections as rejected", () => {
-    expect(mutationRecoveryMessage(new SandboxApiError("INTERNAL", 503, "server down")).outcomeUnknown).toBe(true);
+    expect(mutationRecoveryMessage({ httpStatus: 503, code: "INTERNAL" }).outcomeUnknown).toBe(true);
     for (const status of [400, 401, 403, 404, 409, 422]) {
-      const r = mutationRecoveryMessage(new SandboxApiError("REJECTED", status, "rejected"));
+      const r = mutationRecoveryMessage({ httpStatus: status, code: "REJECTED" });
       expect(r.outcomeUnknown).toBe(false);
       expect(r.message).toContain("read-only refresh");
     }
