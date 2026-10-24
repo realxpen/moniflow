@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Screen, SecondaryButton, SoftCard, StatusPill } from "@/components/ui";
 import { ReadOnlyHomeHero } from "@/components/workspace/ReadOnlyHomeHero";
@@ -253,7 +253,7 @@ function Readiness({ label, detail, pill }: { label: string; detail: string; pil
 }
 
 const styles = StyleSheet.create({
-  page: { gap: spacing.xl, paddingTop: spacing.xl, paddingBottom: layout.tabContentBottomInset },
+  page: { gap: spacing.xl, paddingTop: spacing.xl, paddingBottom: Platform.OS === "web" ? spacing.lg : layout.tabContentBottomInset },
   heading: { gap: spacing.sm },
   eyebrow: { ...typography.technical, color: colors.statusProcessing },
   title: { ...typography.display, color: colors.textPrimary },
