@@ -62,7 +62,8 @@ await expectStatus("/api/operator/plans", "POST", 401);
  */
 const pwaOrigins = [
   "https://xpen-moniflow-pwa-202610--n9px8b7cup.expo.app",
-  "https://xpen-moniflow-pwa-202610--7emunmce6e.expo.app"
+  "https://xpen-moniflow-pwa-202610--7emunmce6e.expo.app",
+  "https://xpen-moniflow-pwa-202610--30ngd54vd2.expo.app"
 ];
 async function assertCors(path, method, headers, expected, expectedOrigin) {
   const controller = new AbortController();
