@@ -33,7 +33,7 @@ jobs:
           async function req(path, method, origin, body) {
             const r = await fetch(base + path, {
               method, redirect: 'manual',
-              headers: { origin, 'content-type': 'application/json',
+              headers: { origin, ...(method === 'POST' ? { 'content-type': 'application/json' } : {}),
                 ...(method === 'OPTIONS' ? {
                   'access-control-request-method': 'POST',
                   'access-control-request-headers': 'authorization,content-type'
