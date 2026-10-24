@@ -1,6 +1,10 @@
 name: MONIFlow iPhone PWA - One Intent Lab Preview
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/iphone-pwa-intent-lab-once.yml
+      - docs/RC_IPHONE_PWA_INTENT_LAB_ONE_SHOT_20261024.md
   push:
     branches: [main]
     paths:
@@ -14,8 +18,49 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  api-preview-probe:
+    if: github.event_name == 'pull_request' && github.repository == 'realxpen/moniflow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify new isolated API build, JWT boundary and existing PWA origin
+        env:
+          PREVIEW_API: https://moniflow-sandbox-staging-5sbbss3ky-swifnatechnologyltd.vercel.app
+        run: |
+          node --input-type=module - <<'NODE'
+          const base = process.env.PREVIEW_API;
+          const old = "https://xpen-moniflow-pwa-202610--vxgwelbarp.expo.app";
+          async function req(path, method, origin, body) {
+            const r = await fetch(base + path, {
+              method, redirect: 'manual',
+              headers: { origin, 'content-type': 'application/json',
+                ...(method === 'OPTIONS' ? {
+                  'access-control-request-method': 'POST',
+                  'access-control-request-headers': 'authorization,content-type'
+                } : {}) },
+              ...(body ? {body} : {})
+            });
+            return r;
+          }
+          const health=await req('/health/provider','GET',old);
+          if(health.status !== 200 || health.headers.get('access-control-allow-origin') !== old)
+            throw Error('New API missing old origin and provider health');
+          const state=await health.json();
+          if(state.provider !== 'moniflow-sandbox' || state.simulated !== true ||
+             state.authenticatedSandboxDemoEnabled !== true ||
+             state.partnerRegistrationEnabled !== false) throw Error('Non-sandbox provider build');
+          const guarded=await req('/api/sandbox-demo/preview','POST',old,'{}');
+          if(guarded.status !== 401 || (await guarded.json()).code !== 'AUTH_REQUIRED' ||
+             guarded.headers.get('access-control-allow-origin') !== old) throw Error('Preview route not JWT-protected');
+          const preflight=await req('/api/sandbox-demo/preview','OPTIONS',old);
+          if(preflight.status !== 204 ||
+             preflight.headers.get('access-control-allow-origin') !== old) throw Error('PWA preflight failed');
+          const alien=await req('/health/provider','GET','https://foreign.example');
+          if(alien.headers.get('access-control-allow-origin') !== null) throw Error('Wildcard/foreign CORS allowed');
+          console.log('PASS: backend preview route, protected 401, existing PWA CORS, foreign denial');
+          NODE
   verify-and-host:
-    if: github.repository == 'realxpen/moniflow' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    if: github.event_name == 'push' && github.repository == 'realxpen/moniflow' && github.ref == 'refs/heads/main' && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -88,6 +133,21 @@ jobs:
              !m.name.includes('Sandbox') || m.icons.length !== 2)
             throw Error('PWA install metadata failed');
           console.log('PASS: static iOS install HTML, real app icons, sandbox manifest');
+          NODE
+      - name: Confirm API alias updated to JWT-owned Intent Lab endpoint
+        shell: bash
+        run: |
+          node --input-type=module - <<'NODE'
+          const api="https://moniflow-sandbox-staging-git-rc-moni-312569-swifnatechnologyltd.vercel.app";
+          const r=await fetch(api+"/api/sandbox-demo/preview", {
+            method:"POST",redirect:"manual",headers:{"content-type":"application/json"},
+            body:"{}"
+          });
+          const payload=await r.json().catch(()=>null);
+          if(r.status !== 401 || payload?.code !== "AUTH_REQUIRED") {
+            throw Error("Existing iPhone sandbox API has not received the protected preview route");
+          }
+          console.log("PASS: stable isolated preview API supports JWT-guarded Intent Lab");
           NODE
       - name: Authenticate the previously connected Expo project
         uses: expo/expo-github-action@v8
