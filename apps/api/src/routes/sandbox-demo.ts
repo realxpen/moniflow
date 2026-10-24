@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { SandboxActionError, SANDBOX_COMMAND, transitionSandbox } from "../services/sandbox-demo/state.js";
+import { previewSandboxIntent } from "../services/sandbox-demo/intent-preview.js";
 import type { SandboxDemoStore } from "../services/sandbox-demo/workspace-store.js";
 
 const planSchema = z.object({ command: z.string().max(240) }).strict();
@@ -46,6 +47,21 @@ export const authenticatedSandboxDemoRoutes: FastifyPluginAsync<DemoOptions> = a
     const state = await options.store.find(userId);
     if (!state) return reply.code(404).send({ code: "SANDBOX_NOT_STARTED", message: "Start an isolated simulated workspace first." });
     return reply.send(state);
+  });
+  // Stateless financial-intent teaching preview. A POST keeps user commands out
+  // of URL/query logs, but performs no mutation and has no approval endpoint.
+  app.post("/preview", async (request, reply) => {
+    const userId = owner(request, reply);
+    if (!userId) return;
+    const input = planSchema.safeParse(request.body);
+    if (!input.success) {
+      return reply.code(400).send({ code: "INVALID_PREVIEW", message: "A single instruction of up to 240 characters is required." });
+    }
+    const state = await options.store.find(userId);
+    if (!state) return reply.code(404).send({
+      code: "SANDBOX_NOT_STARTED", message: "Initialize your fictional sandbox workspace first."
+    });
+    return reply.send(previewSandboxIntent(state, input.data.command));
   });
   app.post("/bootstrap", async (request, reply) => {
     const userId = owner(request, reply);
