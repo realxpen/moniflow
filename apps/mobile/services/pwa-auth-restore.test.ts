@@ -136,6 +136,33 @@ describe("installed iPhone PWA: stay signed in with verified token rotation", ()
     expect(values.size).toBe(0);
   });
 
+  it("keeps the saved refresh credential after a temporary offline restart, for a later retry", async () => {
+    const { values } = browser();
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => result() })));
+    let a = await auth();
+    await a.signInWithPassword("sandbox@example.test", "testpassword!");
+    a = await auth();
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
+    expect(await a.restoreAuthSession()).toBeNull();
+    expect(values.size).toBe(1);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => result() })));
+    expect((await a.restoreAuthSession())?.userId).toBe(userA);
+  });
+
+  it("revokes a stored credential on explicit Supabase 401", async () => {
+    const { values } = browser();
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => result() })));
+    let a = await auth();
+    await a.signInWithPassword("sandbox@example.test", "testpassword!");
+    a = await auth();
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 401,
+      json: async () => ({ message: "Refresh token expired" })
+    })));
+    expect(await a.restoreAuthSession()).toBeNull();
+    expect(values.size).toBe(0);
+  });
+
   it("keeps authentication usable when Safari blocks persistent storage", async () => {
     browser();
     vi.stubGlobal("window", {
