@@ -42,12 +42,17 @@ export function ServerSandboxWorkspace({ ownerId, tab, onExit }: {
   ownerRef.current = ownerId;
 
   const applySnapshot = useCallback((snapshot: ApiSandboxWorkspace, owner: string, seq: number, authRevision: number) => {
-    if (!canApplySandboxResponse({
-      requestedOwner: owner, responseOwner: snapshot.localUserId,
-      requestedSequence: seq, latestSequence: requestRef.current,
-      requestedAuthRevision: authRevision, activeScope: currentAuthScope(),
-      currentScreenOwner: ownerRef.current
-    })) return;
+    const scope = {
+      requestedOwner: owner, requestedSequence: seq,
+      latestSequence: requestRef.current, requestedAuthRevision: authRevision,
+      activeScope: currentAuthScope(), currentScreenOwner: ownerRef.current
+    };
+    if (!canApplySandboxFailure(scope)) return;
+    if (!canApplySandboxResponse({ ...scope, responseOwner: snapshot.localUserId })) {
+      setWorkspace(null);
+      setError("The saved sandbox response belongs to another account. No example funds were displayed.");
+      return;
+    }
     if (snapshot.provider !== "moniflow-sandbox" || snapshot.simulated !== true) {
       setWorkspace(null);
       setError("The server returned a workspace that does not belong to this verified account.");
