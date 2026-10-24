@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
+import { clearPwaRefreshCredential, persistPwaRefreshCredential, readPwaRefreshCredential } from "./pwa-auth-storage";
 
-/** Financial sign-in and refresh tokens are memory-only. Reload requires sign-in. */
+/** Access tokens are always memory-only; only a bounded sandbox PWA refresh credential can survive Safari relaunch. */
 export type AuthSession = {
   accessToken: string;
   userId: string;
@@ -11,6 +12,7 @@ export type AuthSession = {
 let session: AuthSession | null = null;
 let refreshToken: string | null = null;
 let refreshInFlight: Promise<AuthSession | null> | null = null;
+let restoreInFlight: Promise<AuthSession | null> | null = null;
 // Late sign-in/sign-up responses must not restore an account after sign-out,
 // or overwrite a more recent attempt for another account.
 let authIntentRevision = 0;
@@ -20,6 +22,8 @@ const emit = () => listeners.forEach(listener => listener());
 function setSession(next: AuthSession | null, nextRefresh: string | null = null) {
   session = next;
   refreshToken = nextRefresh;
+  if (next && nextRefresh) persistPwaRefreshCredential(next.userId, nextRefresh);
+  else clearPwaRefreshCredential();
   emit();
 }
 export function signOut() {
@@ -94,6 +98,9 @@ function remember(result: AuthResponse, previous?: AuthSession): AuthSession {
   if (previous && previous.userId !== result.user.id) {
     throw new Error("Session identity changed unexpectedly. Sign in again.");
   }
+  if (!Number.isFinite(result.expires_in) || result.expires_in <= 0 || result.expires_in > 86400) {
+    throw new Error("The authentication server returned an invalid expiration.");
+  }
   const next = {
     accessToken: result.access_token,
     userId: result.user.id,
@@ -123,6 +130,44 @@ export async function signUpWithPassword(email: string, password: string) {
     return true;
   }
   return false;
+}
+
+/**
+ * Reopen an installed iPhone PWA by exchanging a storage-scoped refresh token
+ * for a NEW access token over HTTPS. No access token or account balance is read
+ * from browser storage. The Auth API's userId must match the remembered owner.
+ * All older pending restore requests are discarded on sign-out or fresh login.
+ */
+export function restoreAuthSession(): Promise<AuthSession | null> {
+  if (restoreInFlight) return restoreInFlight;
+  if (session) return Promise.resolve(currentAuthSession());
+  const stored = readPwaRefreshCredential();
+  if (!stored) return Promise.resolve(null);
+  const revision = authIntentRevision;
+  const request = (async () => {
+    try {
+      const result = await authRequest("token?grant_type=refresh_token", {
+        refresh_token: stored.refreshToken
+      });
+      if (revision !== authIntentRevision || session) return currentAuthSession();
+      if (!result.user?.id || result.user.id.toLowerCase() !== stored.userId.toLowerCase() ||
+          !result.refresh_token) {
+        clearPwaRefreshCredential(stored.refreshToken);
+        return null;
+      }
+      return remember(result, { accessToken: "", userId: stored.userId, email: "", expiresAt: 0 });
+    } catch {
+      if (revision === authIntentRevision && !session) {
+        // A lost connection or invalid credential must not expose cached account
+        // data. After uncertain network errors the person may sign in normally.
+        clearPwaRefreshCredential(stored.refreshToken);
+      }
+      return null;
+    }
+  })();
+  restoreInFlight = request;
+  void request.finally(() => { if (restoreInFlight === request) restoreInFlight = null; });
+  return request;
 }
 
 /** Serializes token renewal across concurrent reads. Never retries a money movement. */
